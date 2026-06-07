@@ -51,12 +51,13 @@ function buildSections(): NavSection[] {
 
   const sections: NavSection[] = [
     {
-      title: 'Shop',
+      title: 'Shop Jerseys',
       items: [
-        { label: 'Shirts', href: '/products?category=shirts' },
-        { label: 'Hoodies', href: '/products?category=hoodies' },
-        { label: 'T-Shirts', href: '/products?category=tshirts' },
-        { label: 'Collections', href: '/products' },
+        { label: 'Club Jerseys', href: '/products?category=club' },
+        { label: 'National Teams', href: '/products?category=national' },
+        { label: 'Retro Jerseys', href: '/products?category=retro' },
+        { label: 'New Arrivals', href: '/products?category=new' },
+        { label: 'Sale & Offers', href: '/products?category=sale' },
       ],
     },
     {

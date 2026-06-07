@@ -9,24 +9,17 @@ import styles from './page.module.css';
 
 export const dynamic = 'force-dynamic';
 
-/**
- * Collection metadata. The canonical points at the unfiltered
- * listing so that every `?sort=` variant consolidates its ranking
- * signal to a single URL — this is how we avoid splitting authority
- * across sort permutations without having to `Disallow` them in
- * robots.txt.
- */
 export const metadata: Metadata = {
-  title: 'The Collection',
+  title: 'Football Jerseys Catalog',
   description:
-    'The full catalogue. Monochrome menswear in permanent black — shirts, trousers, and outerwear.',
+    'Browse our full catalogue of affordable club, national team, and retro football jerseys priced between ₹250 and ₹350.',
   alternates: { canonical: canonicalUrl('/products') },
   openGraph: {
     type: 'website',
     url: canonicalUrl('/products'),
-    title: `The Collection — ${BRAND.name}`,
+    title: `Football Jerseys Catalog — ${BRAND.name}`,
     description:
-      'The full catalogue. Monochrome menswear in permanent black.',
+      'Browse our full catalogue of affordable club, national team, and retro football jerseys.',
   },
 };
 
@@ -41,6 +34,7 @@ interface ProductRow {
   images: unknown;
   is_active: boolean;
   created_at: string;
+  category: string | null;
 }
 
 interface InventoryRow {
@@ -48,45 +42,46 @@ interface InventoryRow {
   stock: number;
 }
 
-/**
- * Public product catalog.
- *
- * Server-rendered with `force-dynamic` so admin add/deactivate/delete
- * is reflected on the next navigation — no caching, no client refetch.
- *
- * Stock is computed *explicitly* by aggregating `inventory.stock` per
- * product. The `products` table has no stock column and we never
- * pretend it does.
- */
+interface PageParams {
+  sort?: string;
+  category?: string;
+  q?: string;
+}
+
 export default async function ProductsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ sort?: string }>;
+  searchParams: Promise<PageParams>;
 }) {
   const params = await searchParams;
   const sort: SortValue = VALID_SORTS.includes(params.sort as SortValue)
     ? (params.sort as SortValue)
     : 'latest';
+  const category = params.category;
+  const q = params.q;
 
   const supabase = await createServerSupabaseClient();
 
-  // 1. Pull all active products with the ordering the user picked.
-  // For 'latest' we let Postgres ORDER BY created_at (fast, index-backed).
-  // For price sorts we fetch unordered then sort in the server component
-  // using EFFECTIVE price = sale_price_paise ?? price_paise. The Supabase
-  // JS client cannot express COALESCE() in .order(), and a DB-generated
-  // column would require a migration. Since all active products are fetched
-  // in a single query (no cursor pagination today), the server-side sort is
-  // correct and O(n log n) on a small catalogue.
   let productsQuery = supabase
     .from('products')
-    .select('id, slug, name, price_paise, sale_price_paise, images, is_active, created_at')
+    .select('id, slug, name, price_paise, sale_price_paise, images, is_active, created_at, category')
     .eq('is_active', true);
+
+  if (category) {
+    if (category.toLowerCase() === 'sale') {
+      productsQuery = productsQuery.not('sale_price_paise', 'is', null);
+    } else {
+      productsQuery = productsQuery.ilike('category', `%${category}%`);
+    }
+  }
+
+  if (q) {
+    productsQuery = productsQuery.or(`name.ilike.%${q}%,slug.ilike.%${q}%,category.ilike.%${q}%`);
+  }
 
   if (sort === 'latest') {
     productsQuery = productsQuery.order('created_at', { ascending: false });
   }
-  // price-asc / price-desc: fetch without DB ordering, sort below.
 
   const { data: productRows } = await productsQuery;
   let products = (productRows ?? []) as ProductRow[];
@@ -99,9 +94,8 @@ export default async function ProductsPage({
     products = products.slice().sort((a, b) => effectivePrice(b) - effectivePrice(a));
   }
 
-  // 2. Pull inventory for those product ids and aggregate explicitly.
   const ids = products.map(p => p.id);
-  let stockByProduct = new Map<string, number>();
+  const stockByProduct = new Map<string, number>();
 
   if (ids.length > 0) {
     const { data: inventoryRows } = await supabase
@@ -117,7 +111,6 @@ export default async function ProductsPage({
     }
   }
 
-  // 3. Shape into card data. Coerce JSONB images defensively.
   const cards: ProductCardData[] = products.map(p => ({
     id: p.id,
     slug: p.slug,
@@ -126,6 +119,7 @@ export default async function ProductsPage({
     sale_price_paise: p.sale_price_paise,
     images: Array.isArray(p.images) ? (p.images as string[]) : [],
     totalStock: stockByProduct.get(p.id) ?? 0,
+    category: p.category || 'Football Jersey'
   }));
 
   const collectionUrl = canonicalUrl('/products');
@@ -134,36 +128,43 @@ export default async function ProductsPage({
     url: absoluteUrl(`/product/${c.slug}`),
   }));
 
+  const displayEyebrow = category 
+    ? `${category.toUpperCase()} COLLECTION` 
+    : (q ? `SEARCH RESULTS FOR "${q.toUpperCase()}"` : 'FOOTBALL JERSEYS');
+
+  const displayTitle = category 
+    ? `${category.charAt(0).toUpperCase() + category.slice(1)} Jerseys` 
+    : (q ? `Search results` : 'All Jerseys');
+
   return (
     <div className={styles.page}>
       <JsonLd
         data={breadcrumbLd([
           { name: 'Home', path: '/' },
-          { name: 'The Collection', path: '/products' },
+          { name: 'Jerseys', path: '/products' },
         ])}
       />
       <JsonLd
         data={collectionLd({
-          name: 'The Collection',
-          description:
-            'Monochrome menswear in permanent black — shirts, trousers, and outerwear.',
+          name: displayTitle,
+          description: `Buy high quality ${displayTitle} starting from ₹250. Fast shipping in India.`,
           url: collectionUrl,
           items: featuredForSchema,
         })}
       />
       <header className={styles.header}>
         <div>
-          <p className={styles.eyebrow}>The Collection</p>
-          <h1 className={styles.title}>All Products</h1>
+          <p className={styles.eyebrow}>{displayEyebrow}</p>
+          <h1 className={styles.title}>{displayTitle}</h1>
         </div>
         {cards.length > 0 && <SortSelect current={sort} />}
       </header>
 
       {cards.length === 0 ? (
         <div className={styles.emptyState}>
-          <p className={styles.emptyTitle}>Nothing here yet</p>
+          <p className={styles.emptyTitle}>No jerseys found</p>
           <p className={styles.emptyBody}>
-            New pieces are being prepared. Please check back soon.
+            We couldn't find any jerseys matching your filters. Check back soon for restocks!
           </p>
         </div>
       ) : (

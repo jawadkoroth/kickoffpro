@@ -10,7 +10,7 @@ export function PWAInstallPrompt() {
 
   // Check localStorage for previous dismissal
   useEffect(() => {
-    const dismissed = localStorage.getItem('noir-install-dismissed');
+    const dismissed = localStorage.getItem('kickoffpro-install-dismissed');
     if (dismissed) {
       const date = new Date(dismissed);
       const now = new Date();
@@ -35,7 +35,7 @@ export function PWAInstallPrompt() {
   const handleDismiss = () => {
     setIsVisible(false);
     setIsDismissed(true);
-    localStorage.setItem('noir-install-dismissed', new Date().toISOString());
+    localStorage.setItem('kickoffpro-install-dismissed', new Date().toISOString());
     dismissInstall();
   };
 
@@ -74,7 +74,7 @@ export function PWAInstallPrompt() {
                 margin: '0 0 8px',
               }}
             >
-              Install NOIR Admin
+              Install KickoffPro Admin
             </p>
             <p
               style={{
@@ -136,7 +136,7 @@ export function PWAInstallPrompt() {
             flexShrink: 0,
           }}
         >
-          <span style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)' }}>N</span>
+          <span style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)' }}>K</span>
         </div>
         <div style={{ flex: 1 }}>
           <p
@@ -147,7 +147,7 @@ export function PWAInstallPrompt() {
               margin: '0 0 4px',
             }}
           >
-            NOIR ADMIN
+            KICKOFFPRO ADMIN
           </p>
           <p
             style={{

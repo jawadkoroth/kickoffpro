@@ -5,44 +5,18 @@ import { breadcrumbLd } from '@/lib/seo/jsonLd';
 import { BRAND, CONTACT, SOCIAL, canonicalUrl } from '@/lib/seo/site';
 import styles from './about.module.css';
 
-/**
- * About — server component, typography-led editorial.
- *
- * Five quiet sections, in order:
- *
- *   1. Opening statement — single line, breathing space.
- *   2. Standards — material, tone, and silhouette discipline.
- *   3. Editorial caesura — vertical rule + a single fragment.
- *   4. Philosophy — four short rules, rhythmic.
- *   5. Closing — emblem and a single email.
- *
- * No team grid, no founder story, no founding year, no "our
- * journey." If you ever feel the urge to add a numbered list of
- * "values," do not. The section already exists and is kept short
- * for a reason.
- *
- * Photography is intentionally absent in v1. The editorial layout
- * is designed to look complete without imagery; image slots can be
- * added later by replacing the `.standardsArt` and `.fragmentArt`
- * blocks with `<Image>` components.
- *
- * Indexable. Quiet structured-data: a `BreadcrumbList` and the
- * page-level metadata. No FAQ, no Article, no aggressive schema
- * cascade — that's deliberate per the brand brief.
- */
-
 export const metadata: Metadata = {
   title: 'About',
   description:
-    `${BRAND.name} is a monochrome menswear house, built around black. ` +
-    `Linen, cotton, and wool, cut for repetition and made in India.`,
+    `${BRAND.name} is India's budget-friendly football jersey store. ` +
+    `High-quality club, national team, and retro jerseys priced between ₹250 and ₹350.`,
   alternates: { canonical: canonicalUrl('/about') },
   openGraph: {
     type: 'website',
     url: canonicalUrl('/about'),
     title: `About — ${BRAND.name}`,
     description:
-      `Monochrome menswear, built around black. Made in India.`,
+      `Budget football jerseys. Premium fan and retro classics. Made for the game.`,
   },
 };
 
@@ -59,99 +33,81 @@ export default function AboutPage() {
       <main className={styles.page}>
         {/* 1 — Opening statement */}
         <section className={styles.opening} aria-labelledby="about-heading">
-          <p className={styles.openingEyebrow}>The House</p>
+          <p className={styles.openingEyebrow}>Our Mission</p>
           <h1 id="about-heading" className={styles.openingTitle}>
-            Black is not a colour.
+            Football is not just a game.
             <br />
-            It is a decision.
+            It is a passion.
           </h1>
           <p className={styles.openingSub}>
-            We make one thing — quiet menswear in permanent black. Cut to
-            be worn often, and for years.
+            We make one thing — high-quality football jerseys for every fan at unbeatable budget prices (₹250 - ₹350).
           </p>
         </section>
 
         {/* 2 — Standards */}
         <section className={styles.standards} aria-labelledby="standards-heading">
-          <div className={styles.standardsArt} aria-hidden="true" />
-
           <div className={styles.standardsBody}>
             <p className={styles.eyebrow}>Standards</p>
             <h2 id="standards-heading" className={styles.sectionHeading}>
-              The same piece, made well, again.
+              Unbeatable quality at affordable prices.
             </h2>
 
             <dl className={styles.standardsList}>
               <div className={styles.standard}>
-                <dt>Tone</dt>
+                <dt>Pricing</dt>
                 <dd>
-                  A single black across every piece. Reactive-dyed,
-                  set deep, and tested for long-term resistance to
-                  greying.
+                  Flat ₹250 to ₹350 range. Perfect for students, players, and passionate fans who want to support their club without breaking the bank.
                 </dd>
               </div>
               <div className={styles.standard}>
-                <dt>Cloth</dt>
+                <dt>Quality Fabric</dt>
                 <dd>
-                  Long-staple linen, mid-weight cotton, wool worsteds.
-                  Mills are chosen for consistency over volume.
+                  Lightweight, breathable, sweat-wicking polyester fabric. Ideal for playing on the pitch or cheering from the stands.
                 </dd>
               </div>
               <div className={styles.standard}>
-                <dt>Silhouette</dt>
+                <dt>Vast Selection</dt>
                 <dd>
-                  Cut to the body without stricture. Shapes are
-                  refined across seasons rather than replaced.
+                  From the latest 2026 club kits and national teams to classic retro jerseys. Custom badges and detailing on every piece.
                 </dd>
               </div>
               <div className={styles.standard}>
-                <dt>Edition</dt>
+                <dt>COD & Free Shipping</dt>
                 <dd>
-                  Each piece is made in limited runs and re-issued
-                  when the cloth allows.
+                  Pay easily using Cash on Delivery. Get Free Shipping on all orders above ₹499 across India.
                 </dd>
               </div>
             </dl>
           </div>
         </section>
 
-        {/* 3 — Editorial caesura */}
-        <section className={styles.fragment} aria-hidden="false">
-          <span className={styles.fragmentRule} aria-hidden="true" />
-          <p className={styles.fragmentText}>
-            Cut in single runs.
-            <br />
-            Finished by hand at the collar.
-          </p>
-        </section>
-
-        {/* 4 — Philosophy */}
+        {/* 3 — Philosophy */}
         <section className={styles.philosophy} aria-labelledby="philosophy-heading">
-          <p className={styles.eyebrow}>Notes</p>
+          <p className={styles.eyebrow}>Our Goals</p>
           <h2 id="philosophy-heading" className={styles.sectionHeading}>
-            How we think about clothes.
+            Jersey destination for fans.
           </h2>
           <ul className={styles.notes}>
-            <li>Less, kept longer.</li>
-            <li>Built around black.</li>
-            <li>Silhouette before trend.</li>
-            <li>Quiet garments, for repeated wear.</li>
+            <li>Passionate designs for every supporter.</li>
+            <li>No high margins, only fair pricing.</li>
+            <li>Lightweight performance gear.</li>
+            <li>Fast delivery right to your door.</li>
           </ul>
         </section>
 
-        {/* 5 — Closing / contact */}
+        {/* 4 — Closing / contact */}
         <section className={styles.closing} aria-labelledby="contact-heading" id="contact">
           <span className={styles.emblem} aria-hidden="true">
             {BRAND.name}
           </span>
           <h2 id="contact-heading" className={styles.closingHeading}>
-            Write to us.
+            Reach out to our team.
           </h2>
           <ul className={styles.contactList}>
             {CONTACT.email && (
               <li>
                 <a href={`mailto:${CONTACT.email}`}>{CONTACT.email}</a>
-                <span className={styles.contactNote}>General &amp; editorial</span>
+                <span className={styles.contactNote}>Support & bulk orders</span>
               </li>
             )}
             {SOCIAL.instagram && (
@@ -159,12 +115,12 @@ export default function AboutPage() {
                 <a href={SOCIAL.instagram} target="_blank" rel="noopener noreferrer">
                   Instagram
                 </a>
-                <span className={styles.contactNote}>Latest releases</span>
+                <span className={styles.contactNote}>Latest jersey drops</span>
               </li>
             )}
             <li>
-              <Link href="/journal">Journal</Link>
-              <span className={styles.contactNote}>Editorial</span>
+              <Link href="/journal">Blog</Link>
+              <span className={styles.contactNote}>Community</span>
             </li>
           </ul>
         </section>

@@ -12,30 +12,30 @@
 }
 
 :root {
-  --bg-primary: #0B0B0B;
-  --bg-secondary: #111111;
-  --bg-tertiary: #1A1A1A;
-  --bg-elevated: #222222;
-  --bg-input: #161616;
+  --bg-primary: #FFFFFF;
+  --bg-secondary: #F8FAFC;
+  --bg-tertiary: #F1F5F9;
+  --bg-elevated: #FFFFFF;
+  --bg-input: #F8FAFC;
 
-  --text-primary: #F5F5F5;
-  --text-secondary: #CFCFCF;
-  --text-muted: #8A8A8A;
-  --text-accent: #D4AF37;
+  --text-primary: #0F172A;
+  --text-secondary: #334155;
+  --text-muted: #64748B;
+  --text-accent: #38BDF8;
 
-  --border-color: #2A2A2A;
-  --border-light: #333333;
+  --border-color: #E2E8F0;
+  --border-light: #CBD5E1;
 
-  --success: #4CAF50;
-  --error: #E53935;
-  --warning: #FF9800;
-  --info: #29B6F6;
+  --success: #22C55E;
+  --error: #EF4444;
+  --warning: #FACC15;
+  --info: #38BDF8;
 
-  /* Subtle gold accent reserved for hover/limited-stock cues. */
-  --accent-gold: #C9A86A;
+  /* Sporty highlight accent */
+  --accent-gold: #FACC15;
 
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --font-serif: 'Playfair Display', Georgia, serif;
+  --font-serif: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 
   --space-1: 4px;
   --space-2: 8px;
@@ -73,11 +73,11 @@
    *   --subtle-border-strong  hover-state border emphasis
    *   --surface-tint       barely-there surface wash (drop zones)
    */
-  --hover-wash: rgba(255, 255, 255, 0.05);
-  --hover-wash-strong: rgba(255, 255, 255, 0.12);
-  --subtle-border: rgba(255, 255, 255, 0.08);
-  --subtle-border-strong: rgba(255, 255, 255, 0.18);
-  --surface-tint: rgba(255, 255, 255, 0.02);
+  --hover-wash: rgba(15, 23, 42, 0.04);
+  --hover-wash-strong: rgba(15, 23, 42, 0.08);
+  --subtle-border: rgba(15, 23, 42, 0.08);
+  --subtle-border-strong: rgba(15, 23, 42, 0.16);
+  --surface-tint: rgba(15, 23, 42, 0.02);
 
   --ease-out: cubic-bezier(0.25, 0.46, 0.45, 0.94);
   --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -935,16 +935,16 @@ img {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--bg-tertiary);
+  background: var(--border-light);
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--border-light);
+  background: var(--text-muted);
 }
 
 ::selection {
-  background: rgba(212, 175, 55, 0.3);
+  background: rgba(56, 189, 248, 0.3);
   color: var(--text-primary);
 }
 
@@ -980,148 +980,58 @@ img {
   animation: pulse 2s ease-in-out infinite;
 }
 
-/* ---------- Light Theme — Warm Luxury Palette ----------
- *
- * Designed to preserve the NOIR premium feel without resorting to
- * a corporate white-and-blue look. All values are derived from a
- * single warm neutral family (sandstone / linen) so the surface
- * hierarchy stays calm and readable:
- *
- *   bg-primary    page background (slightly warmer than card)
- *   bg-secondary  card surface (lifted, brighter)
- *   bg-tertiary   subtle wash for muted regions
- *   bg-elevated   modal / floating surface (closest to white)
- *   bg-input      input background (matches elevated)
- *
- * Text is soft charcoal — never pure black — to avoid harsh edges
- * against the warm bg. Borders are muted beige/stone, NOT grey.
- * Accent gold is darkened just enough to retain contrast on the
- * sand background.
- *
- * Dark mode tokens above remain untouched.
- */
-[data-theme='light'] {
-  --bg-primary: #F5F1EA;
-  /* page bg: warm sandstone */
-  --bg-secondary: #FAF7F2;
-  /* cards: lifted ivory */
-  --bg-tertiary: #F0EBE1;
-  /* muted wash: subtle linen */
-  --bg-elevated: #FFFEFB;
-  /* modal / float: near-white but warm */
-  --bg-input: #FFFEFB;
+/* ---------- Dark Theme — Deep Navy Sports Palette ---------- */
+[data-theme='dark'] {
+  --bg-primary: #0F172A;
+  --bg-secondary: #1E293B;
+  --bg-tertiary: #1E293B;
+  --bg-elevated: #0F172A;
+  --bg-input: #1E293B;
 
-  --text-primary: #1F1B17;
-  /* soft charcoal, not pure black */
-  --text-secondary: #54483D;
-  /* warm slate */
-  --text-muted: #8F8377;
-  /* stone */
-  --text-accent: #A88532;
-  /* deeper gold for legibility on sand */
+  --text-primary: #F8FAFC;
+  --text-secondary: #CBD5E1;
+  --text-muted: #94A3B8;
+  --text-accent: #38BDF8;
 
-  --border-color: #E2D9CB;
-  /* warm beige */
-  --border-light: #D2C7B5;
-  /* slightly stronger beige */
+  --border-color: #334155;
+  --border-light: #475569;
 
-  /* Subtle gold accent reserved for hover/limited-stock cues. */
-  --accent-gold: #B89858;
+  --accent-gold: #FACC15;
 
-  --shadow-sm: 0 1px 3px rgba(60, 45, 25, 0.06);
-  --shadow-md: 0 4px 14px rgba(60, 45, 25, 0.08);
-  --shadow-lg: 0 10px 28px rgba(60, 45, 25, 0.12);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.6);
+
+  --hover-wash: rgba(255, 255, 255, 0.06);
+  --hover-wash-strong: rgba(255, 255, 255, 0.12);
+  --subtle-border: rgba(255, 255, 255, 0.08);
+  --subtle-border-strong: rgba(255, 255, 255, 0.18);
+  --surface-tint: rgba(255, 255, 255, 0.02);
 }
 
-/* Light-mode admin glass: tuned to the warm palette so the
- * sticky header and card surfaces don't read as cold grey. */
-[data-theme='light'] .admin-layout {
-  --admin-glass-bg: rgba(250, 247, 242, 0.78);
-  --admin-glass-border: rgba(95, 75, 45, 0.10);
-  --admin-glass-shadow: 0 4px 16px rgba(60, 45, 25, 0.05);
-}
-
-[data-theme='light'] body {
-  /* Pure-white selection looks harsh on warm bg; tint it. */
+[data-theme='dark'] body {
   background-color: var(--bg-primary);
 }
 
-[data-theme='light'] ::selection {
-  background: rgba(168, 133, 50, 0.22);
+[data-theme='dark'] ::selection {
+  background: rgba(56, 189, 248, 0.3);
   color: var(--text-primary);
 }
 
-/* btn-primary in dark mode is white-on-black. In light mode the
- * same tokens flip to dark-on-light, which collides with the
- * surrounding sand surfaces (poor visual hierarchy). Anchor the
- * primary button to a deep espresso so it remains the strongest
- * call-to-action on every screen without re-implementing it on
- * every page. */
-[data-theme='light'] .btn-primary {
-  background: #1F1B17;
-  color: #FAF7F2;
+[data-theme='dark'] .gallery-dot {
+  background: rgba(255, 255, 255, 0.4);
 }
 
-[data-theme='light'] .btn-primary:hover {
-  background: #2C261F;
+[data-theme='dark'] .gallery-dot-active {
+  background: white;
 }
 
-[data-theme='light'] .btn-primary:disabled {
-  background: var(--bg-tertiary);
-  color: var(--text-muted);
+[data-theme='dark'] ::-webkit-scrollbar-thumb {
+  background: #334155;
 }
 
-[data-theme='light'] .btn-loading::after {
-  border-top-color: #FAF7F2;
-}
-
-/* Theme-aware token overrides — flip the surface tints from
- * rgba-on-dark to rgba-on-light. All consumers (CSS modules + this
- * file) inherit the new values automatically. */
-[data-theme='light'] {
-  --hover-wash: rgba(31, 27, 23, 0.045);
-  --hover-wash-strong: rgba(31, 27, 23, 0.09);
-  --subtle-border: rgba(31, 27, 23, 0.10);
-  --subtle-border-strong: rgba(31, 27, 23, 0.22);
-  --surface-tint: rgba(31, 27, 23, 0.03);
-}
-
-/* Gallery slide dots: white on a black bg in dark mode is fine,
- * but `rgba(255,255,255,0.4)` and solid `white` go invisible
- * against the warm light surface. Flip to charcoal in light. */
-[data-theme='light'] .gallery-dot {
-  background: rgba(31, 27, 23, 0.35);
-}
-
-[data-theme='light'] .gallery-dot-active {
-  background: #1F1B17;
-}
-
-/* Premium toggle slider shadow: a black drop on a light bg looks
- * like a smudge. Soften it so the slider reads "lifted" without
- * the heavy shadow. */
-[data-theme='light'] .premium-toggle-slider::before,
-[data-theme='light'] .premium-toggle-slider:before {
-  box-shadow: 0 1px 2px rgba(60, 45, 25, 0.10);
-}
-
-/* Stat / order card hover shadows are calibrated for a deep dark
- * surface; on warm linen they read as bruise-purple. Use the
- * warm shadow tokens we already defined for light mode. */
-[data-theme='light'] .stat-card:hover,
-[data-theme='light'] .order-card:hover {
-  box-shadow: 0 10px 26px rgba(60, 45, 25, 0.10);
-}
-
-/* Scrollbar thumb: bg-tertiary in light mode is too close to
- * bg-primary, leaving the scrollbar nearly invisible. Anchor it
- * to a beige that has clear contrast against the page. */
-[data-theme='light'] ::-webkit-scrollbar-thumb {
-  background: #C9BBA3;
-}
-
-[data-theme='light'] ::-webkit-scrollbar-thumb:hover {
-  background: #B8A88B;
+[data-theme='dark'] ::-webkit-scrollbar-thumb:hover {
+  background: #475569;
 }
 
 /* =============================================

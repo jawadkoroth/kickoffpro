@@ -65,7 +65,7 @@ export default function AdminLogin() {
   return (
     <div className={styles.page}>
       <div className={styles.card}>
-        <div className={styles.logo}>NOIR</div>
+        <div className={styles.logo}>KickoffPro</div>
         <h1 className={styles.heading}>Admin Login</h1>
         <form onSubmit={handleLogin} className={styles.form}>
           <div className="input-group">

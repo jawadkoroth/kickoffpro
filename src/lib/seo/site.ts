@@ -11,7 +11,7 @@
  * SEO concerns on the server.
  */
 
-const DEFAULT_URL = 'https://legend-kart.vercel.app';
+const DEFAULT_URL = 'https://kickoffpro.vercel.app';
 
 function normaliseUrl(raw: string | undefined): string {
   if (!raw) return DEFAULT_URL;
@@ -42,13 +42,13 @@ export const SITE_URL = normaliseUrl(
  * knowledge panels.
  */
 export const BRAND = {
-  name: 'NOIR',
-  legalName: process.env.NOIR_LEGAL_NAME || 'NOIR',
+  name: 'KickoffPro',
+  legalName: process.env.NOIR_LEGAL_NAME || 'KickoffPro',
   /** Appended after page-specific titles. Keep short. */
-  titleSuffix: 'NOIR',
+  titleSuffix: 'KickoffPro',
   /** Fallback description for pages that don't supply their own. */
   description:
-    'Monochrome menswear. Permanent black. Crafted in India.',
+    'Affordable Football Jerseys For Every Fan. High quality club, national, and retro jerseys starting at ₹250.',
   /**
    * Country of operation. Used by Merchant Center feed defaults and
    * Organization schema `addressCountry`.

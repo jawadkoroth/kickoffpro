@@ -110,7 +110,7 @@ function siteUrl(): string {
   return (
     process.env.NEXT_PUBLIC_URL ||
     process.env.NEXT_PUBLIC_SITE_URL ||
-    'https://legend-kart.vercel.app'
+    'https://kickoffpro.vercel.app'
   );
 }
 
@@ -223,7 +223,7 @@ function renderEmail(opts: RenderOpts): string {
             <!-- Header / wordmark -->
             <tr>
               <td style="padding:28px 28px 0;text-align:center;">
-                <p style="margin:0;font-family:Georgia,'Playfair Display',serif;font-size:22px;letter-spacing:0.32em;color:#F5F5F5;">NOIR</p>
+                <p style="margin:0;font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:22px;font-weight:900;font-style:italic;letter-spacing:-0.02em;color:#F5F5F5;">KICKOFF<span style="color:#FACC15;">PRO</span></p>
                 <div style="height:1px;background:rgba(255,255,255,0.06);margin:24px 0 0;"></div>
               </td>
             </tr>
@@ -232,7 +232,7 @@ function renderEmail(opts: RenderOpts): string {
             <tr>
               <td style="padding:28px;">
                 ${eyebrowBlock}
-                <h1 style="margin:0 0 10px;font-family:Georgia,'Playfair Display',serif;font-size:22px;font-weight:500;color:#F5F5F5;letter-spacing:-0.01em;">${escapeHtml(heading)}</h1>
+                <h1 style="margin:0 0 10px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:22px;font-weight:700;color:#F5F5F5;letter-spacing:-0.01em;">${escapeHtml(heading)}</h1>
                 <p style="margin:0;color:#CFCFCF;font-size:14px;line-height:1.6;">${escapeHtml(intro)}</p>
 
                 ${itemBlock}
@@ -259,7 +259,7 @@ function renderEmail(opts: RenderOpts): string {
               <td style="padding:0 28px 28px;">
                 <div style="height:1px;background:rgba(255,255,255,0.06);margin:0 0 16px;"></div>
                 <p style="margin:0;color:#6A6A6A;font-size:11px;line-height:1.6;text-align:center;">
-                  This is an automated message from NOIR.<br />
+                  This is an automated message from KickoffPro.<br />
                   If you have any questions, simply reply to this email.
                 </p>
               </td>
@@ -419,7 +419,7 @@ async function dispatch(opts: DispatchOpts): Promise<void> {
 
   try {
     await resend.emails.send({
-      from: process.env.EMAIL_FROM || 'NOIR <onboarding@resend.dev>',
+      from: process.env.EMAIL_FROM || 'KickoffPro <onboarding@resend.dev>',
       to,
       subject,
       html,

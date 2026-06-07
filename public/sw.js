@@ -14,9 +14,9 @@
  *   - API routes explicitly excluded from cache
  */
 
-const CACHE_CORE = 'noir-core-v1';
-const CACHE_IMAGES = 'noir-images-v1';
-const CACHE_ASSETS = 'noir-assets-v1';
+const CACHE_CORE = 'kickoffpro-core-v1';
+const CACHE_IMAGES = 'kickoffpro-images-v1';
+const CACHE_ASSETS = 'kickoffpro-assets-v1';
 
 // Core static assets only (no SSR routes)
 const CORE_ASSETS = [
@@ -60,7 +60,7 @@ self.addEventListener('activate', (event) => {
       .then((cacheNames) =>
         Promise.all(
           cacheNames
-            .filter((name) => name.startsWith('noir-') && name !== CACHE_CORE && name !== CACHE_IMAGES && name !== CACHE_ASSETS)
+            .filter((name) => name.startsWith('kickoffpro-') && name !== CACHE_CORE && name !== CACHE_IMAGES && name !== CACHE_ASSETS)
             .map((name) => caches.delete(name))
         )
       )
@@ -147,8 +147,8 @@ self.addEventListener('fetch', (event) => {
           new Response(
             `<!DOCTYPE html>
 <html>
-<head><title>NOIR — Offline</title><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>
-body{background:#0B0B0B;color:#fff;font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;text-align:center;padding:20px}
+<head><title>KickoffPro — Offline</title><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>
+body{background:#0F172A;color:#fff;font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;text-align:center;padding:20px}
 .icon{font-size:48px;margin-bottom:16px}
 h1{font-size:18px;font-weight:600;letter-spacing:0.1em;margin-bottom:8px}
 p{font-size:14px;color:#888;margin:0}
@@ -156,7 +156,7 @@ p{font-size:14px;color:#888;margin:0}
 <body>
 <div>
 <div class="icon">📡</div>
-<h1>NOIR OFFLINE</h1>
+<h1>KICKOFFPRO OFFLINE</h1>
 <p>Connection lost. Working offline mode.</p>
 <p style="margin-top:20px;font-size:12px;color:#666">Check network and retry</p>
 </div>
@@ -182,13 +182,13 @@ self.addEventListener('push', (event) => {
   try {
     payload = event.data ? event.data.json() : {};
   } catch (_) {
-    payload = { title: 'NOIR Alert', body: event.data ? event.data.text() : '' };
+    payload = { title: 'KickoffPro Alert', body: event.data ? event.data.text() : '' };
   }
 
-  const title = payload.title || 'NOIR Admin';
+  const title = payload.title || 'KickoffPro Admin';
   const options = {
     body: payload.body || '',
-    tag: payload.tag || 'noir-alert',
+    tag: payload.tag || 'kickoffpro-alert',
     renotify: true,
     requireInteraction: payload.requireInteraction || false,
     silent: false,

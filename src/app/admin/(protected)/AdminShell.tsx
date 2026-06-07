@@ -32,7 +32,7 @@ export default function AdminShell({
     <div className="admin-layout">
       <div className="admin-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-          <span style={{ fontFamily: 'var(--font-serif)', fontSize: '1.25rem', fontWeight: 600, letterSpacing: '0.1em' }}>NOIR</span>
+          <span style={{ fontFamily: 'var(--font-sans)', fontSize: '1.25rem', fontWeight: 800, letterSpacing: '0.05em' }}>KickoffPro</span>
           <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.15em' }}>ADMIN</span>
         </div>
 

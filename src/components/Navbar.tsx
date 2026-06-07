@@ -11,7 +11,7 @@ export default function Navbar() {
   const pathname = usePathname();
   const { totalItems } = useCart();
   const { user } = useAuth();
-  const [theme, setTheme] = useState<'light' | 'dark'>('dark');
+  const [theme, setTheme] = useState<'light' | 'dark'>('light');
 
   useEffect(() => {
     // Check initial theme from html attribute or localStorage
@@ -37,15 +37,19 @@ export default function Navbar() {
 
   return (
     <nav className={styles.navbar}>
-      <Link href="/" className={styles.logo}>NOIR</Link>
+      <Link href="/" className={styles.logo}>
+        KICKOFF<span className={styles.logoHighlight}>PRO</span>
+      </Link>
+      
+      <div className={styles.navLinks}>
+        <Link href="/products" className={styles.navLink}>Shop</Link>
+        <Link href="/products?category=club" className={styles.navLink}>Clubs</Link>
+        <Link href="/products?category=national" className={styles.navLink}>National</Link>
+        <Link href="/products?category=retro" className={styles.navLink}>Retro</Link>
+        <Link href="/products?category=sale" className={`${styles.navLink} ${styles.saleLink}`}>Sale</Link>
+      </div>
+
       <div className={styles.actions}>
-        <Link
-          href="/products"
-          className={styles.shopLink}
-          aria-label="Shop all products"
-        >
-          Shop
-        </Link>
         <button onClick={toggleTheme} className={styles.iconBtn} aria-label="Toggle Theme">
           {theme === 'dark' ? (
             // Sun icon

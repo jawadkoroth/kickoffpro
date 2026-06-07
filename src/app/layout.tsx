@@ -27,7 +27,7 @@ import { SpeedInsights } from '@vercel/speed-insights/next';
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: `${BRAND.name} — Monochrome Menswear, India`,
+    default: `${BRAND.name} — Affordable Football Jerseys, India`,
     template: `%s — ${BRAND.titleSuffix}`,
   },
   description: BRAND.description,
@@ -39,12 +39,12 @@ export const metadata: Metadata = {
     siteName: BRAND.name,
     locale: BRAND.locale,
     url: SITE_URL,
-    title: `${BRAND.name} — Monochrome Menswear, India`,
+    title: `${BRAND.name} — Affordable Football Jerseys, India`,
     description: BRAND.description,
   },
   twitter: {
     card: 'summary_large_image',
-    title: `${BRAND.name} — Monochrome Menswear, India`,
+    title: `${BRAND.name} — Affordable Football Jerseys, India`,
     description: BRAND.description,
   },
   robots: {
@@ -66,7 +66,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
-    title: 'NOIR ADMIN',
+    title: 'KickoffPro Admin',
   },
 };
 
@@ -78,7 +78,7 @@ export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   viewportFit: 'cover',
-  themeColor: '#0B0B0B',
+  themeColor: '#FFFFFF',
 };
 
 export default async function RootLayout({
@@ -103,7 +103,7 @@ export default async function RootLayout({
               (function() {
                 try {
                   var localTheme = localStorage.getItem('theme');
-                  var themeToSet = localTheme || 'dark';
+                  var themeToSet = localTheme || 'light';
                   document.documentElement.setAttribute('data-theme', themeToSet);
                 } catch (e) {}
               })();
@@ -113,7 +113,7 @@ export default async function RootLayout({
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link
-          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@400;500;600;700&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
           rel="stylesheet"
         />
       </head>

@@ -28,10 +28,11 @@
 }
 
 .brand {
-  font-family: var(--font-serif);
-  font-weight: 400;
+  font-family: var(--font-sans);
+  font-weight: 950;
+  font-style: italic;
   font-size: clamp(2rem, 4.2vw, 3rem);
-  letter-spacing: 0.18em;
+  letter-spacing: -0.03em;
   color: var(--text-primary);
   margin: 0;
   line-height: 1;

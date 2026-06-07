@@ -21,35 +21,35 @@ const NOTIFICATION_CONFIG = {
   new_order: {
     icon: '/icons/icon-192x192.png',
     badge: '/icons/icon-96x96.png',
-    tag: 'noir-order',
+    tag: 'kickoffpro-order',
     vibrate: [200, 100, 200],
     requireInteraction: false,
   },
   shipment_update: {
     icon: '/icons/icon-192x192.png',
     badge: '/icons/icon-96x96.png',
-    tag: 'noir-shipment',
+    tag: 'kickoffpro-shipment',
     vibrate: [150, 50, 150],
     requireInteraction: false,
   },
   webhook_failure: {
     icon: '/icons/icon-192x192.png',
     badge: '/icons/icon-96x96.png',
-    tag: 'noir-webhook',
+    tag: 'kickoffpro-webhook',
     vibrate: [300, 100, 300, 100, 300],
     requireInteraction: true,
   },
   operational_alert: {
     icon: '/icons/icon-192x192.png',
     badge: '/icons/icon-96x96.png',
-    tag: 'noir-alert',
+    tag: 'kickoffpro-alert',
     vibrate: [250, 100, 250],
     requireInteraction: true,
   },
   diagnostics_warning: {
     icon: '/icons/icon-192x192.png',
     badge: '/icons/icon-96x96.png',
-    tag: 'noir-diag',
+    tag: 'kickoffpro-diag',
     vibrate: [100, 50, 100],
     requireInteraction: false,
   },
@@ -70,9 +70,8 @@ self.addEventListener('push', (event) => {
   let payload = {};
   try {
     payload = event.data ? event.data.json() : {};
-  } catch (_) {
     payload = {
-      title: 'NOIR Alert',
+      title: 'KickoffPro Alert',
       body: event.data ? event.data.text() : 'Operational notification',
       type: 'operational_alert'
     };
@@ -88,7 +87,7 @@ self.addEventListener('push', (event) => {
       ? `${config.tag}-${payload.shipmentId}`
       : config.tag;
 
-  const title = payload.title || 'NOIR Admin';
+  const title = payload.title || 'KickoffPro Admin';
   const options = {
     body: payload.body || '',
     tag: tag,
@@ -185,7 +184,7 @@ self.addEventListener('message', (event) => {
   // ── Realtime order alert routed from AdminRealtimeProvider when app is backgrounded ──
   if (event.data?.type === 'SHOW_ORDER_NOTIFICATION') {
     const p = event.data.payload || {};
-    const tag = p.orderId ? `noir-order-${p.orderId}` : 'noir-order';
+    const tag = p.orderId ? `kickoffpro-order-${p.orderId}` : 'kickoffpro-order';
 
     const notifOptions = {
       body: p.body || 'A new order has been placed.',
@@ -209,7 +208,7 @@ self.addEventListener('message', (event) => {
     };
 
     event.waitUntil(
-      self.registration.showNotification(p.title || '💰 New Order — NOIR', notifOptions)
+      self.registration.showNotification(p.title || '💰 New Order — KickoffPro', notifOptions)
     );
     return;
   }
