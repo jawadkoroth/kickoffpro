@@ -1,5 +1,5 @@
 /**
- * NOIR — GET /api/admin/shipping/diagnostics
+ * KickoffPro — GET /api/admin/shipping/diagnostics
  *
  * Returns comprehensive operational health metrics for the shipping system.
  * Includes provider health, webhook status, shipment pipeline, and recent events.

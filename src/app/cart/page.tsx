@@ -20,7 +20,7 @@ import styles from './page.module.css';
  * revalidate again before the order POST, and the database remains
  * the final inventory gate.
  */
-const COUPON_STORAGE_KEY = 'noir_coupon_code';
+const COUPON_STORAGE_KEY = 'kickoffpro_coupon_code';
 
 export default function CartPage() {
   const router = useRouter();

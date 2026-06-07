@@ -1,5 +1,5 @@
 /**
- * NOIR — Shiprocket provider adapter.
+ * KickoffPro — Shiprocket provider adapter.
  *
  * Auth model: JWT session token obtained via /auth/login.
  * Tokens expire after 24h. refreshAuth() obtains a new token
@@ -63,7 +63,7 @@ export class ShiprocketProvider implements ShippingProvider {
   }
 
   /**
-   * NOIR — Shiprocket Error Forensics
+   * KickoffPro — Shiprocket Error Forensics
    * Parses Shiprocket API errors into actionable diagnostics.
    */
   private parseShiprocketError(status: number, data: Record<string, unknown>): ParsedProviderError {
@@ -228,7 +228,7 @@ export class ShiprocketProvider implements ShippingProvider {
   }
 
   /**
-   * NOIR: Pre-flight validation for shipment creation.
+   * KickoffPro: Pre-flight validation for shipment creation.
    */
   validateShipmentRequest(req: ShipmentRequest): ParsedProviderError | null {
     // Customer phone required

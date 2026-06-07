@@ -2,7 +2,7 @@ import type { MetadataRoute } from 'next';
 import { SITE_URL } from '@/lib/seo/site';
 
 /**
- * NOIR — robots.txt policy.
+ * KickoffPro — robots.txt policy.
  *
  * Baseline: allow generic crawlers across the public surface;
  * explicitly disallow transactional, authenticated, admin, and

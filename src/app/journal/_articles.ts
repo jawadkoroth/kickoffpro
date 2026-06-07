@@ -1,5 +1,5 @@
 /**
- * NOIR — Journal article registry.
+ * KickoffPro — Journal article registry.
  *
  * The journal is intentionally a small, hand-curated set of pieces.
  * No CMS, no markdown loader, no auto-generated archive views. Add

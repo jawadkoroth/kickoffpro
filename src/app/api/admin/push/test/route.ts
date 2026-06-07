@@ -44,7 +44,7 @@ export async function POST(_req: NextRequest) {
   if (!gate.ok) return apiError(gate.status, gate.message);
 
   const result = await notifyAdmins(gate.admin, {
-    title: 'NOIR — test notification',
+    title: 'KickoffPro — test notification',
     body: 'If you see this, your push pipeline is live.',
     url: '/admin/dashboard',
     tag: `push-test-${Date.now()}`,

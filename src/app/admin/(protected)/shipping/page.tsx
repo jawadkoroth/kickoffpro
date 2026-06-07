@@ -537,7 +537,7 @@ function PricingTab({
     <div>
       <div style={{ marginBottom: 24 }}>
         <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: 0, lineHeight: 1.6 }}>
-          Global pricing rules applied to all orders. These are courier-agnostic — they govern NOIR's shipping policy, not the provider.
+          Global pricing rules applied to all orders. These are courier-agnostic — they govern KickoffPro's shipping policy, not the provider.
         </p>
       </div>
 
@@ -1095,7 +1095,7 @@ export default function AdminShipping() {
       {/* Page header */}
       <div style={{ marginBottom: 28 }}>
         <p style={{ fontSize: '0.625rem', fontWeight: 700, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 4 }}>
-          NOIR · Shipping Console
+          KickoffPro · Shipping Console
         </p>
         <h1 style={{ fontSize: '1.25rem', fontWeight: 700, letterSpacing: '0.01em', color: 'var(--text-primary)', margin: 0 }}>
           Shipping

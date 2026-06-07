@@ -15,7 +15,7 @@ import { mapDelhiveryStatus } from './state';
 import { logEvent } from '@/lib/log';
 
 /**
- * NOIR — Delhivery Error Forensics
+ * KickoffPro — Delhivery Error Forensics
  * Parses Delhivery API errors into actionable diagnostics.
  */
 function parseDelhiveryError(status: number, data: Record<string, unknown>, context?: string): ParsedProviderError {
@@ -320,7 +320,7 @@ export class DelhiveryProvider implements ShippingProvider {
   }
 
   async createShipment(req: ShipmentRequest): Promise<ShipmentResponse> {
-    // NOIR: Delhivery shipment payload — field names are Delhivery One API spec
+    // KickoffPro: Delhivery shipment payload — field names are Delhivery One API spec
     const shipmentPayload = {
       shipments: [{
         name: req.customer.name,
@@ -350,7 +350,7 @@ export class DelhiveryProvider implements ShippingProvider {
     const endpoint = `${this.apiUrl}/api/cmu/create.json`;
     const payloadDataStr = JSON.stringify(shipmentPayload);
 
-    // NOIR: Delhivery requires multipart/form-data with:
+    // KickoffPro: Delhivery requires multipart/form-data with:
     //   format=json
     //   data=<JSON string>
     // NOT application/json raw body — this is the "format key missing in POST" root cause.

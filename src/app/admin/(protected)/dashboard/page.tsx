@@ -11,7 +11,7 @@ import { ADMIN_ORDER_CREATED_EVENT } from '@/components/admin/AdminRealtimeProvi
 import AdminWelcome from '@/components/admin/AdminWelcome';
 
 /**
- * NOIR Admin — operations dashboard.
+ * KickoffPro Admin — operations dashboard.
  *
  * Server-side aggregation only: this page fetches a single
  * `/api/admin/analytics` endpoint that returns every metric / list

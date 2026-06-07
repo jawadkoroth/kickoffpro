@@ -2,7 +2,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { getRequestContext } from '@/lib/observability/context';
 
 /**
- * Structured logger for server-side events — NOIR observability spine.
+ * Structured logger for server-side events — KickoffPro observability spine.
  *
  * Two sinks, both best-effort:
  *

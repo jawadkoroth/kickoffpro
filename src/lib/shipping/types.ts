@@ -12,11 +12,11 @@ export interface ShipmentResponse {
   label_url?: string;
   error?: string;
   raw_response?: unknown;
-  /** NOIR: Parsed forensic error with actionable diagnostics */
+  /** KickoffPro: Parsed forensic error with actionable diagnostics */
   parsed_error?: ParsedProviderError;
-  /** NOIR: Whether this failure is safe to retry */
+  /** KickoffPro: Whether this failure is safe to retry */
   retry_safe?: boolean;
-  /** NOIR: Request latency in milliseconds */
+  /** KickoffPro: Request latency in milliseconds */
   latency_ms?: number;
 }
 
@@ -105,7 +105,7 @@ export interface ConnectionTestResult {
 }
 
 /**
- * NOIR — Normalized provider error with forensic diagnostics.
+ * KickoffPro — Normalized provider error with forensic diagnostics.
  * Every shipping failure produces actionable intelligence.
  */
 export interface ParsedProviderError {
@@ -174,7 +174,7 @@ export interface ShippingProvider {
   testConnection(): Promise<ConnectionTestResult>;
 
   /**
-   * NOIR: Pre-flight validation for shipment creation.
+   * KickoffPro: Pre-flight validation for shipment creation.
    * Validates all prerequisites before calling provider API.
    * Returns null if valid, or ParsedProviderError with actionable diagnostics.
    */

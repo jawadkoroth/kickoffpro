@@ -55,7 +55,7 @@ interface Order {
     last_provider_event_at: string | null;
     environment: string | null;
     failure_reason: string | null;
-    /** NOIR: Parsed forensic error with actionable diagnostics */
+    /** KickoffPro: Parsed forensic error with actionable diagnostics */
     parsed_error: ParsedProviderError | null;
     retry_safe: boolean | null;
     latency_ms: number | null;
@@ -116,7 +116,7 @@ export default function AdminOrderDetail({ params }: { params: Promise<{ id: str
 
   async function fetchShipmentData() {
     const supabase = createClient();
-    // Fetch shipment from new shipments table with NOIR forensic fields
+    // Fetch shipment from new shipments table with KickoffPro forensic fields
     const { data: shipment } = await supabase
       .from('shipments')
       .select(`
@@ -371,7 +371,7 @@ export default function AdminOrderDetail({ params }: { params: Promise<{ id: str
               borderRadius: 3,
               border: '1px solid var(--border-color)',
             }}>
-              {shipmentData.shipment.provider_name?.toUpperCase() ?? 'NOIR'}
+              {shipmentData.shipment.provider_name?.toUpperCase() ?? 'KickoffPro'}
             </span>
           )}
         </div>
@@ -380,7 +380,7 @@ export default function AdminOrderDetail({ params }: { params: Promise<{ id: str
           orderNumber={order.order_number}
         />
 
-        {/* NOIR: Provider Response Panel — shows forensic error details for failed shipments */}
+        {/* KickoffPro: Provider Response Panel — shows forensic error details for failed shipments */}
         {shipmentData.shipment && (
           <ProviderResponsePanel
             provider={shipmentData.shipment.provider_name}

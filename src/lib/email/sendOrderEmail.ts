@@ -3,7 +3,7 @@ import { logEvent } from '@/lib/log';
 import { getPublicUrl } from '@/lib/media';
 
 /**
- * NOIR — order lifecycle email module (v1).
+ * KickoffPro — order lifecycle email module (v1).
  *
  * Design constraints:
  *   - Lazy Resend client so a missing RESEND_API_KEY does not break

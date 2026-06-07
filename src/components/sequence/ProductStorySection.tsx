@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * NOIR — ProductStorySection
+ * KickoffPro — ProductStorySection
  *
  * An immersive scroll-driven product storytelling section that inserts
  * BELOW the existing hero/video. It does NOT modify any existing landing
@@ -222,7 +222,7 @@ function AnnotationOverlay({ annotations, currentFrame }: AnnotationOverlayProps
 
 /* ─────────────────────────────────────────────────────────────────────
    PLACEHOLDER SHIRT SVG (shown when no frames loaded yet)
-   A minimal flat silhouette — no distraction, maintains NOIR mood.
+   A minimal flat silhouette — no distraction, maintains KickoffPro mood.
    ───────────────────────────────────────────────────────────────────── */
 function PlaceholderShirt() {
   return (
@@ -373,7 +373,7 @@ export default function ProductStorySection() {
         {/* Loading overlay */}
         {mounted && (
           <div className={`${styles.loadingOverlay} ${firstFrameReady ? styles.fadeOut : ''}`}>
-            <span className={styles.loadingWordmark}>NOIR</span>
+            <span className={styles.loadingWordmark}>KickoffPro</span>
             <div className={styles.loadingTrack}>
               <div
                 className={styles.loadingFill}

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 
 /**
- * NOIR — Homepage promotional strip.
+ * KickoffPro — Homepage promotional strip.
  *
  * Renders the most recently updated active coupon row whose
  * `show_on_homepage` flag is true. RLS allows public SELECT on
@@ -16,7 +16,7 @@ import { createClient } from '@/lib/supabase/client';
  *   - server-driven copy + colour, no hard-coded codes
  *
  * Always rendered when an active banner row exists; no client-side
- * dismiss state (NOIR spec: promo visibility is an admin decision,
+ * dismiss state (KickoffPro spec: promo visibility is an admin decision,
  * not a per-visitor one — turn off `show_on_homepage` to hide).
  *
  * Hidden silently when no banner is configured. Never blocks the

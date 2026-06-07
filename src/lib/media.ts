@@ -1,5 +1,5 @@
 /**
- * NOIR — Media utility for product images.
+ * KickoffPro — Media utility for product images.
  *
  * Provides backward-compatible URL resolution:
  *   - Old absolute URLs (https://...) pass through untouched.

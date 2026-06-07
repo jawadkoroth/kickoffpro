@@ -2,7 +2,7 @@ import webpush, { WebPushError } from 'web-push';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 /**
- * NOIR — Web Push helper.
+ * KickoffPro — Web Push helper.
  *
  * Wraps the `web-push` lib with:
  *

@@ -10,7 +10,7 @@ import {
 import { notifyAdmins, type AdminPushPayload } from '@/lib/push/webPush';
 
 /**
- * NOIR — job handler registry.
+ * KickoffPro — job handler registry.
  *
  * Each entry is a pure async function that takes `(payload, supabase)`
  * and throws on failure so the runner can retry. Handlers must be:

@@ -1,5 +1,5 @@
 /**
- * NOIR — server-authoritative shipping + COD pricing.
+ * KickoffPro — server-authoritative shipping + COD pricing.
  *
  * Pure, deterministic function: given a subtotal, payment method,
  * and the current shipping settings, return the shipping charge,

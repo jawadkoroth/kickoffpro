@@ -1,5 +1,5 @@
 /**
- * NOIR — Unified shipping webhook receiver.
+ * KickoffPro — Unified shipping webhook receiver.
  *
  * Handles inbound webhook events from all courier providers.
  * Provider is identified by the `?provider=delhivery` query param

@@ -1,5 +1,5 @@
 /*
- * NOIR Admin — Products list.
+ * KickoffPro Admin — Products list.
  *
  * A quiet, dense, scannable inventory surface. The page used to be
  * a wall of unconstrained cards with stock controls, toggles, and
@@ -14,7 +14,7 @@
  *   - Stock-by-size editing is preserved but tucked behind an
  *     expand chevron; the default view stays calm.
  *
- * Visual language matches the rest of NOIR Admin: deep neutral
+ * Visual language matches the rest of KickoffPro Admin: deep neutral
  * surfaces, hairline borders, gold reserved for the active filter
  * pill. No drop-shadows on rows; depth comes from the surface
  * gradient and a single hover lift.

@@ -102,7 +102,7 @@ export default function OrderPage({ params }: { params: Promise<{ id: string }> 
         key: data.key_id,
         amount: data.amount,
         currency: 'INR',
-        name: 'NOIR',
+        name: 'KickoffPro',
         order_id: data.razorpay_order_id,
         prefill: {
           name: data.customer?.name,

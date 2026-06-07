@@ -4,7 +4,7 @@ import { SITE_URL } from '@/lib/seo/site';
 import { publishedArticles } from '@/app/journal/_articles';
 
 /**
- * NOIR — root sitemap.
+ * KickoffPro — root sitemap.
  *
  * Emits:
  *   - static surface routes (home, shop, about, journal, legal)

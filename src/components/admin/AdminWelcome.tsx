@@ -22,7 +22,7 @@ function getGreeting(): string {
 function extractFirstName(email: string | undefined): string {
   if (!email) return 'Admin';
   
-  // Extract name from email (e.g., jawad@noir.com → Jawad)
+  // Extract name from email (e.g., jawad@kickoffpro.com → Jawad)
   const localPart = email.split('@')[0];
   
   // Handle common separators
@@ -92,21 +92,20 @@ export default function AdminWelcome() {
       <h1
         style={{
           fontSize: 'clamp(1.75rem, 4vw, 2.5rem)',
-          fontWeight: 300,
-          letterSpacing: '-0.03em',
-          color: 'var(--text, #ECECEC)',
+          fontWeight: 800,
+          letterSpacing: '-0.02em',
+          color: 'var(--navy, #071B3A)',
           lineHeight: 1.2,
           margin: 0,
           fontFamily: 'inherit',
+          textTransform: 'uppercase',
         }}
       >
         {greeting},
         <br />
         <span
           style={{
-            fontWeight: 500,
-            color: 'var(--gold, #D4AF37)',
-            textShadow: '0 0 40px rgba(212,175,37,0.15)',
+            color: 'var(--blue, #2FA9F5)',
           }}
         >
           {firstName}
@@ -123,7 +122,7 @@ export default function AdminWelcome() {
           fontWeight: 400,
         }}
       >
-        NOIR Operations Dashboard
+        KickoffPro Operations Dashboard
       </p>
     </div>
   );

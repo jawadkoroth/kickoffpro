@@ -21,7 +21,7 @@ interface TrendPoint {
   orders: number;
 }
 
-const GOLD = '#D4AF37';
+const ACCENT_COLOR = '#2FA9F5';
 const TEXT_MUTED = 'var(--text-muted, #8A8A8A)';
 const BORDER = 'rgba(255,255,255,0.08)';
 
@@ -68,9 +68,9 @@ export function RevenueTrendChart({ data }: { data: TrendPoint[] }) {
       style={{ display: 'block' }}
     >
       <defs>
-        <linearGradient id="noir-revenue-fill" x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0%" stopColor={GOLD} stopOpacity="0.22" />
-          <stop offset="100%" stopColor={GOLD} stopOpacity="0" />
+        <linearGradient id="kickoffpro-revenue-fill" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0%" stopColor={ACCENT_COLOR} stopOpacity="0.22" />
+          <stop offset="100%" stopColor={ACCENT_COLOR} stopOpacity="0" />
         </linearGradient>
       </defs>
       {/* horizontal gridline at midpoint */}
@@ -82,17 +82,17 @@ export function RevenueTrendChart({ data }: { data: TrendPoint[] }) {
         stroke={BORDER}
         strokeDasharray="2 4"
       />
-      <path d={areaPath} fill="url(#noir-revenue-fill)" />
+      <path d={areaPath} fill="url(#kickoffpro-revenue-fill)" />
       <path
         d={linePath}
         fill="none"
-        stroke={GOLD}
+        stroke={ACCENT_COLOR}
         strokeWidth="1.75"
         strokeLinejoin="round"
         strokeLinecap="round"
       />
       {points.map(([x, y], i) => (
-        <circle key={i} cx={x} cy={y} r={2.5} fill={GOLD} />
+        <circle key={i} cx={x} cy={y} r={2.5} fill={ACCENT_COLOR} />
       ))}
       {/* x-axis labels: only first, middle, last to avoid clutter */}
       {[0, Math.floor(data.length / 2), data.length - 1]
@@ -200,7 +200,7 @@ export function PaymentSplitBar({
         <div
           style={{
             width: `${pctOnline}%`,
-            background: GOLD,
+            background: ACCENT_COLOR,
             transition: 'width 320ms ease',
           }}
           aria-label={`Online ${pctOnline} percent`}
@@ -230,7 +230,7 @@ export function PaymentSplitBar({
               width: 8,
               height: 8,
               borderRadius: 2,
-              background: GOLD,
+              background: ACCENT_COLOR,
               marginRight: 6,
             }}
           />

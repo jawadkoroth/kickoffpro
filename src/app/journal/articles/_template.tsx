@@ -1,5 +1,5 @@
 /**
- * NOIR — Journal article template.
+ * KickoffPro — Journal article template.
  *
  * This file is the canonical example of how to author a journal
  * article body. It is NOT registered in `_articles.ts` and is

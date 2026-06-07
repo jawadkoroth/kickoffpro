@@ -12,7 +12,7 @@ import {
 } from 'react';
 
 /**
- * NOIR cart — local, client-side, localStorage-backed.
+ * KickoffPro cart — local, client-side, localStorage-backed.
  *
  * Design notes:
  *

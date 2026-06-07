@@ -1,5 +1,5 @@
 /**
- * NOIR — Canonical shipment creation entry point.
+ * KickoffPro — Canonical shipment creation entry point.
  *
  * Every code path that needs to create a shipment calls this function.
  * No direct provider imports anywhere else.
@@ -89,7 +89,7 @@ export async function createShipmentForOrder(
 
   const shipmentId: string = (shipmentRow as { id: string }).id;
 
-  // NOIR: Pre-flight validation before calling provider API
+  // KickoffPro: Pre-flight validation before calling provider API
   const preflightError = provider.validateShipmentRequest(input.req);
   if (preflightError) {
     logEvent('shipping.create_shipment.preflight_failed', {
@@ -165,7 +165,7 @@ export async function createShipmentForOrder(
       latency_ms: latencyMs,
     }, { source: 'api', severity: logSeverity, entityType: 'order', entityId: input.orderId });
 
-    // NOIR: Store forensic error details
+    // KickoffPro: Store forensic error details
     await supabase
       .from('shipments')
       .update({

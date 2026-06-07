@@ -5,7 +5,7 @@ import { PWADiagnostics } from '@/components/PWADiagnostics';
 import styles from './diagnostics.module.css';
 
 /**
- * NOIR Admin — System Health.
+ * KickoffPro Admin — System Health.
  *
  * Rebrand of the old "Diagnostics" surface. Same data, same queries,
  * same RLS contract — purely a visual and naming upgrade:
@@ -15,8 +15,8 @@ import styles from './diagnostics.module.css';
  *     visible above the tabs; dead + failed glow red/amber so a
  *     single glance confirms pipeline health.
  *   - Tabs: "Events" and "Jobs" — unchanged labels, new gold active
- *     underline to match the rest of NOIR Admin.
- *   - Filter toolbars: compact field groups with NOIR input tokens.
+ *     underline to match the rest of KickoffPro Admin.
+ *   - Filter toolbars: compact field groups with KickoffPro input tokens.
  *   - Tables: monochrome hairline rows, mono font for code values,
  *     severity/status chips that use border+text colour rather than
  *     filled backgrounds so 100 rows don't look like a traffic light.

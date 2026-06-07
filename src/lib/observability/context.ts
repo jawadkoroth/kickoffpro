@@ -1,7 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 
 /**
- * NOIR observability — per-request correlation context.
+ * KickoffPro observability — per-request correlation context.
  *
  * AsyncLocalStorage gives us request-scoped state without passing
  * a context object through every function call. The middleware

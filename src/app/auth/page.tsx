@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 import styles from './page.module.css';
 
 /**
- * NOIR Auth — Passwordless sign-in
+ * KickoffPro Auth — Passwordless sign-in
  *
  * Flow:
  *   1. User chooses Google or Email.
@@ -26,7 +26,7 @@ import styles from './page.module.css';
 const COOLDOWN_SECONDS = 60;
 
 /**
- * Maps raw Supabase/provider error messages to curated NOIR copy.
+ * Maps raw Supabase/provider error messages to curated KickoffPro copy.
  * Technical messages are logged to console; only premium UX copy
  * is shown to users.
  */
@@ -171,7 +171,7 @@ function AuthInner() {
       <div className={styles.card}>
         {/* Brand mark */}
         <div className={styles.brand}>
-          <span className={styles.brandName}>NOIR</span>
+          <span className={styles.brandName}>KickoffPro</span>
           <span className={styles.brandDot} />
         </div>
 

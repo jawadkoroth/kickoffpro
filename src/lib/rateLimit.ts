@@ -3,7 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { logEvent } from '@/lib/log';
 
 /**
- * NOIR — request rate limiting.
+ * KickoffPro — request rate limiting.
  *
  * Thin wrapper around the `rate_limit_hit(key, max, window_seconds)`
  * Postgres function. One round trip per check. No external infra.

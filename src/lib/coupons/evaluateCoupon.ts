@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 /**
- * NOIR — server-authoritative coupon evaluation.
+ * KickoffPro — server-authoritative coupon evaluation.
  *
  * Single source of truth used by:
  *   - /api/coupons/validate  (preflight: tells the cart UI whether

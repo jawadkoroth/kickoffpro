@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
   if (errorParam) {
     const target = new URL('/auth', url.origin);
     target.searchParams.set('error', errorDescription || errorParam);
-    return NextResponse.redirect(target);
+    return NextResponse.redirect(target.toString());
   }
 
   const supabase = await createServerSupabaseClient();
@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
     if (verifyError) {
       const target = new URL('/auth', url.origin);
       target.searchParams.set('error', verifyError.message);
-      return NextResponse.redirect(target);
+      return NextResponse.redirect(target.toString());
     }
   } else if (code) {
     // ── OAuth PKCE flow (Google, etc.) ──
@@ -52,12 +52,12 @@ export async function GET(request: NextRequest) {
     if (exchangeError) {
       const target = new URL('/auth', url.origin);
       target.searchParams.set('error', exchangeError.message);
-      return NextResponse.redirect(target);
+      return NextResponse.redirect(target.toString());
     }
   } else {
     const target = new URL('/auth', url.origin);
     target.searchParams.set('error', 'Missing authorization parameters');
-    return NextResponse.redirect(target);
+    return NextResponse.redirect(target.toString());
   }
 
   const {
@@ -67,7 +67,7 @@ export async function GET(request: NextRequest) {
   if (!user) {
     const target = new URL('/auth', url.origin);
     target.searchParams.set('error', 'Session could not be established');
-    return NextResponse.redirect(target);
+    return NextResponse.redirect(target.toString());
   }
 
   // Profile row is auto-created by trigger (migration 003).
@@ -82,5 +82,5 @@ export async function GET(request: NextRequest) {
     ? next
     : `/profile/complete?next=${encodeURIComponent(next)}`;
 
-  return NextResponse.redirect(new URL(destination, url.origin));
+  return NextResponse.redirect(new URL(destination, url.origin).toString());
 }

@@ -1,5 +1,5 @@
 /**
- * NOIR — JSON-LD structured-data builders.
+ * KickoffPro — JSON-LD structured-data builders.
  *
  * Every builder returns a plain object literal that serialises
  * cleanly to the `application/ld+json` payload. Consumers inject

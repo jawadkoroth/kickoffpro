@@ -11,7 +11,7 @@ export function PWAInstallButton() {
   return (
     <button
       onClick={install}
-      title="Install NOIR Admin app"
+      title="Install KickoffPro Admin app"
       style={{
         background: 'none',
         border: '1px solid var(--border-color)',

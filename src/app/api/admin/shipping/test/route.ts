@@ -1,5 +1,5 @@
 /**
- * NOIR — POST /api/admin/shipping/test
+ * KickoffPro — POST /api/admin/shipping/test
  *
  * Performs a live operational test of the configured shipping provider.
  * Returns structured diagnostics for the admin diagnostics panel.

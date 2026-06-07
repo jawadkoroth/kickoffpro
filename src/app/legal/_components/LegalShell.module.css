@@ -1,62 +1,74 @@
-/* Editorial legal column — monochrome, silent, deliberately spare. */
+/* KickoffPro Legal Pages — Navy, Blue Accents, Modern Cards */
 
 .page {
   min-height: 100dvh;
-  background: #000;
-  color: #e7e7e7;
-  padding: clamp(6rem, 12vh, 10rem) clamp(1.5rem, 5vw, 4rem) 6rem;
+  background: var(--navy, #071B3A);
+  color: #E5E7EB;
+  padding: clamp(6rem, 12vh, 8rem) clamp(1rem, 5vw, 2rem) 6rem;
   display: flex;
   flex-direction: column;
   align-items: center;
+  font-family: var(--font-sans, system-ui, -apple-system, sans-serif);
 }
 
 .header {
   width: 100%;
-  max-width: 62ch;
-  margin-bottom: clamp(3rem, 8vh, 6rem);
+  max-width: 68ch;
+  margin-bottom: clamp(2rem, 6vh, 4rem);
+  text-align: center;
 }
 
 .eyebrow {
-  font-size: 0.72rem;
-  letter-spacing: 0.22em;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: #8a8a8a;
-  margin: 0 0 1.75rem;
+  color: var(--blue, #2FA9F5);
+  margin: 0 0 1rem;
 }
 
 .title {
-  font-family: 'Playfair Display', Georgia, serif;
-  font-weight: 400;
-  font-size: clamp(2.25rem, 5vw, 3.5rem);
+  font-weight: 800;
+  font-size: clamp(2rem, 5vw, 3rem);
   line-height: 1.1;
-  letter-spacing: -0.01em;
-  color: #f6f6f6;
-  margin: 0 0 1.25rem;
+  letter-spacing: -0.02em;
+  color: #FFFFFF;
+  margin: 0 0 1rem;
+  text-transform: uppercase;
 }
 
 .meta {
-  font-size: 0.78rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: #7a7a7a;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #9CA3AF;
   margin: 0;
 }
 
 .body {
   width: 100%;
-  max-width: 62ch;
+  max-width: 68ch;
   font-size: 1rem;
   line-height: 1.75;
-  color: #cfcfcf;
+  color: #D1D5DB;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 16px;
+  padding: clamp(1.5rem, 4vw, 3rem);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
 }
 
 .body :global(h2) {
-  font-family: 'Playfair Display', Georgia, serif;
-  font-weight: 400;
-  font-size: 1.35rem;
-  letter-spacing: -0.005em;
-  color: #f0f0f0;
-  margin: 3rem 0 1rem;
+  font-weight: 800;
+  font-size: 1.5rem;
+  letter-spacing: -0.01em;
+  color: #FFFFFF;
+  margin: 2.5rem 0 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 2px solid rgba(47, 169, 245, 0.2);
+}
+
+.body :global(h2):first-child {
+  margin-top: 0;
 }
 
 .body :global(p) {
@@ -64,47 +76,53 @@
 }
 
 .body :global(a) {
-  color: #f6f6f6;
+  color: var(--blue, #2FA9F5);
+  text-decoration: none;
+  font-weight: 600;
+  transition: color 150ms ease;
+}
+
+.body :global(a):hover {
+  color: #60A5FA;
   text-decoration: underline;
-  text-decoration-thickness: 1px;
-  text-underline-offset: 0.2em;
 }
 
 .body :global(ul),
 .body :global(ol) {
   margin: 0 0 1.5rem;
-  padding-left: 1.4rem;
+  padding-left: 1.5rem;
 }
 
 .body :global(li) {
-  margin-bottom: 0.45rem;
+  margin-bottom: 0.5rem;
 }
 
 .body :global(strong) {
-  color: #ededed;
-  font-weight: 500;
+  color: #F3F4F6;
+  font-weight: 700;
 }
 
 .siblings {
   width: 100%;
-  max-width: 62ch;
-  margin-top: clamp(4rem, 10vh, 7rem);
+  max-width: 68ch;
+  margin-top: clamp(3rem, 8vh, 5rem);
   padding-top: 2rem;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   display: flex;
   flex-wrap: wrap;
-  gap: 1.5rem 2.25rem;
-  font-size: 0.8rem;
-  letter-spacing: 0.12em;
+  justify-content: center;
+  gap: 1rem 2rem;
+  font-size: 0.875rem;
+  font-weight: 600;
   text-transform: uppercase;
 }
 
 .siblings a {
-  color: #9a9a9a;
+  color: #9CA3AF;
   text-decoration: none;
-  transition: color 220ms ease;
+  transition: color 150ms ease;
 }
 
 .siblings a:hover {
-  color: #f6f6f6;
+  color: var(--blue, #2FA9F5);
 }

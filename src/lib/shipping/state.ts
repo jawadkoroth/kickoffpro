@@ -1,5 +1,5 @@
 /**
- * NOIR — Canonical shipment state machine.
+ * KickoffPro — Canonical shipment state machine.
  *
  * Provider-specific status strings (Delhivery scan codes, Shiprocket
  * status labels, etc.) are ALWAYS mapped into CanonicalShipmentStatus

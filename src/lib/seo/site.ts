@@ -1,5 +1,5 @@
 /**
- * NOIR — central site configuration for SEO / metadata / JSON-LD.
+ * KickoffPro — central site configuration for SEO / metadata / JSON-LD.
  *
  * Every value that might change per-environment (production domain,
  * social handles, legal entity) is env-driven so brand lock-in can

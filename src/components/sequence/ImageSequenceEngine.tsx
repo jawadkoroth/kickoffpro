@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * NOIR — ImageSequenceEngine
+ * KickoffPro — ImageSequenceEngine
  *
  * A scroll-driven frame interpolation engine. Handles:
  *   - Preloading a sequence of images with priority tiers

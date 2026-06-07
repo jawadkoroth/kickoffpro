@@ -3,7 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { logEvent } from '@/lib/log';
 
 /**
- * NOIR job queue — thin wrapper around the `job_queue` table.
+ * KickoffPro job queue — thin wrapper around the `job_queue` table.
  *
  * Design goals:
  *   * Zero external infra. Single Postgres-backed queue, claimed

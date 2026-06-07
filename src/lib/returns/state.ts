@@ -1,5 +1,5 @@
 /**
- * NOIR Returns & Exchange State Machine
+ * KickoffPro Returns & Exchange State Machine
  * 
  * Canonical states for return/exchange flow:
  * - User initiates request

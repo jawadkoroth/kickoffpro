@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 /**
- * NOIR — Admin audit log helper.
+ * KickoffPro — Admin audit log helper.
  *
  * Fire-and-forget write into `admin_audit_log`. The helper never
  * throws; any failure is logged to stderr and swallowed so audit

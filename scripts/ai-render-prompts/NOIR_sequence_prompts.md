@@ -1,4 +1,4 @@
-# NOIR — Linen Shirt Sequence: AI Render Prompt Pack
+# KickoffPro — Linen Shirt Sequence: AI Render Prompt Pack
 ## Production-Grade Frame Sequence for Scroll-Driven Storytelling
 ### Version 1.0 | 60 Frames | 800×1000 or 1000×1250
 
@@ -7,7 +7,7 @@
 ## OVERVIEW
 
 This document contains everything needed to generate the 60-frame production
-render sequence for the NOIR landing page interactive product storytelling section.
+render sequence for the KickoffPro landing page interactive product storytelling section.
 
 Target engine: `ImageSequenceEngine` in `src/components/sequence/`  
 Output folder: `public/sequences/linen-shirt/`  
