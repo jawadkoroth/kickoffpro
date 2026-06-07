@@ -1,5 +1,5 @@
 /**
- * NOIR Admin — Production-grade service worker for operational notifications.
+ * KickoffPro Admin — Production-grade service worker for operational notifications.
  *
  * Responsibilities:
  *   1. Background push notification delivery with category support

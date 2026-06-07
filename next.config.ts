@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 /**
- * NOIR — production security headers
+ * KickoffPro — production security headers
  *
  * Applied to every route. CSP is the load-bearing one: it whitelists
  * Razorpay (checkout iframe + script), Supabase (REST + Realtime

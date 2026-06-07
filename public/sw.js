@@ -1,5 +1,5 @@
 /**
- * NOIR — Progressive Web App Service Worker
+ * KickoffPro — Progressive Web App Service Worker
  *
  * Strategy:
  *   - Shell caching: App shell assets cached for offline resilience

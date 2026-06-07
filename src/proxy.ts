@@ -32,7 +32,7 @@ function newRequestId(): string {
   }
 }
 
-export async function proxy(request: NextRequest) {
+export default async function proxy(request: NextRequest) {
   // Correlation ID: accept an inbound `x-request-id` (e.g. from a
   // reverse proxy / load test harness) when present; otherwise mint
   // a fresh one. Pass it through to the downstream handler via a

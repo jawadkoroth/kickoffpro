@@ -43,7 +43,7 @@ export const SITE_URL = normaliseUrl(
  */
 export const BRAND = {
   name: 'KickoffPro',
-  legalName: process.env.NOIR_LEGAL_NAME || 'KickoffPro',
+  legalName: process.env.KICKOFFPRO_LEGAL_NAME || 'KickoffPro',
   /** Appended after page-specific titles. Keep short. */
   titleSuffix: 'KickoffPro',
   /** Fallback description for pages that don't supply their own. */
@@ -67,13 +67,13 @@ export const BRAND = {
  * than emitting empty strings).
  */
 export const CONTACT = {
-  email: process.env.NOIR_CONTACT_EMAIL || '',
-  addressLine1: process.env.NOIR_ADDRESS_LINE_1 || '',
-  addressLine2: process.env.NOIR_ADDRESS_LINE_2 || '',
-  locality: process.env.NOIR_ADDRESS_LOCALITY || '',
-  region: process.env.NOIR_ADDRESS_REGION || '',
-  postalCode: process.env.NOIR_ADDRESS_POSTAL_CODE || '',
-  gstin: process.env.NOIR_GSTIN || '',
+  email: process.env.KICKOFFPRO_CONTACT_EMAIL || '',
+  addressLine1: process.env.KICKOFFPRO_ADDRESS_LINE_1 || '',
+  addressLine2: process.env.KICKOFFPRO_ADDRESS_LINE_2 || '',
+  locality: process.env.KICKOFFPRO_ADDRESS_LOCALITY || '',
+  region: process.env.KICKOFFPRO_ADDRESS_REGION || '',
+  postalCode: process.env.KICKOFFPRO_ADDRESS_POSTAL_CODE || '',
+  gstin: process.env.KICKOFFPRO_GSTIN || '',
 } as const;
 
 /**
@@ -84,10 +84,10 @@ export const CONTACT = {
  * unification. Only add profiles the brand actually controls.
  */
 export const SOCIAL = {
-  instagram: process.env.NOIR_SOCIAL_INSTAGRAM || '',
-  youtube: process.env.NOIR_SOCIAL_YOUTUBE || '',
-  twitter: process.env.NOIR_SOCIAL_TWITTER || '',
-  pinterest: process.env.NOIR_SOCIAL_PINTEREST || '',
+  instagram: process.env.KICKOFFPRO_SOCIAL_INSTAGRAM || '',
+  youtube: process.env.KICKOFFPRO_SOCIAL_YOUTUBE || '',
+  twitter: process.env.KICKOFFPRO_SOCIAL_TWITTER || '',
+  pinterest: process.env.KICKOFFPRO_SOCIAL_PINTEREST || '',
 } as const;
 
 /**

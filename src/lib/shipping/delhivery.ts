@@ -100,7 +100,7 @@ function parseDelhiveryError(status: number, data: Record<string, unknown>, cont
         ...base,
         message: 'Pickup location invalid',
         meaning: 'The configured pickup address does not exist in Delhivery One.',
-        suggested_fix: 'Delhivery One → Settings → Pickup Locations → Create warehouse using same address + phone as NOIR admin.',
+        suggested_fix: 'Delhivery One → Settings → Pickup Locations → Create warehouse using same address + phone as KickoffPro admin.',
         severity: 'high',
         operational_category: 'pickup_not_registered',
       };

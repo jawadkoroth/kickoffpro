@@ -629,7 +629,7 @@ function CheckoutContent() {
       key: orderData.key_id,
       amount: orderData.amount,
       currency: 'INR',
-      name: 'NOIR',
+      name: 'KickoffPro',
       description,
       order_id: orderData.razorpay_order_id,
       prefill: {

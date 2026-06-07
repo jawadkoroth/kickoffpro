@@ -114,7 +114,7 @@ interface CartContextType {
 
 const CartContext = createContext<CartContextType | null>(null);
 
-const CART_KEY = 'noir_cart';
+const CART_KEY = 'kickoffpro_cart';
 
 function isCartItem(value: unknown): value is CartItem {
   if (!value || typeof value !== 'object') return false;
