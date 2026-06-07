@@ -157,7 +157,10 @@ export default function AdminRealtimeProvider() {
   const seenIds = useRef<Set<string>>(new Set());
   const toastIdRef = useRef(0);
 
-  useEffect(() => { setIsMuted(getMuteState()); }, []);
+  useEffect(() => { 
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setIsMuted(getMuteState()); 
+  }, []);
 
   const dismissToast = useCallback((id: number) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));

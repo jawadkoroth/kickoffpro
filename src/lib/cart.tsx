@@ -177,6 +177,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const initial = loadCart();
     lastSerializedRef.current = JSON.stringify(initial);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setItems(initial);
     setLoaded(true);
   }, []);

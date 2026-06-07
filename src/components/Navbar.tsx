@@ -5,6 +5,8 @@ import { usePathname } from 'next/navigation';
 import { useCart } from '@/lib/cart';
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/auth/AuthProvider';
+import { Search, ShoppingCart, User, Menu, X, Sun, Moon } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
 import styles from './Navbar.module.css';
 
 export default function Navbar() {
@@ -12,6 +14,7 @@ export default function Navbar() {
   const { totalItems } = useCart();
   const { user } = useAuth();
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     // Check initial theme from html attribute or localStorage
@@ -25,6 +28,20 @@ export default function Navbar() {
     }
   }, []);
 
+  // Sync state with DOM mutation if it changes externally
+  useEffect(() => {
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        if (mutation.attributeName === 'data-theme') {
+          const currentTheme = document.documentElement.getAttribute('data-theme') as 'light' | 'dark';
+          if (currentTheme !== theme) setTheme(currentTheme);
+        }
+      });
+    });
+    observer.observe(document.documentElement, { attributes: true });
+    return () => observer.disconnect();
+  }, [theme]);
+
   const toggleTheme = () => {
     const newTheme = theme === 'dark' ? 'light' : 'dark';
     setTheme(newTheme);
@@ -32,60 +49,78 @@ export default function Navbar() {
     localStorage.setItem('theme', newTheme);
   };
 
+  const closeMenu = () => setMobileMenuOpen(false);
+
   // Hide on admin pages
   if (pathname.startsWith('/admin')) return null;
 
   return (
-    <nav className={styles.navbar}>
-      <Link href="/" className={styles.logo}>
-        KICKOFF<span className={styles.logoHighlight}>PRO</span>
-      </Link>
-      
-      <div className={styles.navLinks}>
-        <Link href="/products" className={styles.navLink}>Shop</Link>
-        <Link href="/products?category=club" className={styles.navLink}>Clubs</Link>
-        <Link href="/products?category=national" className={styles.navLink}>National</Link>
-        <Link href="/products?category=retro" className={styles.navLink}>Retro</Link>
-        <Link href="/products?category=sale" className={`${styles.navLink} ${styles.saleLink}`}>Sale</Link>
-      </div>
-
-      <div className={styles.actions}>
-        <button onClick={toggleTheme} className={styles.iconBtn} aria-label="Toggle Theme">
-          {theme === 'dark' ? (
-            // Sun icon
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="5" />
-              <line x1="12" y1="1" x2="12" y2="3" />
-              <line x1="12" y1="21" x2="12" y2="23" />
-              <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
-              <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
-              <line x1="1" y1="12" x2="3" y2="12" />
-              <line x1="21" y1="12" x2="23" y2="12" />
-              <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
-              <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
-            </svg>
-          ) : (
-            // Moon icon
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-            </svg>
-          )}
+    <>
+      <nav className={styles.navbar}>
+        <button className={styles.mobileMenuBtn} onClick={() => setMobileMenuOpen(true)}>
+          <Menu size={24} />
         </button>
-        <Link href="/cart" className={styles.iconBtn} aria-label="Cart">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z" />
-            <line x1="3" y1="6" x2="21" y2="6" />
-            <path d="M16 10a4 4 0 01-8 0" />
-          </svg>
-          {totalItems > 0 && <span className={styles.badge}>{totalItems}</span>}
+
+        <Link href="/" className={styles.logo} onClick={closeMenu}>
+          KICKOFF<span className={styles.logoHighlight}>PRO</span>
         </Link>
-        <Link href={user ? '/profile' : '/auth'} className={styles.iconBtn} aria-label="Profile">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" />
-            <circle cx="12" cy="7" r="4" />
-          </svg>
-        </Link>
-      </div>
-    </nav>
+        
+        <div className={styles.navLinks}>
+          <Link href="/products" className={styles.navLink}>Home</Link>
+          <Link href="/products?category=national" className={styles.navLink}>National Teams</Link>
+          <Link href="/products?category=club" className={styles.navLink}>Club Jerseys</Link>
+          <Link href="/products?category=retro" className={styles.navLink}>Retro Jerseys</Link>
+          <Link href="/products?sort=newest" className={styles.navLink}>New Arrivals</Link>
+          <Link href="/products?sale=true" className={`${styles.navLink} ${styles.saleLink}`}>Sale</Link>
+        </div>
+
+        <div className={styles.actions}>
+          <button onClick={toggleTheme} className={styles.iconBtn} aria-label="Toggle Theme">
+            {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
+          </button>
+          
+          <Link href="/products" className={styles.iconBtn} aria-label="Search">
+            <Search size={20} />
+          </Link>
+
+          <Link href="/cart" className={styles.iconBtn} aria-label="Cart">
+            <ShoppingCart size={20} />
+            {totalItems > 0 && <span className={styles.badge}>{totalItems}</span>}
+          </Link>
+
+          <Link href={user ? '/profile' : '/auth'} className={styles.iconBtn} aria-label="Profile">
+            <User size={20} />
+          </Link>
+        </div>
+      </nav>
+
+      <AnimatePresence>
+        {mobileMenuOpen && (
+          <motion.div
+            initial={{ opacity: 0, x: -50 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -50 }}
+            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+            className={styles.mobileMenu}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+              <Link href="/" className={styles.logo} onClick={closeMenu}>
+                KICKOFF<span className={styles.logoHighlight}>PRO</span>
+              </Link>
+              <button className={styles.iconBtn} onClick={closeMenu}>
+                <X size={28} />
+              </button>
+            </div>
+            
+            <Link href="/" className={styles.mobileNavLink} onClick={closeMenu}>Home</Link>
+            <Link href="/products?category=national" className={styles.mobileNavLink} onClick={closeMenu}>National Teams</Link>
+            <Link href="/products?category=club" className={styles.mobileNavLink} onClick={closeMenu}>Club Jerseys</Link>
+            <Link href="/products?category=retro" className={styles.mobileNavLink} onClick={closeMenu}>Retro Jerseys</Link>
+            <Link href="/products?sort=newest" className={styles.mobileNavLink} onClick={closeMenu}>New Arrivals</Link>
+            <Link href="/products?sale=true" className={`${styles.mobileNavLink} ${styles.saleLink}`} onClick={closeMenu}>Sale</Link>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
   );
 }

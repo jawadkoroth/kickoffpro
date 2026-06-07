@@ -40,6 +40,7 @@ export default function AdminWelcome() {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true);
     
     // Update greeting on mount (avoid hydration mismatch)

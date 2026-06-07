@@ -6,6 +6,7 @@ import useEmblaCarousel from 'embla-carousel-react';
 import { useCart } from '@/lib/cart';
 import { formatPaise } from '@/lib/format';
 import { getPublicUrl } from '@/lib/media';
+import { Truck, ShieldCheck, RefreshCw, ShoppingCart, Check } from 'lucide-react';
 import styles from './page.module.css';
 
 export interface ProductDetail {
@@ -24,11 +25,6 @@ export interface InventoryItem {
   stock: number;
 }
 
-/**
- * Client-side detail UI. Receives all data via props from the server
- * page — no `useEffect` fetch, no `/api/products` round-trip, no
- * fallback-to-first-product behaviour.
- */
 export default function ProductDetailClient({
   product,
   inventory,
@@ -104,9 +100,6 @@ export default function ProductDetailClient({
   function handleAddToCart() {
     if (!selectedSize || isSoldOut) return;
     const sizeStock = getStock(selectedSize);
-    // Defence-in-depth: the size button is already disabled when its
-    // individual stock is 0, but never let a sold-out size sneak into
-    // the cart even if state somehow desyncs.
     if (sizeStock <= 0) return;
     const images = getImages();
     addItem({
@@ -127,14 +120,6 @@ export default function ProductDetailClient({
     const sizeStock = getStock(selectedSize);
     if (sizeStock <= 0) return;
 
-    // Buy Now MUST hydrate the cart before routing — otherwise the
-    // checkout snapshot diverges from the cart state and any later
-    // navigation back to /cart loses the line. We re-use the existing
-    // cart system rather than spinning up a parallel "buy now" path:
-    // single source of truth, single localStorage key, single
-    // validation pipeline. The checkout page's URL contract is
-    // unchanged (product_id + size + optional coupon), so deep links
-    // and back-navigation continue to behave.
     const images = getImages();
     addItem({
       product_id: product.id,
@@ -171,9 +156,9 @@ export default function ProductDetailClient({
           <div className={styles.emblaViewport} ref={emblaRef}>
             <div className={styles.emblaContainer}>
               {images.map((img, idx) => (
-                <div key={idx} className={styles.emblaSlide}>
-                  <img src={img} alt={`${product.name} - ${idx + 1}`} />
-                </div>
+               <div key={idx} className={styles.emblaSlide}>
+                 <img src={img} alt={`${product.name} - ${idx + 1}`} />
+               </div>
               ))}
             </div>
           </div>
@@ -184,6 +169,7 @@ export default function ProductDetailClient({
                   key={idx}
                   className={`${styles.dot} ${idx === selectedSlide ? styles.dotActive : ''}`}
                   onClick={() => emblaApi?.scrollTo(idx)}
+                  aria-label={`Go to slide ${idx + 1}`}
                 />
               ))}
             </div>
@@ -218,7 +204,7 @@ export default function ProductDetailClient({
 
             {/* Size Selector */}
             <div className={styles.section}>
-              <label className="input-label">Select Size</label>
+              <label className="input-label" style={{ display: 'block', marginBottom: '8px' }}>Select Size</label>
               <div className="size-grid">
                 {(product.sizes as string[]).map(size => {
                   const stock = getStock(size);
@@ -237,55 +223,23 @@ export default function ProductDetailClient({
                 })}
               </div>
               {selectedSize && getStock(selectedSize) <= 3 && getStock(selectedSize) > 0 && (
-                <p className={styles.lowStock}>Only {getStock(selectedSize)} left</p>
-              )}
-            </div>
-
-            {/* Coupon */}
-            <div className={styles.section}>
-              {!showCoupon ? (
-                <button className={styles.couponToggle} onClick={() => setShowCoupon(true)}>
-                  Have a coupon code?
-                </button>
-              ) : (
-                <div className={styles.couponRow}>
-                  <input
-                    className="input-field"
-                    placeholder="Enter coupon code"
-                    value={couponCode}
-                    onChange={e => {
-                      setCouponCode(e.target.value.toUpperCase());
-                      setCouponApplied(false);
-                      setCouponError('');
-                      setCouponDiscount(0);
-                    }}
-                    style={{ textTransform: 'uppercase', flex: 1 }}
-                  />
-                  <button
-                    className={`btn btn-secondary btn-sm ${couponApplied ? 'btn-success' : ''}`}
-                    onClick={handleValidateCoupon}
-                    disabled={couponApplied}
-                    style={{ width: 'auto', whiteSpace: 'nowrap' }}
-                  >
-                    {couponApplied ? '✓ Applied' : 'Apply'}
-                  </button>
-                </div>
-              )}
-              {couponError && <p className="input-error-text">{couponError}</p>}
-              {couponApplied && (
-                <p className={styles.couponSuccess}>
-                  {couponDiscount}% off applied — You save {formatPaise(discountAmount)}
-                </p>
+                <p className={styles.lowStock}>Only {getStock(selectedSize)} left in stock</p>
               )}
             </div>
 
             {/* Trust Badges */}
             <div className={styles.trustBadges}>
-              <span>🚚 Free Shipping</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <Truck size={16} /> <span>Free Shipping</span>
+              </div>
               <span>·</span>
-              <span>💰 COD Available</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <ShieldCheck size={16} /> <span>COD Available</span>
+              </div>
               <span>·</span>
-              <span>↩️ Easy Returns</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <RefreshCw size={16} /> <span>Easy Returns</span>
+              </div>
             </div>
 
             {/* Desktop CTAs */}
@@ -294,6 +248,7 @@ export default function ProductDetailClient({
                 className="btn btn-primary"
                 disabled={!selectedSize || isSoldOut}
                 onClick={handleBuyNow}
+                style={{ width: '100%', marginBottom: '12px', fontSize: '1rem', textTransform: 'uppercase' }}
               >
                 {isSoldOut
                   ? 'OUT OF STOCK'
@@ -305,9 +260,9 @@ export default function ProductDetailClient({
                 className={`btn btn-secondary ${addedToCart ? 'btn-success' : ''}`}
                 disabled={!selectedSize || isSoldOut}
                 onClick={handleAddToCart}
-                style={{ marginTop: 'var(--space-3)' }}
+                style={{ width: '100%', fontSize: '0.875rem', textTransform: 'uppercase' }}
               >
-                {addedToCart ? '✓ ADDED TO CART' : 'ADD TO CART'}
+                {addedToCart ? <><Check size={16} style={{marginRight:'8px'}}/> ADDED TO CART</> : <><ShoppingCart size={16} style={{marginRight:'8px'}}/> ADD TO CART</>}
               </button>
             </div>
           </div>
@@ -322,19 +277,19 @@ export default function ProductDetailClient({
             disabled={!selectedSize || isSoldOut}
             onClick={handleAddToCart}
           >
-            {addedToCart ? '✓' : '🛒'}
+            {addedToCart ? <Check size={20} /> : <ShoppingCart size={20} />}
           </button>
           <button
             className="btn btn-primary"
             disabled={!selectedSize || isSoldOut}
             onClick={handleBuyNow}
-            style={{ flex: 1 }}
+            style={{ flex: 1, textTransform: 'uppercase', fontSize: '0.875rem' }}
           >
             {isSoldOut
               ? 'OUT OF STOCK'
               : selectedSize
                 ? `BUY NOW — ${formatPaise(finalPrice)}`
-                : 'SELECT A SIZE'}
+                : 'SELECT SIZE'}
           </button>
         </div>
       </div>

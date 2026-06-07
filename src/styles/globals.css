@@ -18,21 +18,23 @@
   --bg-elevated: #FFFFFF;
   --bg-input: #F8FAFC;
 
-  --text-primary: #0F172A;
+  --text-primary: #071B3A; /* Deep Navy */
   --text-secondary: #334155;
   --text-muted: #64748B;
-  --text-accent: #38BDF8;
+  --text-accent: #2FA9F5; /* Primary Blue */
 
   --border-color: #E2E8F0;
   --border-light: #CBD5E1;
 
   --success: #22C55E;
   --error: #EF4444;
-  --warning: #FACC15;
-  --info: #38BDF8;
+  --warning: #FFC928; /* Accent Yellow */
+  --info: #2FA9F5;
 
   /* Sporty highlight accent */
-  --accent-gold: #FACC15;
+  --accent-gold: #FFC928;
+  --brand-blue: #2FA9F5;
+  --brand-navy: #071B3A;
 
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-serif: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -982,21 +984,23 @@ img {
 
 /* ---------- Dark Theme — Deep Navy Sports Palette ---------- */
 [data-theme='dark'] {
-  --bg-primary: #0F172A;
-  --bg-secondary: #1E293B;
-  --bg-tertiary: #1E293B;
-  --bg-elevated: #0F172A;
-  --bg-input: #1E293B;
+  --bg-primary: #071B3A; /* Deep Navy */
+  --bg-secondary: #0A244D;
+  --bg-tertiary: #0C2B5C;
+  --bg-elevated: #0A244D;
+  --bg-input: #0A244D;
 
-  --text-primary: #F8FAFC;
-  --text-secondary: #CBD5E1;
+  --text-primary: #FFFFFF;
+  --text-secondary: #E2E8F0;
   --text-muted: #94A3B8;
-  --text-accent: #38BDF8;
+  --text-accent: #2FA9F5; /* Primary Blue */
 
-  --border-color: #334155;
-  --border-light: #475569;
+  --border-color: #1E3A8A;
+  --border-light: #1E40AF;
 
-  --accent-gold: #FACC15;
+  --accent-gold: #FFC928;
+  --brand-blue: #2FA9F5;
+  --brand-navy: #071B3A;
 
   --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);

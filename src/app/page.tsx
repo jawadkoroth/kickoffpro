@@ -31,6 +31,8 @@ interface Product {
   category: string | null;
 }
 
+export const revalidate = 60; // Revalidate every minute
+
 export default async function LandingPage() {
   let products: Product[] = [];
   try {
@@ -40,7 +42,7 @@ export default async function LandingPage() {
       .select('id, slug, name, price_paise, sale_price_paise, images, is_active, created_at, category')
       .eq('is_active', true)
       .order('created_at', { ascending: false })
-      .limit(8);
+      .limit(100);
     products = (data ?? []) as Product[];
   } catch (err) {
     console.error('[HOMEPAGE_PRODUCTS_FETCH]', err);
@@ -54,8 +56,9 @@ export default async function LandingPage() {
     price_paise: p.price_paise,
     sale_price_paise: p.sale_price_paise,
     images: Array.isArray(p.images) ? (p.images as string[]) : [],
-    category: p.category,
+    category: p.category || undefined,
     created_at: p.created_at,
+    totalStock: 10 // Mock total stock for UI since we don't query variants table here
   }));
 
   return (

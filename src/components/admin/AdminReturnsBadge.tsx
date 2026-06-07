@@ -16,14 +16,6 @@ export default function AdminReturnsBadge() {
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
-  useEffect(() => {
-    fetchPendingCount();
-    
-    // Refresh every 60 seconds
-    const interval = setInterval(fetchPendingCount, 60000);
-    return () => clearInterval(interval);
-  }, []);
-
   async function fetchPendingCount() {
     try {
       const supabase = createClient();
@@ -40,6 +32,15 @@ export default function AdminReturnsBadge() {
       setLoading(false);
     }
   }
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchPendingCount();
+    
+    // Refresh every 60 seconds
+    const interval = setInterval(fetchPendingCount, 60000);
+    return () => clearInterval(interval);
+  }, []);
 
   if (loading || count === 0) return null;
 

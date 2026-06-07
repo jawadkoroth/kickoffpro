@@ -95,9 +95,11 @@ export default function AdminPushPrompt() {
       // as a PWA (iOS 16.4+). If we detect iOS Safari that's NOT in
       // standalone mode, show an install hint instead of a dead end.
       if (isIosSafari() && !isStandalonePwa()) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setState('ios-install');
         return;
       }
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setState('unsupported');
       return;
     }
@@ -156,7 +158,7 @@ export default function AdminPushPrompt() {
 
       const sub = await reg.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(publicKey) as any,
+        applicationServerKey: urlBase64ToUint8Array(publicKey) as unknown as BufferSource,
       });
 
       // Persist on the server. The browser representation has

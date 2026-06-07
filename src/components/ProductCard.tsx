@@ -17,6 +17,7 @@ export interface ProductCardData {
   totalStock: number;
   category?: string;
   sizes?: string[];
+  created_at?: string;
 }
 
 export default function ProductCard({ product }: { product: ProductCardData }) {
@@ -30,6 +31,9 @@ export default function ProductCard({ product }: { product: ProductCardData }) {
   const originalPrice = product.price_paise;
   const finalPrice = product.sale_price_paise ?? originalPrice;
   const hasSale = product.sale_price_paise !== null && product.sale_price_paise < originalPrice;
+  
+  // Calculate if product is new (created within last 14 days)
+  const isNew = product.created_at ? (new Date().getTime() - new Date(product.created_at).getTime()) < 14 * 24 * 60 * 60 * 1000 : false;
 
   // Default sizes if none in DB
   const sizesList = product.sizes && product.sizes.length > 0
@@ -77,20 +81,19 @@ export default function ProductCard({ product }: { product: ProductCardData }) {
             loading="lazy"
           />
           {hasSale && (
-            <span className={styles.saleBadge}>
+            <span className={`${styles.badge} ${styles.saleBadge}`}>
               SALE
             </span>
           )}
-          {outOfStock ? (
+          {!hasSale && isNew && (
+             <span className={`${styles.badge} ${styles.newBadge}`}>
+               NEW
+             </span>
+          )}
+          {outOfStock && (
             <span className={styles.outOfStockPill} aria-hidden>
               SOLD OUT
             </span>
-          ) : (
-            product.totalStock <= 5 && (
-              <span className={styles.lowStockPill}>
-                {product.totalStock} LEFT
-              </span>
-            )
           )}
         </div>
 
@@ -113,13 +116,12 @@ export default function ProductCard({ product }: { product: ProductCardData }) {
         </div>
       </Link>
 
-      {/* Sporty Quick Actions */}
       <div className={styles.actionsContainer}>
         {!outOfStock && (
           <div className={styles.actionBlock}>
             {showSizes ? (
               <div className={styles.sizeSelector}>
-                <span className={styles.sizeLabel}>SELECT SIZE:</span>
+                <span className={styles.sizeLabel}>SELECT SIZE</span>
                 <div className={styles.sizesRow}>
                   {sizesList.map((size) => (
                     <button
@@ -138,7 +140,7 @@ export default function ProductCard({ product }: { product: ProductCardData }) {
                 onClick={toggleSizeMenu}
                 disabled={added}
               >
-                {added ? '✓ ADDED TO CART' : '⚡ QUICK ADD'}
+                {added ? '✓ ADDED' : '+ ADD TO CART'}
               </button>
             )}
           </div>
