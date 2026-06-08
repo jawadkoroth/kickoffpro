@@ -2,6 +2,7 @@ import { notFound, redirect } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
+import { getPublicUrl } from '@/lib/media';
 import styles from '../orders.module.css';
 
 /**
@@ -259,19 +260,21 @@ export default async function OrderDetailPage({
           {lines.length > 1 ? `Items (${lines.length})` : 'Items'}
         </p>
         <ul className={styles.itemList}>
-          {lines.map((line) => (
-            <li key={line.id} className={styles.itemRow}>
-              <div className={styles.thumb}>
-                {line.image_url ? (
-                  <Image
-                    src={line.image_url}
-                    alt={line.product_name}
-                    fill
-                    sizes="72px"
-                    style={{ objectFit: 'cover' }}
-                  />
-                ) : null}
-              </div>
+          {lines.map((line) => {
+            const imageUrl = line.image_url ? getPublicUrl(line.image_url) : '';
+            return (
+              <li key={line.id} className={styles.itemRow}>
+                <div className={styles.thumb}>
+                  {imageUrl ? (
+                    <Image
+                      src={imageUrl}
+                      alt={line.product_name}
+                      fill
+                      sizes="72px"
+                      style={{ objectFit: 'cover' }}
+                    />
+                  ) : null}
+                </div>
               <div className={styles.itemMeta}>
                 <p className={styles.itemName}>{line.product_name}</p>
                 <p className={styles.itemSub}>
@@ -282,7 +285,8 @@ export default async function OrderDetailPage({
                 {formatPrice(line.subtotal_paise)}
               </p>
             </li>
-          ))}
+            );
+          })}
         </ul>
       </section>
 

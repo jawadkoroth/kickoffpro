@@ -46,6 +46,7 @@ interface PageParams {
   sort?: string;
   category?: string;
   q?: string;
+  sale?: string;
 }
 
 export default async function ProductsPage({
@@ -59,6 +60,7 @@ export default async function ProductsPage({
     : 'latest';
   const category = params.category;
   const q = params.q;
+  const sale = params.sale === 'true';
 
   const supabase = await createServerSupabaseClient();
 
@@ -67,12 +69,10 @@ export default async function ProductsPage({
     .select('id, slug, name, price_paise, sale_price_paise, images, is_active, created_at, category')
     .eq('is_active', true);
 
-  if (category) {
-    if (category.toLowerCase() === 'sale') {
-      productsQuery = productsQuery.not('sale_price_paise', 'is', null);
-    } else {
-      productsQuery = productsQuery.ilike('category', `%${category}%`);
-    }
+  if (sale || (category && category.toLowerCase() === 'sale')) {
+    productsQuery = productsQuery.or('sale_price_paise.not.is.null,category.ilike.%sale%');
+  } else if (category) {
+    productsQuery = productsQuery.ilike('category', `%${category}%`);
   }
 
   if (q) {
@@ -128,13 +128,18 @@ export default async function ProductsPage({
     url: absoluteUrl(`/product/${c.slug}`),
   }));
 
-  const displayEyebrow = category 
-    ? `${category.toUpperCase()} COLLECTION` 
-    : (q ? `SEARCH RESULTS FOR "${q.toUpperCase()}"` : 'FOOTBALL JERSEYS');
+  const isSale = sale || (category && category.toLowerCase() === 'sale');
+  const displayEyebrow = isSale
+    ? 'SALE & OFFERS'
+    : (category 
+        ? `${category.toUpperCase()} COLLECTION` 
+        : (q ? `SEARCH RESULTS FOR "${q.toUpperCase()}"` : 'FOOTBALL JERSEYS'));
 
-  const displayTitle = category 
-    ? `${category.charAt(0).toUpperCase() + category.slice(1)} Jerseys` 
-    : (q ? `Search results` : 'All Jerseys');
+  const displayTitle = isSale
+    ? 'Sale Jerseys'
+    : (category 
+        ? `${category.charAt(0).toUpperCase() + category.slice(1)} Jerseys` 
+        : (q ? `Search results` : 'All Jerseys'));
 
   return (
     <div className={styles.page}>
@@ -164,7 +169,7 @@ export default async function ProductsPage({
         <div className={styles.emptyState}>
           <p className={styles.emptyTitle}>No jerseys found</p>
           <p className={styles.emptyBody}>
-            We couldn't find any jerseys matching your filters. Check back soon for restocks!
+            We couldn&apos;t find any jerseys matching your filters. Check back soon for restocks!
           </p>
         </div>
       ) : (

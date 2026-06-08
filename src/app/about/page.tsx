@@ -1,5 +1,4 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
 import { JsonLd } from '@/components/seo/JsonLd';
 import { breadcrumbLd } from '@/lib/seo/jsonLd';
 import { BRAND, CONTACT, SOCIAL, canonicalUrl } from '@/lib/seo/site';
@@ -118,10 +117,6 @@ export default function AboutPage() {
                 <span className={styles.contactNote}>Latest jersey drops</span>
               </li>
             )}
-            <li>
-              <Link href="/journal">Blog</Link>
-              <span className={styles.contactNote}>Community</span>
-            </li>
           </ul>
         </section>
       </main>

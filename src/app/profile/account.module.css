@@ -1,22 +1,16 @@
 /*
  * KickoffPro — scoped styling for the /profile dashboard.
- *
- * Lives entirely in this CSS Module — class names are hashed at
- * build time so they never collide with `.card`, `.btn`, etc. used
- * by other surfaces. The brand palette is reused via existing CSS
- * variables; the only locally-defined accent is a very faint gold
- * glow used for hover affordance.
  */
 
 .page {
-  --account-accent: #C9A86A;
-  --account-glow: rgba(201, 168, 106, 0.10);
+  --account-accent: #2FA9F5;
+  --account-glow: rgba(47, 169, 245, 0.10);
 
-  --account-surface: var(--bg-secondary, #0F0F11);
-  --account-border: var(--border-color, var(--subtle-border));
-  --account-border-strong: var(--border-light, var(--subtle-border-strong));
-  --account-text: var(--text-primary, #F5F5F5);
-  --account-muted: var(--text-muted, #9A9A9A);
+  --account-surface: #FFFFFF;
+  --account-border: rgba(7, 27, 58, 0.08);
+  --account-border-strong: rgba(7, 27, 58, 0.15);
+  --account-text: #071B3A;
+  --account-muted: #718096;
 
   --account-radius: 14px;
   --account-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -26,6 +20,7 @@
   margin: 0 auto;
   padding: var(--space-6, 32px) var(--space-4, 16px);
   color: var(--account-text);
+  background: #F7FAFC;
 }
 
 /* ------------------------------------------------------------------ */
@@ -68,42 +63,42 @@
 /* ------------------------------------------------------------------ */
 
 .summary {
-  background: linear-gradient(180deg,
-      var(--account-surface) 0%,
-      color-mix(in oklab, var(--account-surface) 92%, #000) 100%);
+  background: #FFFFFF;
   border: 1px solid var(--account-border);
   border-radius: var(--account-radius);
-  padding: 24px 20px;
+  padding: 28px 20px;
   text-align: center;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02);
 }
 
 .avatar {
-  width: 72px;
-  height: 72px;
+  width: 76px;
+  height: 76px;
   border-radius: 50%;
-  background: var(--bg-elevated, #17171A);
-  border: 1px solid var(--account-border-strong);
+  background: #071B3A;
+  border: 3px solid #2FA9F5;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-family: var(--font-serif, 'Playfair Display', Georgia, serif);
-  font-size: 1.625rem;
-  font-weight: 500;
-  color: var(--account-text);
+  font-family: var(--font-sans);
+  font-size: 1.75rem;
+  font-weight: 800;
+  color: #FFFFFF;
   margin: 0 auto 16px;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.02);
+  box-shadow: 0 4px 10px rgba(7, 27, 58, 0.15);
 }
 
 .summaryName {
-  font-family: var(--font-serif, 'Playfair Display', Georgia, serif);
+  font-family: var(--font-sans);
   font-size: 1.25rem;
-  font-weight: 500;
+  font-weight: 850;
   letter-spacing: -0.01em;
   margin: 0 0 4px;
+  color: #071B3A;
 }
 
 .summaryEmail {
-  font-size: 0.8125rem;
+  font-size: 0.85rem;
   color: var(--account-muted);
   margin: 0;
   word-break: break-all;
@@ -117,27 +112,22 @@
 
 .signOut {
   background: none;
-  border: none;
+  border: 1px solid rgba(7, 27, 58, 0.1);
   font-size: 0.75rem;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--account-muted);
+  color: #071B3A;
+  font-weight: 700;
   cursor: pointer;
-  padding: 6px 8px;
-  border-radius: 999px;
-  transition:
-    color var(--account-dur) var(--account-ease),
-    background var(--account-dur) var(--account-ease);
+  padding: 8px 16px;
+  border-radius: 20px;
+  transition: all var(--account-dur) var(--account-ease);
 }
 
 .signOut:hover {
-  color: var(--account-text);
-  background: var(--hover-wash);
-}
-
-.signOut:focus-visible {
-  outline: 2px solid var(--account-accent);
-  outline-offset: 3px;
+  color: #FFFFFF;
+  background: #071B3A;
+  border-color: #071B3A;
 }
 
 /* ------------------------------------------------------------------ */
@@ -148,7 +138,8 @@
   background: var(--account-surface);
   border: 1px solid var(--account-border);
   border-radius: var(--account-radius);
-  padding: 22px 22px;
+  padding: 24px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02);
   transition:
     transform var(--account-dur) var(--account-ease),
     border-color var(--account-dur) var(--account-ease),
@@ -158,9 +149,8 @@
 .section:hover {
   transform: translateY(-1px);
   border-color: var(--account-border-strong);
-  /* Very faint gold halo + soft drop, no harsh shadow. */
   box-shadow:
-    0 8px 22px -18px rgba(0, 0, 0, 0.45),
+    0 8px 22px rgba(7, 27, 58, 0.05),
     0 0 0 1px var(--account-glow);
 }
 
@@ -188,8 +178,6 @@
 }
 
 .sectionCollapsible.sectionOpen {
-  /* Restore the inner padding only when the body is shown so the
-     collapsed pill stays compact without squashing the header. */
   padding: 0;
 }
 
@@ -211,7 +199,7 @@
 }
 
 .sectionHeaderBtn:hover:not(:disabled) {
-  background: var(--surface-tint);
+  background: #F7FAFC;
 }
 
 .sectionHeaderBtn:focus-visible {
@@ -287,27 +275,27 @@
 
 .sectionIcon {
   flex-shrink: 0;
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border-radius: 10px;
-  background: rgba(201, 168, 106, 0.06);
-  color: var(--account-accent);
-  border: 1px solid rgba(201, 168, 106, 0.18);
+  background: rgba(47, 169, 245, 0.08);
+  color: #2FA9F5;
+  border: 1px solid rgba(47, 169, 245, 0.2);
 }
 
 .sectionIcon svg {
-  width: 16px;
-  height: 16px;
-  stroke-width: 1.6;
+  width: 18px;
+  height: 18px;
+  stroke-width: 1.8;
 }
 
 .sectionTitle {
-  font-family: var(--font-serif, 'Playfair Display', Georgia, serif);
-  font-size: 1.0625rem;
-  font-weight: 500;
+  font-family: var(--font-sans);
+  font-size: 1.05rem;
+  font-weight: 700;
   letter-spacing: -0.005em;
   margin: 0;
   color: var(--account-text);
@@ -340,39 +328,22 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 14px;
+  padding: 8px 16px;
   font-size: 0.75rem;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  font-weight: 600;
-  color: var(--account-text);
-  border: 1px solid var(--account-border-strong);
+  font-weight: 700;
+  color: #071B3A;
+  border: 1px solid rgba(7, 27, 58, 0.12);
   border-radius: 999px;
   text-decoration: none;
-  transition:
-    color var(--account-dur) var(--account-ease),
-    border-color var(--account-dur) var(--account-ease);
+  transition: all var(--account-dur) var(--account-ease);
 }
 
 .cta:hover {
-  color: var(--account-accent);
-  border-color: var(--account-accent);
-}
-
-.cta:focus-visible {
-  outline: 2px solid var(--account-accent);
-  outline-offset: 3px;
-}
-
-.ctaDisabled {
-  color: var(--account-muted);
-  border-color: var(--account-border);
-  cursor: not-allowed;
-}
-
-.ctaDisabled:hover {
-  color: var(--account-muted);
-  border-color: var(--account-border);
+  color: #FFFFFF;
+  background: #071B3A;
+  border-color: #071B3A;
 }
 
 /* ------------------------------------------------------------------ */
@@ -390,25 +361,18 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 12px 14px;
-  background: var(--bg-elevated, #17171A);
+  padding: 14px 16px;
+  background: #F7FAFC;
   border: 1px solid var(--account-border);
   border-radius: 10px;
   text-decoration: none;
   color: inherit;
-  transition:
-    border-color var(--account-dur) var(--account-ease),
-    background var(--account-dur) var(--account-ease);
+  transition: all var(--account-dur) var(--account-ease);
 }
 
 .recentRow:hover {
-  border-color: var(--account-border-strong);
-  background: color-mix(in oklab, var(--bg-elevated, #17171A) 85%, #000);
-}
-
-.recentRow:focus-visible {
-  outline: 2px solid var(--account-accent);
-  outline-offset: 2px;
+  border-color: rgba(47, 169, 245, 0.3);
+  background: #EDF2F7;
 }
 
 .recentLeft {
@@ -419,14 +383,14 @@
 }
 
 .recentNumber {
-  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-size: 0.75rem;
-  font-weight: 600;
-  letter-spacing: 0.02em;
+  font-family: monospace;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #071B3A;
 }
 
 .recentMeta {
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   color: var(--account-muted);
 }
 
@@ -438,37 +402,37 @@
 }
 
 .recentTotal {
-  font-size: 0.8125rem;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
+  font-size: 0.875rem;
+  font-weight: 800;
+  color: #071B3A;
 }
 
 .statusDot {
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
   background: var(--account-muted);
   flex-shrink: 0;
 }
 
 .statusDot_pending {
-  background: #E8C988;
+  background: #FFC928;
 }
 
 .statusDot_confirmed {
-  background: #A9C7FF;
+  background: #2FA9F5;
 }
 
 .statusDot_shipped {
-  background: #C8AEEB;
+  background: #2FA9F5;
 }
 
 .statusDot_delivered {
-  background: #9FD6B0;
+  background: #22C55E;
 }
 
 .statusDot_cancelled {
-  background: #E59B9B;
+  background: #EF4444;
 }
 
 .recentEmpty {
@@ -476,22 +440,4 @@
   color: var(--account-muted);
   margin: 0;
   padding: 10px 0;
-}
-
-/* ------------------------------------------------------------------ */
-/* Reduced motion                                                      */
-/* ------------------------------------------------------------------ */
-
-@media (prefers-reduced-motion: reduce) {
-
-  .section,
-  .recentRow,
-  .signOut,
-  .cta {
-    transition: none;
-  }
-
-  .section:hover {
-    transform: none;
-  }
 }

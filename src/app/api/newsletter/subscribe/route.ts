@@ -25,7 +25,7 @@ interface Body {
 }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const ALLOWED_SOURCES = new Set(['footer', 'about', 'journal', 'product']);
+const ALLOWED_SOURCES = new Set(['footer', 'about', 'journal', 'product', 'homepage']);
 
 export async function POST(req: NextRequest) {
   const limited = await enforceRateLimit(req, {

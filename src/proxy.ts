@@ -49,9 +49,22 @@ export default async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request: { headers: requestHeaders } });
   response.headers.set('x-request-id', requestId);
 
+  const { pathname } = request.nextUrl;
+  if (pathname.startsWith('/auth/callback')) {
+    return response;
+  }
+
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+    console.error('[PROXY] Missing Supabase environment variables on proxy initialization.');
+    return new NextResponse(
+      'Configuration Error: NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY must be set.',
+      { status: 500 }
+    );
+  }
+
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
     {
       cookies: {
         getAll() {
@@ -61,8 +74,11 @@ export default async function proxy(request: NextRequest) {
           cookiesToSet.forEach(({ name, value }) => {
             request.cookies.set(name, value);
           });
+          const cookieHeaderValue = request.cookies.getAll()
+            .map(({ name, value }) => `${name}=${value}`)
+            .join('; ');
+          requestHeaders.set('cookie', cookieHeaderValue);
           response = NextResponse.next({ request: { headers: requestHeaders } });
-          // Re-attach the correlation id after the response is rebuilt.
           response.headers.set('x-request-id', requestId);
           cookiesToSet.forEach(({ name, value, options }) => {
             response.cookies.set(name, value, options);
@@ -76,8 +92,6 @@ export default async function proxy(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const { pathname } = request.nextUrl;
-
   // Routes that require an authenticated user.
   const requiresUser =
     pathname.startsWith('/profile') ||
@@ -88,25 +102,20 @@ export default async function proxy(request: NextRequest) {
   const requiresAdmin = pathname.startsWith('/admin/');
 
   if ((requiresUser || requiresAdmin) && !user) {
-    const redirectUrl = request.nextUrl.clone();
     if (requiresAdmin) {
-      redirectUrl.pathname = '/admin';
-      redirectUrl.search = '';
+      return NextResponse.redirect(new URL('/admin', request.url));
     } else {
-      redirectUrl.pathname = '/auth';
-      redirectUrl.search = '';
+      const redirectUrl = new URL('/auth', request.url);
       redirectUrl.searchParams.set('next', pathname);
+      return NextResponse.redirect(redirectUrl);
     }
-    return NextResponse.redirect(redirectUrl);
   }
 
   // Already authenticated users should not see the login page.
   if (pathname === '/auth' && user) {
     const next = request.nextUrl.searchParams.get('next') || '/profile';
-    const redirectUrl = request.nextUrl.clone();
-    redirectUrl.pathname = next.startsWith('/') ? next : '/profile';
-    redirectUrl.search = '';
-    return NextResponse.redirect(redirectUrl);
+    const destination = next.startsWith('/') ? next : '/profile';
+    return NextResponse.redirect(new URL(destination, request.url));
   }
 
   return response;

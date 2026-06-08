@@ -19,6 +19,7 @@ export default function AdminNewProduct() {
   const [images, setImages] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [category, setCategory] = useState('National Team');
 
   function handleNameChange(val: string) {
     setName(val);
@@ -51,6 +52,7 @@ export default function AdminNewProduct() {
         sale_price_paise: salePrice,
         sizes,
         images,
+        category,
         is_active: true,
       })
       .select('id')
@@ -112,6 +114,20 @@ export default function AdminNewProduct() {
               <label className="input-label">Sale Price (₹, optional)</label>
               <input className="input-field" type="number" step="0.01" value={salePricePaise} onChange={e => setSalePricePaise(e.target.value)} placeholder="999" />
             </div>
+          </div>
+          <div className="input-group" style={{ marginBottom: 'var(--space-3)' }}>
+            <label className="input-label">Category</label>
+            <select 
+              className="input-field" 
+              value={category} 
+              onChange={e => setCategory(e.target.value)}
+              style={{ width: '100%', padding: 'var(--space-2) var(--space-3)', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', color: 'var(--text-primary)' }}
+            >
+              <option value="National Team">National Team</option>
+              <option value="Club Jersey">Club Jersey</option>
+              <option value="Retro Jersey">Retro Jersey</option>
+              <option value="Sale">Sale</option>
+            </select>
           </div>
         </div>
 

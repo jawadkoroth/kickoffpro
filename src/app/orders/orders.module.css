@@ -1,43 +1,26 @@
-/*
- * KickoffPro — scoped premium styling for /orders and /orders/[id].
- *
- * Lives entirely in this CSS Module. Class names are hashed at build
- * time so they cannot collide with global classes (.badge-*, .timeline-*)
- * used by admin and the public /order/[id] success page.
- *
- * Design intent:
- *   - dark, high-contrast surfaces with a single gold accent
- *   - subtle motion (soft lift, low-opacity glow, no harsh shadows)
- *   - badges share size/typography; only color varies
- *   - horizontal stepper drives progress strictly off order_status
- */
-
-/* ------------------------------------------------------------------ */
-/* Tokens                                                              */
-/* ------------------------------------------------------------------ */
-
 .page {
-  --orders-accent: #C9A86A;
-  --orders-accent-soft: rgba(201, 168, 106, 0.12);
-  --orders-accent-glow: rgba(201, 168, 106, 0.10);
+  --orders-accent: #2FA9F5;
+  --orders-accent-soft: rgba(47, 169, 245, 0.12);
+  --orders-accent-glow: rgba(47, 169, 245, 0.10);
 
-  --orders-surface: var(--bg-secondary, #0F0F11);
-  --orders-surface-strong: var(--bg-elevated, #17171A);
-  --orders-border: var(--border-color, rgba(255, 255, 255, 0.08));
-  --orders-border-strong: var(--border-light, rgba(255, 255, 255, 0.14));
+  --orders-surface: #FFFFFF;
+  --orders-surface-strong: #F7FAFC;
+  --orders-border: rgba(7, 27, 58, 0.08);
+  --orders-border-strong: rgba(7, 27, 58, 0.14);
 
-  --orders-text: var(--text-primary, #F5F5F5);
-  --orders-text-muted: var(--text-muted, #9A9A9A);
+  --orders-text: #071B3A;
+  --orders-text-muted: #718096;
 
   --orders-radius: 14px;
   --orders-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
   --orders-dur-fast: 150ms;
   --orders-dur-slow: 220ms;
 
-  max-width: 720px;
+  max-width: 680px;
   margin: 0 auto;
   padding: var(--space-6, 32px) var(--space-4, 16px);
   color: var(--orders-text);
+  background-color: #F7FAFC;
 }
 
 /* ------------------------------------------------------------------ */
@@ -46,18 +29,20 @@
 
 .header {
   margin-bottom: var(--space-6, 32px);
+  text-align: left;
 }
 
 .title {
-  font-family: var(--font-serif, 'Playfair Display', Georgia, serif);
+  font-family: var(--font-sans);
   font-size: 1.75rem;
-  font-weight: 500;
+  font-weight: 850;
   letter-spacing: -0.01em;
   margin: 0;
+  color: #071B3A;
 }
 
 .subtitle {
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   color: var(--orders-text-muted);
   margin-top: var(--space-2, 8px);
 }
@@ -66,21 +51,16 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 0.8125rem;
+  font-size: 0.85rem;
   color: var(--orders-text-muted);
   text-decoration: none;
   margin-bottom: var(--space-4, 16px);
   transition: color var(--orders-dur-fast) var(--orders-ease);
+  font-weight: 600;
 }
 
 .back:hover {
-  color: var(--orders-text);
-}
-
-.back:focus-visible {
-  outline: 2px solid var(--orders-accent);
-  outline-offset: 3px;
-  border-radius: 4px;
+  color: #071B3A;
 }
 
 /* ------------------------------------------------------------------ */
@@ -90,37 +70,26 @@
 .list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
 }
 
 .card {
-  display: block;
-  padding: 16px 18px;
-  background: linear-gradient(180deg,
-      var(--orders-surface) 0%,
-      color-mix(in oklab, var(--orders-surface) 92%, #000) 100%);
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+  background: #FFFFFF;
   border: 1px solid var(--orders-border);
   border-radius: var(--orders-radius);
   text-decoration: none;
   color: inherit;
-  transition:
-    transform var(--orders-dur-slow) var(--orders-ease),
-    border-color var(--orders-dur-slow) var(--orders-ease),
-    box-shadow var(--orders-dur-slow) var(--orders-ease);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.01);
+  transition: all var(--orders-dur-slow) var(--orders-ease);
 }
 
 .card:hover {
   transform: translateY(-2px);
-  border-color: var(--orders-border-strong);
-  /* Subtle: very low opacity glow, no harsh shadow. */
-  box-shadow:
-    0 8px 20px -16px rgba(0, 0, 0, 0.45),
-    0 0 0 1px var(--orders-accent-glow);
-}
-
-.card:focus-visible {
-  outline: 2px solid var(--orders-accent);
-  outline-offset: 2px;
+  border-color: rgba(47, 169, 245, 0.3);
+  box-shadow: 0 8px 20px rgba(7, 27, 58, 0.05);
 }
 
 .cardHeader {
@@ -128,68 +97,153 @@
   justify-content: space-between;
   align-items: center;
   gap: 12px;
-  margin-bottom: 10px;
+  margin-bottom: 16px;
 }
 
 .orderNumber {
-  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-size: 0.8125rem;
-  font-weight: 600;
-  letter-spacing: 0.02em;
+  font-family: monospace;
+  font-size: 0.9rem;
+  font-weight: 800;
+  color: #071B3A;
+}
+
+/* Amazon/Nike style Layout for Cards */
+.cardContent {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+
+.cardThumb {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #F7FAFC;
+  border: 1px solid var(--orders-border);
+}
+
+.cardDetails {
+  flex: 1;
+  min-width: 0;
+}
+
+.cardProductName {
+  font-weight: 700;
+  font-size: 0.92rem;
+  color: #071B3A;
+  margin: 0 0 4px 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .cardMeta {
   display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  font-size: 0.8125rem;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.8rem;
   color: var(--orders-text-muted);
 }
 
 .cardTotal {
-  font-weight: 600;
-  color: var(--orders-text);
-  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  color: #071B3A;
+  font-size: 0.95rem;
+}
+
+.cardEta {
+  font-size: 0.8rem;
+  color: #2FA9F5;
+  font-weight: 700;
+  margin-top: 4px;
+}
+
+.cardActions {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+  border-top: 1px solid #EDF2F7;
+  padding-top: 12px;
+}
+
+.cardBtnPrimary {
+  flex: 1;
+  background: #FFC928;
+  color: #071B3A;
+  font-size: 0.75rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 8px 12px;
+  border-radius: 6px;
+  text-align: center;
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+
+.cardBtnPrimary:hover {
+  background: #2FA9F5;
+  color: #FFFFFF;
+}
+
+.cardBtnSecondary {
+  flex: 1;
+  background: #FFFFFF;
+  color: #071B3A;
+  border: 1px solid rgba(7, 27, 58, 0.12);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 8px 12px;
+  border-radius: 6px;
+  text-align: center;
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+
+.cardBtnSecondary:hover {
+  background: #F7FAFC;
 }
 
 /* Empty state ----------------------------------------------------- */
 
 .empty {
   text-align: center;
-  padding: var(--space-8, 48px) var(--space-5, 24px);
-  background: var(--orders-surface);
+  padding: var(--space-10, 64px) var(--space-5, 24px);
+  background: #FFFFFF;
   border: 1px solid var(--orders-border);
   border-radius: var(--orders-radius);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02);
 }
 
 .emptyText {
   color: var(--orders-text-muted);
   margin-bottom: var(--space-4, 16px);
+  font-size: 0.95rem;
 }
 
 .emptyLink {
   display: inline-block;
-  padding: 10px 20px;
-  border: 1px solid var(--orders-border-strong);
+  padding: 10px 24px;
+  border: 1px solid #071B3A;
+  background: #071B3A;
   border-radius: 999px;
-  color: var(--orders-text);
+  color: #FFFFFF;
   text-decoration: none;
-  font-size: 0.8125rem;
+  font-size: 0.8rem;
+  font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  transition:
-    border-color var(--orders-dur-fast) var(--orders-ease),
-    color var(--orders-dur-fast) var(--orders-ease);
+  transition: all var(--orders-dur-fast) var(--orders-ease);
 }
 
 .emptyLink:hover {
-  border-color: var(--orders-accent);
-  color: var(--orders-accent);
-}
-
-.emptyLink:focus-visible {
-  outline: 2px solid var(--orders-accent);
-  outline-offset: 3px;
+  background: #2FA9F5;
+  border-color: #2FA9F5;
 }
 
 /* ------------------------------------------------------------------ */
@@ -201,57 +255,56 @@
   align-items: center;
   justify-content: center;
   padding: 4px 10px;
-  border-radius: 999px;
-  font-size: 0.6875rem;
-  /* 11px */
+  border-radius: 20px;
+  font-size: 0.7rem;
   line-height: 1;
-  font-weight: 600;
-  letter-spacing: 0.06em;
+  font-weight: 800;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
   border: 1px solid transparent;
   white-space: nowrap;
 }
 
 .badge_pending {
-  background: rgba(201, 168, 106, 0.10);
-  color: #E8C988;
-  border-color: rgba(201, 168, 106, 0.25);
+  background: rgba(47, 169, 245, 0.08);
+  color: #2FA9F5; /* Placed: #2FA9F5 */
+  border-color: rgba(47, 169, 245, 0.2);
 }
 
 .badge_confirmed {
-  background: rgba(110, 168, 255, 0.10);
-  color: #A9C7FF;
-  border-color: rgba(110, 168, 255, 0.25);
+  background: rgba(255, 201, 40, 0.1);
+  color: #E2B21C; /* Processing: #FFC928 style text */
+  border-color: rgba(255, 201, 40, 0.25);
 }
 
 .badge_shipped {
-  background: rgba(168, 132, 219, 0.12);
-  color: #C8AEEB;
-  border-color: rgba(168, 132, 219, 0.28);
+  background: rgba(47, 169, 245, 0.08);
+  color: #2FA9F5;
+  border-color: rgba(47, 169, 245, 0.2);
 }
 
 .badge_delivered {
-  background: rgba(120, 196, 141, 0.12);
-  color: #9FD6B0;
-  border-color: rgba(120, 196, 141, 0.28);
+  background: rgba(34, 197, 94, 0.08);
+  color: #22C55E; /* Delivered: #22C55E */
+  border-color: rgba(34, 197, 94, 0.2);
 }
 
 .badge_cancelled {
-  background: rgba(229, 80, 80, 0.10);
-  color: #E59B9B;
-  border-color: rgba(229, 80, 80, 0.22);
+  background: rgba(239, 68, 68, 0.08);
+  color: #EF4444; /* Cancelled: #EF4444 */
+  border-color: rgba(239, 68, 68, 0.2);
 }
 
 .badge_paid {
-  background: rgba(120, 196, 141, 0.12);
-  color: #9FD6B0;
-  border-color: rgba(120, 196, 141, 0.28);
+  background: rgba(34, 197, 94, 0.08);
+  color: #22C55E;
+  border-color: rgba(34, 197, 94, 0.2);
 }
 
 .badge_unpaid {
-  background: rgba(201, 168, 106, 0.10);
-  color: #E8C988;
-  border-color: rgba(201, 168, 106, 0.25);
+  background: rgba(255, 201, 40, 0.1);
+  color: #E2B21C;
+  border-color: rgba(255, 201, 40, 0.25);
 }
 
 .badgeRow {
@@ -274,7 +327,7 @@
 }
 
 .placedAt {
-  font-size: 0.75rem;
+  font-size: 0.8rem;
   color: var(--orders-text-muted);
   margin-top: 4px;
 }
@@ -283,17 +336,20 @@
   background: var(--orders-surface);
   border: 1px solid var(--orders-border);
   border-radius: var(--orders-radius);
-  padding: 18px 18px;
-  margin-bottom: 14px;
+  padding: 24px;
+  margin-bottom: 16px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.01);
 }
 
 .sectionLabel {
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--orders-text-muted);
-  margin: 0 0 12px;
-  font-weight: 500;
+  color: #071B3A;
+  margin: 0 0 16px;
+  font-weight: 800;
+  border-left: 3px solid #2FA9F5;
+  padding-left: 8px;
 }
 
 /* Item row -------------------------------------------------------- */
@@ -306,22 +362,24 @@
 
 .itemRow {
   display: flex;
-  gap: 14px;
+  gap: 16px;
   align-items: center;
+  padding: 12px 0;
+}
+
+.itemRow + .itemRow {
+  border-top: 1px solid #EDF2F7;
 }
 
 .thumb {
   position: relative;
-  width: 72px;
-  height: 72px;
+  width: 64px;
+  height: 64px;
   flex-shrink: 0;
-  border-radius: 10px;
+  border-radius: 8px;
   overflow: hidden;
-  background: linear-gradient(135deg,
-      var(--orders-surface-strong) 0%,
-      color-mix(in oklab, var(--orders-surface-strong) 80%, #000) 100%);
+  background: #F7FAFC;
   border: 1px solid var(--orders-border);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
 .itemMeta {
@@ -330,10 +388,10 @@
 }
 
 .itemName {
-  font-size: 0.9375rem;
-  /* 15px */
-  font-weight: 500;
+  font-size: 0.92rem;
+  font-weight: 700;
   margin: 0;
+  color: #071B3A;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -342,14 +400,13 @@
 .itemSub {
   font-size: 0.75rem;
   color: var(--orders-text-muted);
-  letter-spacing: 0.02em;
   margin-top: 4px;
 }
 
 .itemPrice {
-  font-size: 0.9375rem;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #071B3A;
   white-space: nowrap;
 }
 
@@ -358,46 +415,49 @@
 .totalsRow {
   display: flex;
   justify-content: space-between;
-  font-size: 0.875rem;
+  font-size: 0.9rem;
   margin-bottom: 8px;
-  font-variant-numeric: tabular-nums;
+  color: #4A5568;
 }
 
 .totalsRowMuted {
-  color: var(--orders-text-muted);
+  color: #718096;
 }
 
 .totalsRowDiscount {
-  color: var(--orders-accent);
+  color: #22C55E;
+  font-weight: 600;
 }
 
 .totalsTotal {
   display: flex;
   justify-content: space-between;
-  padding-top: 10px;
+  padding-top: 12px;
   margin-top: 6px;
-  border-top: 1px solid var(--orders-border);
-  font-weight: 600;
-  font-size: 0.9375rem;
-  font-variant-numeric: tabular-nums;
+  border-top: 2px dashed #EDF2F7;
+  font-weight: 800;
+  font-size: 1.1rem;
+  color: #071B3A;
 }
 
 /* Address --------------------------------------------------------- */
 
 .addressName {
-  font-weight: 500;
+  font-weight: 750;
   margin: 0;
+  color: #071B3A;
+  font-size: 0.95rem;
 }
 
 .addressPhone {
-  font-size: 0.8125rem;
+  font-size: 0.8rem;
   color: var(--orders-text-muted);
   margin: 2px 0 8px;
 }
 
 .addressLines {
-  font-size: 0.875rem;
-  line-height: 1.55;
+  font-size: 0.9rem;
+  line-height: 1.5;
   color: var(--orders-text);
   margin: 0;
 }
@@ -405,26 +465,26 @@
 /* Cancelled banner ------------------------------------------------ */
 
 .cancelledBanner {
-  background: rgba(229, 80, 80, 0.05);
-  border: 1px solid rgba(229, 80, 80, 0.22);
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.15);
   border-radius: var(--orders-radius);
-  padding: 16px 18px;
-  margin-bottom: 14px;
+  padding: 16px 20px;
+  margin-bottom: 16px;
+  color: #EF4444;
 }
 
 .cancelledLabel {
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #E59B9B;
-  font-weight: 600;
+  color: #EF4444;
+  font-weight: 800;
   margin: 0 0 6px;
 }
 
 .cancelledReason {
-  font-size: 0.875rem;
-  color: var(--orders-text);
-  margin: 0;
+  font-size: 0.9rem;
+  color: #4A5568;
 }
 
 /* ------------------------------------------------------------------ */
@@ -439,17 +499,13 @@
   margin-top: 6px;
 }
 
-/* Track behind the dots. Inset by 12.5% on each side so the visible
- * line starts at the centre of the first dot and ends at the centre
- * of the last dot (4 columns ⇒ 1/8 = 12.5% inset). */
 .stepperTrack {
   position: absolute;
   top: 17px;
-  /* aligns to vertical centre of 12px dot + 2px border */
   left: 12.5%;
   right: 12.5%;
   height: 2px;
-  background: var(--orders-border-strong);
+  background: #E2E8F0;
   border-radius: 2px;
   overflow: hidden;
 }
@@ -458,16 +514,11 @@
   position: absolute;
   inset: 0;
   width: 0%;
-  background: var(--orders-accent);
+  background: #2FA9F5;
   border-radius: 2px;
   transition: width var(--orders-dur-slow) var(--orders-ease);
 }
 
-/* Mapping required: pending 0% / confirmed 33% / shipped 66% /
- * delivered 100% / cancelled = no fill (muted track only).
- * (33 and 66 are the user-specified values; mathematically the
- *  centre-to-centre midpoints would be 33.33% and 66.66%, so 33%/66%
- *  read as a touch under each step's dot — intentional per spec.) */
 .fill_pending {
   width: 0%;
 }
@@ -501,41 +552,33 @@
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  background: var(--orders-surface);
-  border: 2px solid var(--orders-border-strong);
-  transition:
-    background var(--orders-dur-slow) var(--orders-ease),
-    border-color var(--orders-dur-slow) var(--orders-ease),
-    box-shadow var(--orders-dur-slow) var(--orders-ease);
+  background: #FFFFFF;
+  border: 2px solid #CBD5E1;
+  transition: all var(--orders-dur-slow) var(--orders-ease);
 }
 
 .dotDone {
-  background: var(--orders-accent);
-  border-color: var(--orders-accent);
-  box-shadow: 0 0 0 4px var(--orders-accent-glow);
+  background: #2FA9F5;
+  border-color: #2FA9F5;
+  box-shadow: 0 0 0 4px rgba(47, 169, 245, 0.2);
 }
 
-/* `.dotCurrent` is always applied alongside `.dotDone` in JSX, so it
- * only needs to add the pulse animation here. */
 .dotCurrent {
   animation: orders_pulse 1.8s var(--orders-ease) infinite;
 }
 
 @keyframes orders_pulse {
-
-  0%,
-  100% {
-    box-shadow: 0 0 0 4px var(--orders-accent-glow);
+  0%, 100% {
+    box-shadow: 0 0 0 4px rgba(47, 169, 245, 0.2);
   }
-
   50% {
-    box-shadow: 0 0 0 7px rgba(201, 168, 106, 0.06);
+    box-shadow: 0 0 0 7px rgba(47, 169, 245, 0.08);
   }
 }
 
 .stepLabel {
   font-size: 0.75rem;
-  font-weight: 500;
+  font-weight: 700;
   text-align: center;
   color: var(--orders-text-muted);
   max-width: 100%;
@@ -545,13 +588,12 @@
 }
 
 .stepLabelDone {
-  color: var(--orders-text);
+  color: #071B3A;
 }
 
 .stepTime {
   font-size: 0.6875rem;
   color: var(--orders-text-muted);
-  font-variant-numeric: tabular-nums;
   text-align: center;
 }
 
@@ -565,39 +607,4 @@
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
-}
-
-/* Reduced motion ---------------------------------------------------- */
-
-@media (prefers-reduced-motion: reduce) {
-
-  .card,
-  .dot,
-  .stepperFill {
-    transition: none;
-  }
-
-  .card:hover {
-    transform: none;
-  }
-
-  .dotCurrent {
-    animation: none;
-  }
-}
-
-/* Mobile tweaks ---------------------------------------------------- */
-
-@media (max-width: 480px) {
-  .stepLabel {
-    font-size: 0.6875rem;
-  }
-
-  .stepTime {
-    font-size: 0.625rem;
-  }
-
-  .section {
-    padding: 16px;
-  }
 }

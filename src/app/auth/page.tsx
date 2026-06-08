@@ -60,10 +60,19 @@ function mapAuthError(raw: string): string {
   if (msg.includes('access_denied')) {
     return 'Access was denied. Please try again or use a different sign-in method.';
   }
+  if (msg.includes('redirect_uri_mismatch') || msg.includes('redirect url') || msg.includes('redirect uri') || msg.includes('callback url')) {
+    return 'Unauthorized callback URL / Invalid redirect URL. Please check your Supabase Dashboard configuration.';
+  }
+  if (msg.includes('configuration') || msg.includes('missing api key') || msg.includes('supabase key') || msg.includes('env var')) {
+    return 'Missing Supabase configuration. Please check your environment variables.';
+  }
+  if (msg.includes('email not authorized') || msg.includes('not authorized') || msg.includes('unauthorized')) {
+    return 'Email not authorized. Access is restricted.';
+  }
 
-  // Log technical details internally; return generic premium message.
+  // Log technical details internally
   console.error('[AUTH_ERROR]', raw);
-  return 'Something went wrong. Please try again.';
+  return `Authentication error: ${raw}`;
 }
 
 type Step = 'enter' | 'sent';
@@ -302,7 +311,7 @@ function GoogleIcon() {
 
 export default function AuthPage() {
   return (
-    <Suspense fallback={<div style={{ minHeight: '100dvh', background: '#0B0B0B' }} />}>
+    <Suspense fallback={<div style={{ minHeight: '100dvh', background: '#071B3A' }} />}>
       <AuthInner />
     </Suspense>
   );

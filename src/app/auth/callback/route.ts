@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
+import { cookies } from 'next/headers';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 
 /**
@@ -28,10 +29,13 @@ export async function GET(request: NextRequest) {
   const next = rawNext.startsWith('/') && !rawNext.startsWith('//') ? rawNext : '/profile';
 
   if (errorParam) {
-    const target = new URL('/auth', url.origin);
+    const target = new URL('/auth', request.url);
     target.searchParams.set('error', errorDescription || errorParam);
-    return NextResponse.redirect(target.toString());
+    return NextResponse.redirect(target);
   }
+
+  const cookieStore = await cookies();
+  console.log('[AUTH_CALLBACK] Request cookies:', cookieStore.getAll().map(c => `${c.name}: ${c.value.substring(0, 12)}...`));
 
   const supabase = await createServerSupabaseClient();
 
@@ -42,22 +46,22 @@ export async function GET(request: NextRequest) {
       type,
     });
     if (verifyError) {
-      const target = new URL('/auth', url.origin);
+      const target = new URL('/auth', request.url);
       target.searchParams.set('error', verifyError.message);
-      return NextResponse.redirect(target.toString());
+      return NextResponse.redirect(target);
     }
   } else if (code) {
     // ── OAuth PKCE flow (Google, etc.) ──
     const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
     if (exchangeError) {
-      const target = new URL('/auth', url.origin);
+      const target = new URL('/auth', request.url);
       target.searchParams.set('error', exchangeError.message);
-      return NextResponse.redirect(target.toString());
+      return NextResponse.redirect(target);
     }
   } else {
-    const target = new URL('/auth', url.origin);
+    const target = new URL('/auth', request.url);
     target.searchParams.set('error', 'Missing authorization parameters');
-    return NextResponse.redirect(target.toString());
+    return NextResponse.redirect(target);
   }
 
   const {
@@ -65,9 +69,9 @@ export async function GET(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    const target = new URL('/auth', url.origin);
+    const target = new URL('/auth', request.url);
     target.searchParams.set('error', 'Session could not be established');
-    return NextResponse.redirect(target.toString());
+    return NextResponse.redirect(target);
   }
 
   // Profile row is auto-created by trigger (migration 003).
@@ -82,5 +86,5 @@ export async function GET(request: NextRequest) {
     ? next
     : `/profile/complete?next=${encodeURIComponent(next)}`;
 
-  return NextResponse.redirect(new URL(destination, url.origin).toString());
+  return NextResponse.redirect(new URL(destination, request.url));
 }

@@ -1,36 +1,9 @@
 import Link from 'next/link';
-import NewsletterField from './NewsletterField';
 import { BRAND, CONTACT, SOCIAL } from '@/lib/seo/site';
 import styles from './Footer.module.css';
 
 /**
  * KickoffPro — global footer.
- *
- * Server-rendered. The only client island inside is the
- * <NewsletterField/>. Everything else is static and crawlable.
- *
- * Visual brief (per the brand direction):
- *   - Editorial spacing, generous breathing room.
- *   - Soft hairline separators only.
- *   - No emojis, no icons in the link rows.
- *   - No "Get 10% off your first order" — the newsletter line
- *     is editorial, not promotional.
- *   - Monochrome only. No gold, no glow. The accent gold token
- *     stays untouched in globals; we just don't reach for it.
- *
- * Information architecture:
- *
- *   SHOP        COMPANY     SUPPORT     CONNECT
- *   Shirts      About       Shipping    Instagram
- *   Hoodies     Journal     Returns     Pinterest
- *   T-Shirts    Contact     Privacy     YouTube
- *   Collections             Terms       Email
- *
- * Shop column links route to category-filtered listings on
- * `/products?category=…`. Until category filtering exists in the
- * collection page, these still resolve to `/products` and append
- * a query string the listing safely ignores. This way the IA is
- * future-proofed without speculative routes.
  */
 
 interface NavSection {
@@ -64,7 +37,6 @@ function buildSections(): NavSection[] {
       title: 'Company',
       items: [
         { label: 'About', href: '/about' },
-        { label: 'Journal', href: '/journal' },
         {
           label: 'Contact',
           href: CONTACT.email ? `mailto:${CONTACT.email}` : '/about',
@@ -103,13 +75,6 @@ export default function Footer() {
   return (
     <footer className={styles.footer} role="contentinfo">
       <div className={styles.inner}>
-        <section className={styles.editorial} aria-labelledby="footer-newsletter-heading">
-          <h2 id="footer-newsletter-heading" className={styles.brand}>
-            {BRAND.name}
-          </h2>
-          <NewsletterField source="footer" />
-        </section>
-
         <nav className={styles.columns} aria-label="Footer">
           {sections.map((section) => (
             <div key={section.title} className={styles.column}>

@@ -6,30 +6,23 @@
   position: sticky;
   top: 0;
   z-index: 100;
-  background: rgba(var(--bg-primary-rgb, 255, 255, 255), 0.85);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border-bottom: 1px solid var(--border-color);
+  background: #071B3A; /* Premium Dark Navy */
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   transition: all 0.3s ease;
-}
-
-[data-theme='dark'] .navbar {
-  background: rgba(7, 27, 58, 0.85); /* Deep Navy blurred */
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .logo {
   font-size: 1.25rem;
   font-weight: 800;
   letter-spacing: -0.02em;
-  color: var(--text-primary);
+  color: #FFFFFF; /* High-contrast white */
   display: flex;
   align-items: center;
   gap: var(--space-2);
 }
 
 .logoHighlight {
-  color: var(--brand-blue);
+  color: #FFC928; /* Action Yellow */
 }
 
 .navLinks {
@@ -47,7 +40,7 @@
 .navLink {
   font-size: 0.875rem;
   font-weight: 600;
-  color: var(--text-secondary);
+  color: rgba(255, 255, 255, 0.8);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   transition: color 0.2s ease;
@@ -55,7 +48,7 @@
 }
 
 .navLink:hover {
-  color: var(--text-primary);
+  color: #FFFFFF;
 }
 
 .navLink::after {
@@ -65,7 +58,7 @@
   left: 0;
   width: 0%;
   height: 2px;
-  background-color: var(--brand-blue);
+  background-color: #2FA9F5; /* Sky Blue */
   transition: width 0.2s ease;
 }
 
@@ -74,15 +67,15 @@
 }
 
 .saleLink {
-  color: var(--error);
+  color: #FFC928; /* Action Yellow to stand out in dark navy */
 }
 
 .saleLink:hover {
-  color: #c62828;
+  color: #FFFFFF;
 }
 
 .saleLink::after {
-  background-color: var(--error);
+  background-color: #FFC928;
 }
 
 .actions {
@@ -93,7 +86,7 @@
 
 .iconBtn {
   position: relative;
-  color: var(--text-primary);
+  color: #FFFFFF;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -103,7 +96,7 @@
 }
 
 .iconBtn:hover {
-  background-color: var(--bg-tertiary);
+  background-color: rgba(255, 255, 255, 0.08);
   transform: scale(1.05);
 }
 
@@ -111,8 +104,8 @@
   position: absolute;
   top: 0;
   right: 0;
-  background-color: var(--brand-blue);
-  color: white;
+  background-color: #FFC928; /* Action Yellow */
+  color: #071B3A; /* Dark Navy text */
   font-size: 0.65rem;
   font-weight: 700;
   min-width: 16px;
@@ -121,7 +114,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 2px solid var(--bg-primary);
+  border: 2px solid #071B3A; /* Blends with Navy background */
 }
 
 /* Mobile Menu */
@@ -130,7 +123,7 @@
   align-items: center;
   justify-content: center;
   padding: var(--space-2);
-  color: var(--text-primary);
+  color: #FFFFFF;
 }
 
 @media (min-width: 1024px) {
@@ -145,21 +138,71 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: var(--bg-primary);
+  background: #071B3A; /* Match Navy background */
   z-index: 99;
   padding: var(--space-6);
   display: flex;
   flex-direction: column;
   gap: var(--space-5);
   overflow-y: auto;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .mobileNavLink {
   font-size: 1.25rem;
   font-weight: 700;
-  color: var(--text-primary);
+  color: #FFFFFF;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   padding-bottom: var(--space-4);
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  transition: color 0.2s ease;
+}
+
+.mobileNavLink:hover {
+  color: #FFC928;
+}
+
+.collectionsBtn {
+  background-color: #FFC928; /* Action Yellow */
+  color: #071B3A; /* Dark Navy text */
+  font-weight: 800;
+  font-size: 0.7rem;
+  letter-spacing: 0.05em;
+  padding: 6px 12px;
+  border-radius: 4px;
+  text-decoration: none;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-transform: uppercase;
+}
+
+.collectionsBtn:hover {
+  background-color: #FFFFFF;
+  color: #071B3A;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(255, 201, 40, 0.2);
+}
+
+.desktopCollections {
+  display: none;
+}
+
+.mobileCollections {
+  display: inline;
+}
+
+@media (min-width: 768px) {
+  .collectionsBtn {
+    font-size: 0.75rem;
+    padding: 8px 16px;
+  }
+  .desktopCollections {
+    display: inline;
+  }
+  .mobileCollections {
+    display: none;
+  }
 }

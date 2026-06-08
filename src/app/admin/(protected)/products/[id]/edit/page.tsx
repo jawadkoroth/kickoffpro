@@ -37,6 +37,7 @@ export default function AdminEditProduct({ params }: { params: Promise<{ id: str
   const [images, setImages] = useState<string[]>([]);
   const [isActive, setIsActive] = useState(true);
   const [inventory, setInventory] = useState<{ size: string; stock: number }[]>([]);
+  const [category, setCategory] = useState('National Team');
 
   useEffect(() => {
     async function load() {
@@ -53,6 +54,7 @@ export default function AdminEditProduct({ params }: { params: Promise<{ id: str
       setSizes(p.sizes || []);
       setImages(Array.isArray(p.images) ? p.images : []);
       setIsActive(p.is_active);
+      setCategory(p.category || 'National Team');
 
       const { data: inv } = await supabase
         .from('inventory')
@@ -102,6 +104,7 @@ export default function AdminEditProduct({ params }: { params: Promise<{ id: str
         sale_price_paise: salePriceVal,
         sizes,
         images,
+        category,
         is_active: isActive,
       })
       .eq('id', id);
@@ -163,7 +166,7 @@ export default function AdminEditProduct({ params }: { params: Promise<{ id: str
             <label className="input-label">Description</label>
             <textarea className="input-field" value={description} onChange={e => setDescription(e.target.value)} rows={3} style={{ resize: 'vertical', minHeight: '60px' }} />
           </div>
-          <div className="input-row">
+          <div className="input-row" style={{ marginBottom: 'var(--space-3)' }}>
             <div className="input-group">
               <label className="input-label">Price (₹)</label>
               <input className="input-field" type="number" step="0.01" value={price} onChange={e => setPrice(e.target.value)} required />
@@ -172,6 +175,20 @@ export default function AdminEditProduct({ params }: { params: Promise<{ id: str
               <label className="input-label">Sale Price (₹)</label>
               <input className="input-field" type="number" step="0.01" value={salePrice} onChange={e => setSalePrice(e.target.value)} placeholder="Optional" />
             </div>
+          </div>
+          <div className="input-group" style={{ marginBottom: 'var(--space-3)' }}>
+            <label className="input-label">Category</label>
+            <select 
+              className="input-field" 
+              value={category} 
+              onChange={e => setCategory(e.target.value)}
+              style={{ width: '100%', padding: 'var(--space-2) var(--space-3)', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', color: 'var(--text-primary)' }}
+            >
+              <option value="National Team">National Team</option>
+              <option value="Club Jersey">Club Jersey</option>
+              <option value="Retro Jersey">Retro Jersey</option>
+              <option value="Sale">Sale</option>
+            </select>
           </div>
         </div>
 

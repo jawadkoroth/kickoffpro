@@ -65,22 +65,24 @@ export default function AdminLogin() {
   return (
     <div className={styles.page}>
       <div className={styles.card}>
-        <div className={styles.logo}>KickoffPro</div>
-        <h1 className={styles.heading}>Admin Login</h1>
+        <div className={styles.logo}>
+          KICKOFF<span className={styles.logoHighlight}>PRO</span>
+        </div>
+        <h1 className={styles.heading}>Admin Dashboard Login</h1>
         <form onSubmit={handleLogin} className={styles.form}>
-          <div className="input-group">
+          <div className={styles.inputWrapper}>
             <input
-              className="input-field"
+              className={styles.inputField}
               type="email"
-              placeholder="Email"
+              placeholder="Admin Email"
               value={email}
               onChange={e => setEmail(e.target.value)}
               required
             />
           </div>
-          <div className="input-group">
+          <div className={styles.inputWrapper}>
             <input
-              className="input-field"
+              className={styles.inputField}
               type="password"
               placeholder="Password"
               value={password}
@@ -88,13 +90,13 @@ export default function AdminLogin() {
               required
             />
           </div>
-          {error && <p className="input-error-text">{error}</p>}
+          {error && <p className={styles.errorText}>{error}</p>}
           <button
-            className={`btn btn-primary ${loading ? 'btn-loading' : ''}`}
+            className={`${styles.submitBtn} ${loading ? 'btn-loading' : ''}`}
             type="submit"
             disabled={loading}
           >
-            LOGIN
+            {loading ? 'Authenticating...' : 'Sign In to Dashboard'}
           </button>
         </form>
       </div>

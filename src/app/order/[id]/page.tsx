@@ -2,6 +2,8 @@
 
 import { useState, useEffect, use } from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
+import { useAuth } from '@/lib/auth/AuthProvider';
 import styles from './page.module.css';
 
 interface OrderLine {
@@ -17,11 +19,8 @@ interface OrderLine {
 interface Order {
   id: string;
   order_number: string;
-  // Legacy single-line fields. Track API still populates them from
-  // items[0] for back-compat; multi-line UI prefers `items[]`.
   product_name: string;
   size: string;
-  // Per-line breakdown — present on every order since phase B1.
   items: OrderLine[];
   subtotal_paise?: number | null;
   total_paise: number;
@@ -38,10 +37,12 @@ interface Order {
   created_at: string;
   updated_at: string;
   retry_count: number;
+  cancel_reason?: string | null;
 }
 
 export default function OrderPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  const { user } = useAuth();
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [retrying, setRetrying] = useState(false);
@@ -85,8 +86,8 @@ export default function OrderPage({ params }: { params: Promise<{ id: string }> 
         return;
       }
 
-      // Load Razorpay
-      if (!(window as unknown as { Razorpay: unknown }).Razorpay) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      if (!(window as any).Razorpay) {
         await new Promise<void>((resolve, reject) => {
           const script = document.createElement('script');
           script.src = 'https://checkout.razorpay.com/v1/checkout.js';
@@ -96,7 +97,8 @@ export default function OrderPage({ params }: { params: Promise<{ id: string }> 
         });
       }
 
-      const RazorpayClass = (window as unknown as { Razorpay: new (options: Record<string, unknown>) => { open: () => void } }).Razorpay;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const RazorpayClass = (window as any).Razorpay;
 
       const rzp = new RazorpayClass({
         key: data.key_id,
@@ -109,7 +111,7 @@ export default function OrderPage({ params }: { params: Promise<{ id: string }> 
           contact: data.customer?.phone,
           email: data.customer?.email || '',
         },
-        theme: { color: '#1A1A1A' },
+        theme: { color: '#071B3A' },
         handler: async function (response: { razorpay_payment_id: string; razorpay_signature: string }) {
           await fetch('/api/payments/verify', {
             method: 'POST',
@@ -141,10 +143,7 @@ export default function OrderPage({ params }: { params: Promise<{ id: string }> 
     return (
       <div className={styles.page}>
         <div className={styles.centerContent}>
-          {loading
-            ? <div className="animate-pulse text-muted">Loading order...</div>
-            : <p className="text-muted">Order not found</p>
-          }
+          {loading ? 'Loading order details...' : 'Order not found'}
         </div>
       </div>
     );
@@ -165,181 +164,222 @@ export default function OrderPage({ params }: { params: Promise<{ id: string }> 
   return (
     <div className={styles.page}>
       <div className={styles.content}>
-        {/* Success Header */}
-        {!isCancelled && !isPendingPayment && (
-          <div className={styles.successHeader}>
-            <div className={styles.checkmark}>✓</div>
-            <h1 className={styles.heading}>Order Placed!</h1>
-            <p className={styles.orderNumber}>{order.order_number}</p>
-          </div>
-        )}
+        {/* HERO */}
+        <div className={styles.hero}>
+          <div className={styles.heroGlow} />
+          {!isCancelled && !isPendingPayment && (
+            <>
+              <div className={styles.successIcon}>✓</div>
+              <h1 className={styles.heroTitle}>Order Placed!</h1>
+              <p className={styles.heroSubtitle}>Your jersey order is being processed. Thank you for shopping with KickoffPro!</p>
+            </>
+          )}
 
-        {/* Payment Pending Warning */}
-        {isPendingPayment && (
-          <div className={styles.warningHeader}>
-            <div className={styles.warningIcon}>⚠</div>
-            <h1 className={styles.heading}>Payment Pending</h1>
-            <p className={styles.orderNumber}>{order.order_number}</p>
-
-            {canRetry && (
-              <>
-                <button
-                  className={`btn btn-primary ${retrying ? 'btn-loading' : ''}`}
-                  onClick={handleRetryPayment}
-                  disabled={retrying}
-                  style={{ marginTop: 'var(--space-4)' }}
-                >
-                  RETRY PAYMENT
-                </button>
-                <p className="text-xs text-muted" style={{ marginTop: 'var(--space-2)' }}>
-                  Attempt {order.retry_count} of 3
-                </p>
-              </>
-            )}
-            {!canRetry && (
-              <p className="text-sm text-muted" style={{ marginTop: 'var(--space-4)' }}>
-                Maximum retries reached. Please contact support.
-              </p>
-            )}
-          </div>
-        )}
-
-        {/* Cancelled */}
-        {isCancelled && (
-          <div className={styles.cancelledHeader}>
-            <div className={styles.cancelledIcon}>✕</div>
-            <h1 className={styles.heading}>Order Cancelled</h1>
-            <p className={styles.orderNumber}>{order.order_number}</p>
-          </div>
-        )}
-
-        {/* Order Details */}
-        <div className="card" style={{ marginBottom: 'var(--space-5)' }}>
-          {order.items.map((line) => (
-            <div
-              key={`${line.product_id}::${line.size}`}
-              className={styles.detailRow}
-              style={{ alignItems: 'flex-start', gap: 'var(--space-3)' }}
-            >
-              {line.image_url && (
-                <div style={{ flexShrink: 0, width: 48, height: 48, position: 'relative', borderRadius: 4, overflow: 'hidden', background: 'var(--bg-secondary)' }}>
-                  <Image
-                    src={line.image_url}
-                    alt={line.product_name}
-                    fill
-                    sizes="48px"
-                    style={{ objectFit: 'cover' }}
-                  />
+          {isPendingPayment && (
+            <>
+              <div className={styles.warningIcon}>⚠</div>
+              <h1 className={styles.heroTitle}>Payment Pending</h1>
+              <p className={styles.heroSubtitle}>Please complete your online payment to confirm your order.</p>
+              {canRetry && (
+                <div style={{ marginBottom: '16px' }}>
+                  <button
+                    className={styles.btnPrimary}
+                    onClick={handleRetryPayment}
+                    disabled={retrying}
+                    style={{ margin: '0 auto' }}
+                  >
+                    {retrying ? 'Retrying...' : 'RETRY PAYMENT'}
+                  </button>
+                  <p className="text-xs" style={{ marginTop: '8px', opacity: 0.8 }}>
+                    Attempt {order.retry_count} of 3
+                  </p>
                 </div>
               )}
-              <div style={{ flex: 1 }}>
-                <span className="text-muted">
-                  {line.product_name} · {line.size}
-                  {line.quantity > 1 ? ` × ${line.quantity}` : ''}
-                </span>
-              </div>
-              <span>{formatPrice(line.subtotal_paise)}</span>
+            </>
+          )}
+
+          {isCancelled && (
+            <>
+              <div className={styles.cancelledIcon}>✕</div>
+              <h1 className={styles.heroTitle}>Order Cancelled</h1>
+              <p className={styles.heroSubtitle}>This order has been cancelled.</p>
+            </>
+          )}
+
+          <div className={styles.orderCard}>
+            <p className={styles.orderCardLabel}>Order Number</p>
+            <p className={styles.orderCardNumber}>{order.order_number}</p>
+          </div>
+        </div>
+
+        {/* CANCELLED BANNER */}
+        {isCancelled && order.cancel_reason && (
+          <div className={styles.cancelledBanner}>
+            <p className={styles.cancelledLabel}>Reason for cancellation</p>
+            <p className={styles.cancelledReason}>{order.cancel_reason}</p>
+          </div>
+        )}
+
+        {/* TIMELINE */}
+        {!isCancelled && (
+          <section className={styles.timelineSection}>
+            <p className={styles.sectionTitle}>Order Timeline</p>
+            <div className={styles.timelineGrid}>
+              {statusSteps.map((step) => {
+                const isCurrent = order.order_status === step.key || 
+                  (step.key === 'pending' && order.order_status === 'pending') || 
+                  (step.key === 'confirmed' && order.order_status === 'confirmed') || 
+                  (step.key === 'shipped' && order.order_status === 'shipped') || 
+                  (step.key === 'delivered' && order.order_status === 'delivered');
+                  
+                const isCompleted = step.done;
+                
+                let dotClass = styles.timelineDot;
+                if (isCompleted) {
+                  dotClass = `${styles.timelineDot} ${styles.timelineDotCompleted}`;
+                } else if (isCurrent) {
+                  dotClass = `${styles.timelineDot} ${styles.timelineDotActive}`;
+                }
+
+                return (
+                  <div key={step.key} className={styles.timelineItem}>
+                    <div className={dotClass}>
+                      <div className={styles.timelineDotInner} />
+                    </div>
+                    <div className={styles.timelineContent}>
+                      <p className={styles.timelineLabel}>{step.label}</p>
+                      {isCompleted && step.time && (
+                        <p className={styles.timelineTime}>{formatDate(step.time)}</p>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-          ))}
+          </section>
+        )}
+
+        {/* ORDER SUMMARY */}
+        <section className={styles.summarySection}>
+          <p className={styles.sectionTitle}>Order Items</p>
+          <div style={{ marginBottom: '16px' }}>
+            {order.items.map((line) => (
+              <div key={`${line.product_id}::${line.size}`} className={styles.summaryProductItem}>
+                <div className={styles.summaryThumb}>
+                  {line.image_url && (
+                    <Image
+                      src={line.image_url}
+                      alt={line.product_name}
+                      fill
+                      sizes="56px"
+                      style={{ objectFit: 'cover' }}
+                    />
+                  )}
+                </div>
+                <div className={styles.summaryDetails}>
+                  <p className={styles.summaryProductName}>{line.product_name}</p>
+                  <p className={styles.summaryProductMeta}>Size: {line.size} &middot; Qty: {line.quantity}</p>
+                </div>
+                <p className={styles.summaryProductPrice}>{formatPrice(line.subtotal_paise)}</p>
+              </div>
+            ))}
+          </div>
+
+          <p className={styles.sectionTitle} style={{ marginTop: '24px' }}>Totals & Details</p>
+          
           {(order.subtotal_paise ?? 0) > 0 && (
-            <div className={styles.detailRow}>
-              <span className="text-muted">Subtotal</span>
+            <div className={styles.summaryRow}>
+              <span>Subtotal</span>
               <span>{formatPrice(order.subtotal_paise ?? 0)}</span>
             </div>
           )}
           {order.discount_paise > 0 && (
-            <div className={styles.detailRow}>
-              <span className="text-muted">Discount</span>
+            <div className={styles.summaryRow} style={{ color: '#22C55E', fontWeight: 600 }}>
+              <span>Discount</span>
               <span>− {formatPrice(order.discount_paise)}</span>
             </div>
           )}
           {(order.shipping_paise ?? 0) > 0 && (
-            <div className={styles.detailRow}>
-              <span className="text-muted">Shipping</span>
+            <div className={styles.summaryRow}>
+              <span>Shipping</span>
               <span>{formatPrice(order.shipping_paise ?? 0)}</span>
             </div>
           )}
           {(order.cod_fee_paise ?? 0) > 0 && (
-            <div className={styles.detailRow}>
-              <span className="text-muted">COD fee</span>
+            <div className={styles.summaryRow}>
+              <span>COD fee</span>
               <span>{formatPrice(order.cod_fee_paise ?? 0)}</span>
             </div>
           )}
-          <div className={styles.detailRow}>
-            <span className="text-muted">Total</span>
+          <div className={styles.summaryTotal}>
+            <span>Total</span>
             <span>{formatPrice(order.total_paise)}</span>
           </div>
-          <div className={styles.detailRow}>
-            <span className="text-muted">Payment</span>
+
+          <div className={styles.summaryRow} style={{ marginTop: '16px' }}>
+            <span>Payment Method</span>
             <span>
               {order.payment_method === 'cod' ? 'Cash on Delivery' : 'Online'}
-              {' '}
-              {isPaid && <span className="badge badge-paid">Paid</span>}
-              {isPendingPayment && <span className="badge badge-pending">Pending</span>}
+              {isPaid ? (
+                <span className={styles.badgePaid}>Paid</span>
+              ) : (
+                <span className={styles.badgeYellow}>Pending</span>
+              )}
             </span>
           </div>
-          <div className={styles.detailRow}>
-            <span className="text-muted">Deliver to</span>
+
+          <div className={styles.summaryRow}>
+            <span>Delivery Customer</span>
             <span>{order.customer.name}</span>
           </div>
-          <div className={styles.detailRow}>
-            <span className="text-muted">Address</span>
+
+          <div className={styles.summaryRow} style={{ alignItems: 'flex-start' }}>
+            <span>Shipping Address</span>
             <span className={styles.address}>
               {order.shipping_address.line1}
               {order.shipping_address.line2 && <>, {order.shipping_address.line2}</>}
-              <br />{order.shipping_address.city}, {order.shipping_address.state} {order.shipping_address.pincode}
+              <br />
+              {order.shipping_address.city}, {order.shipping_address.state} {order.shipping_address.pincode}
             </span>
           </div>
-        </div>
+        </section>
 
-        {/* Order Timeline */}
-        {!isCancelled && (
-          <div style={{ marginBottom: 'var(--space-5)' }}>
-            <div className="timeline">
-              {statusSteps.map((step) => (
-                <div key={step.key} className="timeline-item">
-                  <div className={`timeline-dot ${step.done ? 'timeline-dot-success' : ''}`} />
-                  <div className="timeline-content">
-                    <div className="timeline-title">{step.label}</div>
-                    {step.done && step.time && (
-                      <div className="timeline-time">{formatDate(step.time)}</div>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Tracking */}
+        {/* TRACKING */}
         {order.tracking_id && (
-          <div className="card" style={{ marginBottom: 'var(--space-5)' }}>
-            <p className="text-sm text-muted">Tracking ID</p>
-            <p style={{ fontWeight: 600, marginBottom: 'var(--space-3)' }}>{order.tracking_id}</p>
+          <section className={styles.summarySection}>
+            <p className={styles.sectionTitle}>Tracking Info</p>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <p className="text-xs text-muted" style={{ margin: 0 }}>Courier Provider</p>
+                <p style={{ fontWeight: 700, textTransform: 'capitalize', margin: '2px 0 0 0' }}>{order.shipping_provider || 'Pending dispatch'}</p>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <p className="text-xs text-muted" style={{ margin: 0 }}>Tracking Waybill</p>
+                <p style={{ fontWeight: 700, fontFamily: 'monospace', margin: '2px 0 0 0' }}>{order.tracking_id}</p>
+              </div>
+            </div>
             {order.shipping_provider === 'delhivery' && (
               <a
                 href={`https://www.delhivery.com/track/package/${order.tracking_id}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="btn btn-secondary btn-sm"
-                style={{ width: '100%' }}
+                className={styles.btnSecondary}
+                style={{ width: '100%', marginTop: '16px', fontWeight: 700 }}
               >
-                Track on Delhivery →
+                Track Delhivery Shipment →
               </a>
             )}
-          </div>
+          </section>
         )}
 
-        {/* Actions */}
-        <div className={styles.actions}>
-          {order.customer.email && (
-            <p className="text-sm text-muted" style={{ textAlign: 'center' }}>
-              📧 Confirmation sent to {order.customer.email}
-            </p>
-          )}
-          <a href="/" className="btn btn-secondary" style={{ marginTop: 'var(--space-4)' }}>
+        {/* CTA BUTTONS */}
+        <div className={styles.buttonGroup}>
+          <Link href="/" className={styles.btnSecondary}>
             Continue Shopping
-          </a>
+          </Link>
+          <Link href={user ? `/orders/${order.id}` : '#'} className={styles.btnPrimary} style={{ display: user ? 'flex' : 'none' }}>
+            Track My Order
+          </Link>
         </div>
       </div>
     </div>

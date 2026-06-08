@@ -61,7 +61,7 @@ export default async function ProfilePage() {
   // belt-and-braces. The count uses head=true so we ship zero rows
   // back — we only need the cardinality to render the collapsed
   // "N saved addresses" summary in the accordion.
-  const [recentRes, addressCountRes] = await Promise.all([
+  const [recentRes, addressCountRes, ordersCountRes] = await Promise.all([
     supabase
       .from('orders')
       .select('id, order_number, total_paise, order_status, created_at')
@@ -72,10 +72,15 @@ export default async function ProfilePage() {
       .from('addresses')
       .select('id', { count: 'exact', head: true })
       .eq('user_id', user.id),
+    supabase
+      .from('orders')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', user.id),
   ]);
 
   const recent = recentRes.data ?? [];
   const addressCount = addressCountRes.count ?? 0;
+  const ordersCount = ordersCountRes.count ?? 0;
   const addressSummary =
     addressCount === 0
       ? 'No saved addresses'
@@ -96,6 +101,7 @@ export default async function ProfilePage() {
           <ProfileCard
             name={initialProfile.name}
             email={initialProfile.email}
+            ordersCount={ordersCount}
           />
         </div>
 

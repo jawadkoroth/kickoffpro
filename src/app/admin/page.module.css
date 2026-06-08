@@ -3,38 +3,104 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: var(--space-5);
+  padding: var(--space-6);
+  background: radial-gradient(circle at top right, #112d55 0%, #071B3A 100%);
+  color: #FFFFFF;
 }
 
 .card {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  padding: var(--space-10) var(--space-8);
+  background: rgba(15, 34, 64, 0.65);
+  border: 1px solid rgba(47, 169, 245, 0.25);
+  border-radius: 12px;
+  padding: 48px 36px;
   width: 100%;
-  max-width: 400px;
+  max-width: 420px;
+  backdrop-filter: blur(16px);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
   text-align: center;
 }
 
 .logo {
-  font-family: var(--font-serif);
-  font-size: 2rem;
-  font-weight: 700;
-  letter-spacing: 0.2em;
+  font-family: var(--font-sans);
+  font-size: 1.75rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
   margin-bottom: var(--space-2);
+  color: #FFFFFF;
+}
+
+.logoHighlight {
+  color: #FFC928;
 }
 
 .heading {
-  font-size: 0.875rem;
-  font-weight: 400;
-  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #2FA9F5;
   text-transform: uppercase;
-  letter-spacing: 0.1em;
-  margin-bottom: var(--space-8);
+  letter-spacing: 0.15em;
+  margin-bottom: 32px;
 }
 
 .form {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: 20px;
+}
+
+.inputWrapper {
+  position: relative;
+  text-align: left;
+}
+
+.inputField {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  padding: 12px 16px;
+  color: #FFFFFF;
+  font-size: 0.95rem;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.inputField:focus {
+  border-color: #2FA9F5;
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 0 0 3px rgba(47, 169, 245, 0.25);
+}
+
+.submitBtn {
+  background: #FFC928;
+  color: #071B3A;
+  border: none;
+  border-radius: 6px;
+  padding: 14px;
+  font-size: 0.9rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.submitBtn:hover:not(:disabled) {
+  background: #FFFFFF;
+  color: #071B3A;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(255, 201, 40, 0.3);
+}
+
+.submitBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.errorText {
+  color: #EF4444;
+  font-size: 0.825rem;
+  margin-top: 4px;
+  text-align: left;
+  font-weight: 600;
 }
