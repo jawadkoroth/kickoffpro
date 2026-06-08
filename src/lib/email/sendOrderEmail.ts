@@ -110,7 +110,7 @@ function siteUrl(): string {
   return (
     process.env.NEXT_PUBLIC_URL ||
     process.env.NEXT_PUBLIC_SITE_URL ||
-    'https://kickoffpro.vercel.app'
+    'https://kickoffpro.in'
   );
 }
 

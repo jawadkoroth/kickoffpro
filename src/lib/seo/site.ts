@@ -11,7 +11,7 @@
  * SEO concerns on the server.
  */
 
-const DEFAULT_URL = 'https://kickoffpro.vercel.app';
+const DEFAULT_URL = 'https://kickoffpro.in';
 
 function normaliseUrl(raw: string | undefined): string {
   if (!raw) return DEFAULT_URL;
