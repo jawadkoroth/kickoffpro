@@ -33,38 +33,34 @@ export default function ReturnsPage() {
           { name: 'Returns', path: '/legal/returns' },
         ])}
       />
-      <LegalShell eyebrow="Legal" title="Returns" updatedOn={UPDATED}>
+      <LegalShell eyebrow="Legal" title="Size Exchange & Damage Protection Policy" updatedOn={UPDATED}>
         <p>
-          We want you to be certain of your purchase. Pieces may be
-          returned or exchanged within <strong>seven days</strong> of
-          delivery, provided they are unworn, unwashed, and in their
-          original packaging with tags intact.
+          We offer a strict <strong>7-Day Size Exchange</strong> and <strong>7-Day Damage Protection</strong> policy. Due to low business margins, we do not support general or blanket free returns/refunds for changes of mind.
         </p>
 
-        <h2>How to initiate</h2>
+        <h2>Size Exchanges</h2>
         <p>
-          Write to {CONTACT.email || 'our care team'} with your order
-          number and the piece you wish to return. We will confirm the
-          address or arrange a reverse pickup where serviceable.
+          If a jersey does not fit you properly, you can request a size exchange within <strong>7 days</strong> of delivery. The item must be unworn, unwashed, and in its original packaging with tags intact. Size exchanges are subject to stock availability.
         </p>
 
-        <h2>Refunds</h2>
+        <h2>Damage Protection Claims</h2>
         <p>
-          Once the returned piece reaches us and passes inspection,
-          refunds are processed to the original payment method within
-          seven working days.
+          In the rare event that your product arrives damaged or defective, please submit a claim within <strong>7 days</strong> of delivery. 
         </p>
+
+        <h2>How to initiate a request</h2>
+        <p>
+          To request a size exchange or submit a damage claim, write directly to our customer support email at <strong>{CONTACT.email || 'support@kickoffpro.in'}</strong> with:
+        </p>
+        <ul style={{ paddingLeft: '20px', marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          <li>Your order number</li>
+          <li>Details of the size requested or description of the damage</li>
+          <li>Clear photo/video proof of the damage (for damage claims)</li>
+        </ul>
 
         <h2>Exceptions</h2>
         <p>
-          Items marked final sale, personalised items, and innerwear are
-          not eligible for return.
-        </p>
-
-        <h2>Exchanges</h2>
-        <p>
-          Size exchanges are subject to inventory availability. If the
-          replacement size is unavailable we will refund in full.
+          Personalised jerseys (with custom name/number prints) and sale items are not eligible for size exchange or claims.
         </p>
       </LegalShell>
     </>

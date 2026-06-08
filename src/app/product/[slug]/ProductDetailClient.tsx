@@ -25,6 +25,14 @@ export interface InventoryItem {
   stock: number;
 }
 
+const SIZE_GUIDE_DATA = [
+  { size: 'S', chest: '38"', length: '27"' },
+  { size: 'M', chest: '40"', length: '28"' },
+  { size: 'L', chest: '42"', length: '29"' },
+  { size: 'XL', chest: '44"', length: '30"' },
+  { size: 'XXL', chest: '46"', length: '31"' },
+];
+
 export default function ProductDetailClient({
   product,
   inventory,
@@ -43,6 +51,7 @@ export default function ProductDetailClient({
   const [couponApplied, setCouponApplied] = useState(false);
   const [showCoupon, setShowCoupon] = useState(false);
   const [addedToCart, setAddedToCart] = useState(false);
+  const [showSizeGuide, setShowSizeGuide] = useState(false);
 
   const isSoldOut = totalStock <= 0;
 
@@ -204,7 +213,16 @@ export default function ProductDetailClient({
 
             {/* Size Selector */}
             <div className={styles.section}>
-              <label className="input-label" style={{ display: 'block', marginBottom: '8px' }}>Select Size</label>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <label className="input-label" style={{ margin: 0 }}>Select Size</label>
+                <button
+                  type="button"
+                  className={styles.sizeGuideLink}
+                  onClick={() => setShowSizeGuide(true)}
+                >
+                  📏 View Size Guide
+                </button>
+              </div>
               <div className="size-grid">
                 {(product.sizes as string[]).map(size => {
                   const stock = getStock(size);
@@ -227,18 +245,50 @@ export default function ProductDetailClient({
               )}
             </div>
 
+            {/* Delivery Details Card */}
+            <div className={styles.deliveryCard}>
+              <div className={styles.deliveryItem}>
+                <span className={styles.deliveryIcon}>🚚</span>
+                <div>
+                  <h4 className={styles.deliveryTitle}>Delivery in 2–5 Business Days</h4>
+                  <p className={styles.deliveryText}>Fast dispatch across India</p>
+                </div>
+              </div>
+              <div className={styles.deliveryItem}>
+                <span className={styles.deliveryIcon}>📦</span>
+                <div>
+                  <h4 className={styles.deliveryTitle}>COD Available</h4>
+                  <p className={styles.deliveryText}>Pay on delivery option available</p>
+                </div>
+              </div>
+              <div className={styles.deliveryItem}>
+                <span className={styles.deliveryIcon}>🇮🇳</span>
+                <div>
+                  <h4 className={styles.deliveryTitle}>Ships Across India</h4>
+                  <p className={styles.deliveryText}>Delivering to all secure pincodes</p>
+                </div>
+              </div>
+              <div className={styles.deliveryItem}>
+                <span className={styles.deliveryIcon}>🔒</span>
+                <div>
+                  <h4 className={styles.deliveryTitle}>Secure Checkout</h4>
+                  <p className={styles.deliveryText}>100% encrypted online payments</p>
+                </div>
+              </div>
+            </div>
+
             {/* Trust Badges */}
             <div className={styles.trustBadges}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <Truck size={16} /> <span>Free Shipping</span>
+                <Truck size={16} /> <span>7-Day Size Exchange</span>
               </div>
               <span>·</span>
               <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <ShieldCheck size={16} /> <span>COD Available</span>
+                <ShieldCheck size={16} /> <span>Damage Protection</span>
               </div>
               <span>·</span>
               <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <RefreshCw size={16} /> <span>Easy Returns</span>
+                <RefreshCw size={16} /> <span>Support Available</span>
               </div>
             </div>
 
@@ -294,6 +344,49 @@ export default function ProductDetailClient({
         </div>
       </div>
       <div className={styles.mobileCtaSpacer} />
+
+      {/* Global Size Chart Modal */}
+      {showSizeGuide && (
+        <div 
+          className={styles.modalOverlay}
+          onClick={() => setShowSizeGuide(false)}
+        >
+          <div 
+            className={styles.modalContent}
+            onClick={e => e.stopPropagation()}
+          >
+            <div className={styles.modalHeader}>
+              <h3 className={styles.modalTitle}>Size Guide</h3>
+              <button 
+                type="button"
+                className={styles.modalClose}
+                onClick={() => setShowSizeGuide(false)}
+              >
+                ✕
+              </button>
+            </div>
+            <p className={styles.modalSubtitle}>All measurements are in inches. Standard fit.</p>
+            <table className={styles.sizeTable}>
+              <thead>
+                <tr>
+                  <th>Size</th>
+                  <th>Chest</th>
+                  <th>Length</th>
+                </tr>
+              </thead>
+              <tbody>
+                {SIZE_GUIDE_DATA.map((row) => (
+                  <tr key={row.size}>
+                    <td><strong>{row.size}</strong></td>
+                    <td>{row.chest}</td>
+                    <td>{row.length}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

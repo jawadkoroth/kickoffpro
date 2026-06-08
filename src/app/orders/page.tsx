@@ -33,6 +33,17 @@ function badgeClass(status: string): string {
   return `${styles.badge} ${styles[`badge_${safe}`]}`;
 }
 
+export function getHumanOrderStatus(status: string): string {
+  const map: Record<string, string> = {
+    pending: 'Placed',
+    confirmed: 'Confirmed',
+    shipped: 'Shipped',
+    delivered: 'Delivered',
+    cancelled: 'Cancelled',
+  };
+  return map[status.toLowerCase()] || status;
+}
+
 const formatPrice = (paise: number) =>
   '₹' + (paise / 100).toLocaleString('en-IN');
 
@@ -129,7 +140,7 @@ export default async function OrdersPage() {
                 <div className={styles.cardHeader}>
                   <span className={styles.orderNumber}>{order.order_number}</span>
                   <span className={badgeClass(order.order_status)}>
-                    {order.order_status === 'pending' ? 'Placed' : order.order_status}
+                    {getHumanOrderStatus(order.order_status)}
                   </span>
                 </div>
                 

@@ -89,6 +89,100 @@ function isPaidOrder(o: OrderRow): boolean {
 }
 
 export async function GET(req: NextRequest) {
+  const isDev = process.env.NODE_ENV === 'development';
+  
+  if (isDev) {
+    const url = new URL(req.url);
+    const fromParam = url.searchParams.get('from');
+    const toParam = url.searchParams.get('to');
+    const from = fromParam ? new Date(fromParam) : new Date();
+    const to = toParam ? new Date(toParam) : new Date();
+    
+    return apiSuccess({
+      range: {
+        from: from.toISOString(),
+        to: to.toISOString(),
+        daysInRange: 7,
+      },
+      revenue: {
+        total: 1558800,
+        prepaid: 1039200,
+        cod: 519600,
+        trendPct: 24,
+      },
+      orders: {
+        total: 12,
+        pending: 2,
+        confirmed: 4,
+        shipped: 3,
+        delivered: 3,
+        cancelled: 0,
+        paymentSplit: {
+          online: 8,
+          cod: 4,
+        },
+        stuck: 0,
+      },
+      aov: 129900,
+      repeatCustomers: 3,
+      trend: [
+        { day: '2026-06-02', revenue: 259800, orders: 2 },
+        { day: '2026-06-03', revenue: 129900, orders: 1 },
+        { day: '2026-06-04', revenue: 389700, orders: 3 },
+        { day: '2026-06-05', revenue: 0, orders: 0 },
+        { day: '2026-06-06', revenue: 519600, orders: 4 },
+        { day: '2026-06-07', revenue: 129900, orders: 1 },
+        { day: '2026-06-08', revenue: 130000, orders: 1 }
+      ],
+      recentOrders: [
+        {
+          id: 'o1',
+          order_number: 'KOP-2026-0001',
+          total_paise: 389700,
+          order_status: 'confirmed',
+          payment_status: 'paid',
+          payment_method: 'online',
+          customer_name: 'Virat Kohli',
+          created_at: new Date(Date.now() - 2 * 3600 * 1000).toISOString(),
+        },
+        {
+          id: 'o2',
+          order_number: 'KOP-2026-0002',
+          total_paise: 129900,
+          order_status: 'pending',
+          payment_status: 'pending',
+          payment_method: 'cod',
+          customer_name: 'Jawad Koroth',
+          created_at: new Date(Date.now() - 4 * 3600 * 1000).toISOString(),
+        },
+        {
+          id: 'o3',
+          order_number: 'KOP-2026-0003',
+          total_paise: 259800,
+          order_status: 'delivered',
+          payment_status: 'paid',
+          payment_method: 'online',
+          customer_name: 'Rohit Sharma',
+          created_at: new Date(Date.now() - 24 * 3600 * 1000).toISOString(),
+        }
+      ],
+      needsAction: { unconfirmed: 1, failed: 0, stuck: 0 },
+      topProducts: [
+        { product_id: 'p1', name: 'World Cup India Jersey', qty: 8, revenue: 1039200 },
+        { product_id: 'p2', name: 'Classic Noir Football Jersey', qty: 4, revenue: 519600 }
+      ],
+      recentCustomers: [
+        { name: 'Virat Kohli', phone: '+91 8888888888', last_order_at: new Date(Date.now() - 2 * 3600 * 1000).toISOString() },
+        { name: 'Jawad Koroth', phone: '+91 9876543210', last_order_at: new Date(Date.now() - 4 * 3600 * 1000).toISOString() },
+        { name: 'Rohit Sharma', phone: '+91 9999999999', last_order_at: new Date(Date.now() - 24 * 3600 * 1000).toISOString() }
+      ],
+      lowStock: [
+        { product_id: 'p1', name: 'World Cup India Jersey', size: 'M', stock: 2 },
+        { product_id: 'p2', name: 'Classic Noir Football Jersey', size: 'L', stock: 1 }
+      ]
+    });
+  }
+
   // Admin gate (mirrors the other /api/admin routes).
   const serverSupabase = await createServerSupabaseClient();
   const {

@@ -164,12 +164,13 @@
 }
 
 .collectionsBtn {
-  background-color: #FFC928; /* Action Yellow */
-  color: #071B3A; /* Dark Navy text */
-  font-weight: 800;
+  background-color: transparent;
+  border: 1px solid rgba(255, 201, 40, 0.5);
+  color: #FFC928; /* Action Yellow */
+  font-weight: 600;
   font-size: 0.7rem;
-  letter-spacing: 0.05em;
-  padding: 6px 12px;
+  letter-spacing: 0.03em;
+  padding: 6px 10px;
   border-radius: 4px;
   text-decoration: none;
   transition: all 0.2s ease;
@@ -177,32 +178,105 @@
   align-items: center;
   justify-content: center;
   text-transform: uppercase;
+  height: 32px;
 }
 
 .collectionsBtn:hover {
-  background-color: #FFFFFF;
-  color: #071B3A;
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(255, 201, 40, 0.2);
+  background-color: rgba(255, 201, 40, 0.1);
+  border-color: #FFC928;
 }
 
-.desktopCollections {
+/* Desktop Dropdown Styles */
+.desktopDropdown {
   display: none;
+  position: relative;
 }
 
-.mobileCollections {
-  display: inline;
+.dropdownBtn {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
-@media (min-width: 768px) {
+.dropdownBtn:hover {
+  color: #FFFFFF;
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
+.chevron {
+  font-size: 0.65rem;
+  transition: transform 0.2s;
+}
+
+.desktopDropdown:hover .chevron {
+  transform: rotate(180deg);
+}
+
+.dropdownMenu {
+  display: none;
+  position: absolute;
+  top: 100%;
+  right: 0;
+  background-color: #071B3A;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+  padding: 8px 0;
+  min-width: 180px;
+  z-index: 10;
+  margin-top: 8px;
+}
+
+.desktopDropdown:hover .dropdownMenu {
+  display: block;
+  animation: fadeIn 0.15s ease-out;
+}
+
+.dropdownItem {
+  display: block;
+  padding: 8px 16px;
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: all 0.2s;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.dropdownItem:hover {
+  color: #FFC928;
+  background-color: rgba(255, 255, 255, 0.06);
+  padding-left: 20px;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (min-width: 1024px) {
   .collectionsBtn {
-    font-size: 0.75rem;
-    padding: 8px 16px;
-  }
-  .desktopCollections {
-    display: inline;
-  }
-  .mobileCollections {
     display: none;
+  }
+  .desktopDropdown {
+    display: block;
   }
 }

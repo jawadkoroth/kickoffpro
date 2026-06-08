@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
 
   const code = url.searchParams.get('code');
   const tokenHash = url.searchParams.get('token_hash');
-  const type = url.searchParams.get('type') as 'email' | 'recovery' | null;
+  const type = url.searchParams.get('type');
   const errorParam = url.searchParams.get('error');
   const errorDescription = url.searchParams.get('error_description');
 
@@ -41,9 +41,10 @@ export async function GET(request: NextRequest) {
 
   if (tokenHash && type) {
     // ── Magic link / email OTP flow ──
+    const verifyType = (type === 'email' || type === 'magiclink') ? 'magiclink' : type;
     const { error: verifyError } = await supabase.auth.verifyOtp({
       token_hash: tokenHash,
-      type,
+      type: verifyType as any,
     });
     if (verifyError) {
       const target = new URL('/auth', request.url);

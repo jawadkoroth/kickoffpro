@@ -34,7 +34,7 @@ function mapAuthError(raw: string): string {
   const msg = raw.toLowerCase();
 
   if (msg.includes('rate limit') || msg.includes('too many') || msg.includes('429')) {
-    return 'Too many secure link requests. Please wait a moment before trying again.';
+    return 'Please wait a moment before requesting another login link.';
   }
   if (msg.includes('invalid email') || msg.includes('unable to validate email')) {
     return 'Please enter a valid email address.';
@@ -239,7 +239,7 @@ function AuthInner() {
                     <span className={styles.spinner} />
                   ) : cooldown > 0 ? (
                     <span className={styles.cooldownText}>
-                      Available again in {cooldown}s
+                      Request another link in: {cooldown}s
                     </span>
                   ) : (
                     'Send Secure Link'
@@ -279,7 +279,7 @@ function AuthInner() {
                   />
                 </div>
                 <p className={styles.cooldownLabel}>
-                  Next link available in {cooldown}s
+                  Request another link in: {cooldown}s
                 </p>
               </div>
             ) : (

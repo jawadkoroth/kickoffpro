@@ -94,8 +94,8 @@ const ANNOTATIONS: AnnotationDef[] = [
     cardOffsetX: 5,
     cardOffsetY: -4,
     lineLength: 48,
-    primary: 'French Linen',
-    secondary: 'Breathable summer-weight weave',
+    primary: 'Premium Polyester',
+    secondary: 'Breathable engineered double-knit fabric',
   },
   {
     id: 'fit',
@@ -107,8 +107,8 @@ const ANNOTATIONS: AnnotationDef[] = [
     cardOffsetX: -5,
     cardOffsetY: -4,
     lineLength: 52,
-    primary: 'Relaxed Tailored Fit',
-    secondary: 'Structured without stiffness',
+    primary: 'Athletic Fit',
+    secondary: 'Tailored silhouette for movement and comfort',
   },
   {
     id: 'stitch',
@@ -121,7 +121,7 @@ const ANNOTATIONS: AnnotationDef[] = [
     cardOffsetY: 2,
     lineLength: 44,
     primary: 'Reinforced Stitching',
-    secondary: 'Built for repeated wear',
+    secondary: 'Durable construction built for pitch and street',
   },
   {
     id: 'collar',
@@ -133,8 +133,8 @@ const ANNOTATIONS: AnnotationDef[] = [
     cardOffsetX: 5,
     cardOffsetY: -6,
     lineLength: 56,
-    primary: 'Soft Structured Collar',
-    secondary: 'Designed for daily movement',
+    primary: 'Ribbed Crewneck Collar',
+    secondary: 'Lightweight profile prevents chafing',
   },
 ];
 

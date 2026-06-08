@@ -72,6 +72,25 @@ function badgeClass(status: string): string {
   return `${styles.badge} ${styles[`badge_${safeStatus(status)}`]}`;
 }
 
+export function getHumanOrderStatus(status: string): string {
+  const map: Record<string, string> = {
+    pending: 'Placed',
+    confirmed: 'Confirmed',
+    shipped: 'Shipped',
+    delivered: 'Delivered',
+    cancelled: 'Cancelled',
+  };
+  return map[status.toLowerCase()] || status;
+}
+
+export function getHumanPaymentStatus(method: string, status: string): string {
+  if (status.toLowerCase() === 'paid') return 'Paid';
+  if (status.toLowerCase() === 'failed') return 'Failed';
+  if (status.toLowerCase() === 'refunded') return 'Refunded';
+  if (method.toLowerCase() === 'cod') return 'COD';
+  return 'Pending';
+}
+
 const formatPrice = (paise: number) =>
   '₹' + (paise / 100).toLocaleString('en-IN');
 
@@ -180,15 +199,13 @@ export default async function OrderDetailPage({
         </div>
         <div className={styles.badgeRow}>
           <span className={badgeClass(order.order_status)}>
-            {order.order_status}
+            {getHumanOrderStatus(order.order_status)}
           </span>
           <span
             className={`${styles.badge} ${isPaid ? styles.badge_paid : styles.badge_unpaid
               }`}
           >
-            {order.payment_method === 'cod'
-              ? `COD · ${order.payment_status}`
-              : order.payment_status}
+            {getHumanPaymentStatus(order.payment_method, order.payment_status)}
           </span>
         </div>
       </header>

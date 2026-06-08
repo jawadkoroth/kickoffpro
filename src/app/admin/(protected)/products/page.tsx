@@ -6,6 +6,7 @@ import Image from 'next/image';
 import { useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { useToast } from '@/hooks/useToast';
+import { getPublicUrl } from '@/lib/media';
 import styles from './products.module.css';
 
 /**
@@ -397,7 +398,7 @@ export default function AdminProducts() {
                 <div className={styles.thumb}>
                   {firstImage ? (
                     <Image
-                      src={firstImage}
+                      src={getPublicUrl(firstImage)}
                       alt={product.name}
                       fill
                       sizes="64px"

@@ -194,9 +194,9 @@ INSERT INTO shipping_settings (active_provider, provider_config) VALUES
 
 INSERT INTO products (name, slug, description, price_paise, images, sizes) VALUES
   (
-    'The Noir Linen Shirt',
-    'noir-linen-shirt',
-    'Premium black linen, handcrafted with a minimal aesthetic. Breathable fabric with a relaxed fit that transitions effortlessly from day to night.',
+    'Classic Noir Football Jersey',
+    'classic-noir-football-jersey',
+    'Official-inspired football jersey designed for match-day comfort and everyday wear. Breathable fabric, athletic fit, and lightweight construction. Perfect for supporters and collectors.',
     129900,
     '[]',
     '["S", "M", "L", "XL", "XXL"]'
@@ -207,7 +207,7 @@ INSERT INTO inventory (product_id, size, stock)
 SELECT p.id, s.size, 10
 FROM products p,
   (VALUES ('S'), ('M'), ('L'), ('XL'), ('XXL')) AS s(size)
-WHERE p.slug = 'noir-linen-shirt';
+WHERE p.slug = 'classic-noir-football-jersey';
 
 -- SEED: Sample coupon
 INSERT INTO coupons (code, discount_percent) VALUES ('WELCOME10', 10);

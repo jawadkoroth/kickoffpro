@@ -109,7 +109,7 @@ export default function LandingClient({ products }: LandingClientProps) {
     },
     {
       q: 'What is your return and exchange policy?',
-      a: 'We offer an easy 7-day hassle-free return and exchange policy. If your jersey does not fit perfectly, you can request an exchange directly from your profile dashboard.'
+      a: 'We offer a 7-Day Size Exchange and Damage Protection policy. If your jersey has a sizing issue or arrived damaged, you can request a size exchange or submit a claim by contacting our support email within 7 days of delivery.'
     }
   ];
 
@@ -286,7 +286,7 @@ export default function LandingClient({ products }: LandingClientProps) {
           </div>
           <div className={styles.featureCard}>
             <RefreshCw size={32} className={styles.featureIcon} style={{ color: '#2FA9F5' }} />
-            <h3 className={styles.featureTitle}>Easy Returns</h3>
+            <h3 className={styles.featureTitle}>7-Day Exchange</h3>
           </div>
           <div className={styles.featureCard}>
             <Star size={32} className={styles.featureIcon} style={{ color: '#FFC928' }} />

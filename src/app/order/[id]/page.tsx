@@ -68,6 +68,14 @@ export default function OrderPage({ params }: { params: Promise<{ id: string }> 
   const formatPrice = (paise: number) => '₹' + (paise / 100).toLocaleString('en-IN');
   const formatDate = (d: string) => new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 
+  function getHumanPaymentStatus(method: string, status: string): string {
+    if (status.toLowerCase() === 'paid') return 'Paid';
+    if (status.toLowerCase() === 'failed') return 'Failed';
+    if (status.toLowerCase() === 'refunded') return 'Refunded';
+    if (method.toLowerCase() === 'cod') return 'COD';
+    return 'Pending';
+  }
+
   async function handleRetryPayment() {
     if (retrying || !order) return;
     setRetrying(true);
@@ -320,11 +328,15 @@ export default function OrderPage({ params }: { params: Promise<{ id: string }> 
             <span>Payment Method</span>
             <span>
               {order.payment_method === 'cod' ? 'Cash on Delivery' : 'Online'}
-              {isPaid ? (
-                <span className={styles.badgePaid}>Paid</span>
-              ) : (
-                <span className={styles.badgeYellow}>Pending</span>
-              )}
+              <span className={
+                order.payment_status === 'paid'
+                  ? styles.badgePaid
+                  : order.payment_method === 'cod'
+                  ? styles.badgeSky
+                  : styles.badgeYellow
+              }>
+                {getHumanPaymentStatus(order.payment_method, order.payment_status)}
+              </span>
             </span>
           </div>
 
