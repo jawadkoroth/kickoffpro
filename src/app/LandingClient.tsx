@@ -97,7 +97,7 @@ export default function LandingClient({ products }: LandingClientProps) {
   const faqs = [
     {
       q: 'What is the quality of the jerseys?',
-      a: 'All our jerseys are premium quality fan versions, featuring embroidered logos, high-density decals, and breathable polyester fabrics engineered for matchday comfort.'
+      a: 'All our jerseys are premium quality fan versions, featuring embroidered logos, high-density decals, and Premium Dot-Knit Fabric designed for all-day comfort and match-day wear.'
     },
     {
       q: 'Is Cash on Delivery (COD) available?',
@@ -160,7 +160,7 @@ export default function LandingClient({ products }: LandingClientProps) {
             🏆 World Cup Fever Is Live 🏆
           </span>
           <h1 className={styles.heroTitle}>
-            Support Your Nation
+            Support Your Team
           </h1>
           <p className={styles.heroSubtitle}>
             Premium Quality Football Jerseys Starting At ₹299. Get ready for the ultimate matchday experience.

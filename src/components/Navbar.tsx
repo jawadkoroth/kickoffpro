@@ -41,26 +41,6 @@ export default function Navbar() {
         </div>
 
         <div className={styles.actions}>
-          {/* Desktop Collections Dropdown */}
-          <div className={styles.desktopDropdown}>
-            <button className={styles.dropdownBtn}>
-              Collections <span className={styles.chevron}>▼</span>
-            </button>
-            <div className={styles.dropdownMenu}>
-              <Link href="/products" className={styles.dropdownItem}>All Jerseys</Link>
-              <Link href="/products?category=national" className={styles.dropdownItem}>National Teams</Link>
-              <Link href="/products?category=club" className={styles.dropdownItem}>Club Jerseys</Link>
-              <Link href="/products?category=retro" className={styles.dropdownItem}>Retro Jerseys</Link>
-              <Link href="/products?sort=newest" className={styles.dropdownItem}>New Arrivals</Link>
-              <Link href="/products?sale=true" className={styles.dropdownItem}>Sale</Link>
-            </div>
-          </div>
-
-          {/* Mobile Collections button */}
-          <Link href="/products" className={styles.collectionsBtn}>
-            Collections
-          </Link>
-
           <Link href="/cart" className={styles.iconBtn} aria-label="Cart">
             <ShoppingCart size={20} />
             {totalItems > 0 && <span className={styles.badge}>{totalItems}</span>}

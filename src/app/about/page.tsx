@@ -8,7 +8,7 @@ export const metadata: Metadata = {
   title: 'About',
   description:
     `${BRAND.name} is India's budget-friendly football jersey store. ` +
-    `High-quality club, national team, and retro jerseys priced between ₹250 and ₹350.`,
+    `High-quality club, national team, and retro jerseys with budget-friendly pricing.`,
   alternates: { canonical: canonicalUrl('/about') },
   openGraph: {
     type: 'website',
@@ -39,7 +39,7 @@ export default function AboutPage() {
             It is a passion.
           </h1>
           <p className={styles.openingSub}>
-            We make one thing — high-quality football jerseys for every fan at unbeatable budget prices (₹250 - ₹350).
+            We make one thing — high-quality football jerseys for every fan at unbeatable, budget-friendly prices.
           </p>
         </section>
 
@@ -55,13 +55,13 @@ export default function AboutPage() {
               <div className={styles.standard}>
                 <dt>Pricing</dt>
                 <dd>
-                  Flat ₹250 to ₹350 range. Perfect for students, players, and passionate fans who want to support their club without breaking the bank.
+                  Budget-friendly pricing. Perfect for students, players, and passionate fans who want to support their club without breaking the bank.
                 </dd>
               </div>
               <div className={styles.standard}>
                 <dt>Quality Fabric</dt>
                 <dd>
-                  Lightweight, breathable, sweat-wicking polyester fabric. Ideal for playing on the pitch or cheering from the stands.
+                  Premium Dot-Knit Fabric. Lightweight, breathable construction designed for all-day comfort and match-day wear.
                 </dd>
               </div>
               <div className={styles.standard}>

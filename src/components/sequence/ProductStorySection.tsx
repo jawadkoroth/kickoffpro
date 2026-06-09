@@ -94,8 +94,8 @@ const ANNOTATIONS: AnnotationDef[] = [
     cardOffsetX: 5,
     cardOffsetY: -4,
     lineLength: 48,
-    primary: 'Premium Polyester',
-    secondary: 'Breathable engineered double-knit fabric',
+    primary: 'Premium Dot-Knit Fabric',
+    secondary: 'Premium Dot-Knit Fabric designed for all-day comfort and match-day wear.',
   },
   {
     id: 'fit',

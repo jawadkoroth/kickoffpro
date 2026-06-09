@@ -133,17 +133,6 @@
   margin-top: var(--space-2);
 }
 
-.trustBadges {
-  display: flex;
-  gap: var(--space-2);
-  font-size: 0.8125rem;
-  color: var(--text-muted);
-  flex-wrap: wrap;
-  justify-content: center;
-  padding: var(--space-4) 0;
-  border-top: 1px solid var(--border-color);
-  border-bottom: 1px solid var(--border-color);
-}
 
 .desktopCta { display: none; }
 
@@ -255,7 +244,7 @@
   .productName { font-size: 2.25rem; }
   .price { font-size: 1.5rem; }
   .description { font-size: 1rem; }
-  .trustBadges { justify-content: flex-start; gap: var(--space-4); }
+
 
   .desktopCta { display: block; margin-top: var(--space-6); }
   .mobileCta { display: none; }
@@ -278,49 +267,42 @@
   opacity: 0.8;
 }
 
-.deliveryCard {
-  background: linear-gradient(135deg, rgba(47, 169, 245, 0.08) 0%, rgba(7, 27, 58, 0.4) 100%);
-  border: 1px solid rgba(47, 169, 245, 0.25);
-  border-radius: 12px;
-  padding: var(--space-4);
-  margin-bottom: var(--space-6);
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: var(--space-3);
-}
-
-@media (min-width: 640px) {
-  .deliveryCard {
-    grid-template-columns: 1fr 1fr;
-    gap: var(--space-4);
-  }
-}
-
-.deliveryItem {
+.shippingStrip {
+  background-color: #ffffff;
+  border: 1px solid #2FA9F5;
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin-bottom: 20px;
   display: flex;
-  align-items: flex-start;
-  gap: var(--space-3);
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  justify-content: flex-start;
+  align-items: center;
 }
 
-.deliveryIcon {
-  font-size: 1.25rem;
-  line-height: 1;
-}
-
-.deliveryTitle {
-  font-size: 0.8125rem;
-  font-weight: 700;
-  color: #FFFFFF;
-  margin: 0 0 2px 0;
-  line-height: 1.2;
-}
-
-.deliveryText {
+.shippingItem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 0.75rem;
-  color: rgba(255, 255, 255, 0.7);
-  margin: 0;
-  line-height: 1.3;
+  font-weight: 700;
+  color: #071B3A;
+  white-space: nowrap;
 }
+
+.sizeGridError {
+  outline: 2px solid var(--error, #e53935);
+  outline-offset: 4px;
+  border-radius: 4px;
+}
+
+.sizeErrorMsg {
+  color: var(--error, #e53935);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  margin-top: 8px;
+}
+
 
 /* Modal Styling */
 .modalOverlay {

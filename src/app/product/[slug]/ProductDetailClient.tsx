@@ -45,6 +45,7 @@ export default function ProductDetailClient({
   const router = useRouter();
   const { addItem } = useCart();
   const [selectedSize, setSelectedSize] = useState('');
+  const [sizeError, setSizeError] = useState(false);
   const [couponCode, setCouponCode] = useState('');
   const [couponDiscount, setCouponDiscount] = useState(0);
   const [couponError, setCouponError] = useState('');
@@ -107,7 +108,11 @@ export default function ProductDetailClient({
   }
 
   function handleAddToCart() {
-    if (!selectedSize || isSoldOut) return;
+    if (!selectedSize) {
+      setSizeError(true);
+      return;
+    }
+    if (isSoldOut) return;
     const sizeStock = getStock(selectedSize);
     if (sizeStock <= 0) return;
     const images = getImages();
@@ -125,7 +130,11 @@ export default function ProductDetailClient({
   }
 
   function handleBuyNow() {
-    if (!selectedSize || isSoldOut) return;
+    if (!selectedSize) {
+      setSizeError(true);
+      return;
+    }
+    if (isSoldOut) return;
     const sizeStock = getStock(selectedSize);
     if (sizeStock <= 0) return;
 
@@ -223,7 +232,7 @@ export default function ProductDetailClient({
                   📏 View Size Guide
                 </button>
               </div>
-              <div className="size-grid">
+              <div className={`size-grid ${sizeError ? styles.sizeGridError : ''}`}>
                 {(product.sizes as string[]).map(size => {
                   const stock = getStock(size);
                   const outOfStock = stock <= 0;
@@ -232,7 +241,12 @@ export default function ProductDetailClient({
                     <button
                       key={size}
                       className={`size-btn ${isSelected ? 'size-btn-selected' : ''} ${outOfStock ? 'size-btn-disabled' : ''}`}
-                      onClick={() => !outOfStock && setSelectedSize(size)}
+                      onClick={() => {
+                        if (!outOfStock) {
+                          setSelectedSize(size);
+                          setSizeError(false);
+                        }
+                      }}
                       disabled={outOfStock}
                     >
                       {size}
@@ -243,52 +257,24 @@ export default function ProductDetailClient({
               {selectedSize && getStock(selectedSize) <= 3 && getStock(selectedSize) > 0 && (
                 <p className={styles.lowStock}>Only {getStock(selectedSize)} left in stock</p>
               )}
+              {sizeError && (
+                <p className={styles.sizeErrorMsg}>Please select a size before continuing.</p>
+              )}
             </div>
 
-            {/* Delivery Details Card */}
-            <div className={styles.deliveryCard}>
-              <div className={styles.deliveryItem}>
-                <span className={styles.deliveryIcon}>🚚</span>
-                <div>
-                  <h4 className={styles.deliveryTitle}>Delivery in 2–5 Business Days</h4>
-                  <p className={styles.deliveryText}>Fast dispatch across India</p>
-                </div>
+            {/* Compact Shipping Strip */}
+            <div className={styles.shippingStrip}>
+              <div className={styles.shippingItem}>
+                <span>🚚</span> <span>Delivery in 2–5 Business Days</span>
               </div>
-              <div className={styles.deliveryItem}>
-                <span className={styles.deliveryIcon}>📦</span>
-                <div>
-                  <h4 className={styles.deliveryTitle}>COD Available</h4>
-                  <p className={styles.deliveryText}>Pay on delivery option available</p>
-                </div>
+              <div className={styles.shippingItem}>
+                <span>📦</span> <span>COD Available</span>
               </div>
-              <div className={styles.deliveryItem}>
-                <span className={styles.deliveryIcon}>🇮🇳</span>
-                <div>
-                  <h4 className={styles.deliveryTitle}>Ships Across India</h4>
-                  <p className={styles.deliveryText}>Delivering to all secure pincodes</p>
-                </div>
+              <div className={styles.shippingItem}>
+                <span>🔄</span> <span>7-Day Size Exchange</span>
               </div>
-              <div className={styles.deliveryItem}>
-                <span className={styles.deliveryIcon}>🔒</span>
-                <div>
-                  <h4 className={styles.deliveryTitle}>Secure Checkout</h4>
-                  <p className={styles.deliveryText}>100% encrypted online payments</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Trust Badges */}
-            <div className={styles.trustBadges}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <Truck size={16} /> <span>7-Day Size Exchange</span>
-              </div>
-              <span>·</span>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <ShieldCheck size={16} /> <span>Damage Protection</span>
-              </div>
-              <span>·</span>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <RefreshCw size={16} /> <span>Support Available</span>
+              <div className={styles.shippingItem}>
+                <span>🛡</span> <span>Damage Protection</span>
               </div>
             </div>
 
@@ -296,7 +282,7 @@ export default function ProductDetailClient({
             <div className={styles.desktopCta}>
               <button
                 className="btn btn-primary"
-                disabled={!selectedSize || isSoldOut}
+                disabled={isSoldOut}
                 onClick={handleBuyNow}
                 style={{ width: '100%', marginBottom: '12px', fontSize: '1rem', textTransform: 'uppercase' }}
               >
@@ -304,11 +290,11 @@ export default function ProductDetailClient({
                   ? 'OUT OF STOCK'
                   : selectedSize
                     ? `BUY NOW — ${formatPaise(finalPrice)}`
-                    : 'SELECT A SIZE'}
+                    : 'BUY NOW'}
               </button>
               <button
                 className={`btn btn-secondary ${addedToCart ? 'btn-success' : ''}`}
-                disabled={!selectedSize || isSoldOut}
+                disabled={isSoldOut}
                 onClick={handleAddToCart}
                 style={{ width: '100%', fontSize: '0.875rem', textTransform: 'uppercase' }}
               >
@@ -324,14 +310,14 @@ export default function ProductDetailClient({
         <div className={styles.mobileBtnRow}>
           <button
             className={`${styles.mobileCartBtn} ${addedToCart ? styles.mobileCartBtnDone : ''}`}
-            disabled={!selectedSize || isSoldOut}
+            disabled={isSoldOut}
             onClick={handleAddToCart}
           >
             {addedToCart ? <Check size={20} /> : <ShoppingCart size={20} />}
           </button>
           <button
             className="btn btn-primary"
-            disabled={!selectedSize || isSoldOut}
+            disabled={isSoldOut}
             onClick={handleBuyNow}
             style={{ flex: 1, textTransform: 'uppercase', fontSize: '0.875rem' }}
           >
@@ -339,7 +325,7 @@ export default function ProductDetailClient({
               ? 'OUT OF STOCK'
               : selectedSize
                 ? `BUY NOW — ${formatPaise(finalPrice)}`
-                : 'SELECT SIZE'}
+                : 'BUY NOW'}
           </button>
         </div>
       </div>
