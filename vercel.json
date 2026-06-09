@@ -4,29 +4,5 @@
       "path": "/api/jobs/run",
       "schedule": "0 3 * * *"
     }
-  ],
-  "redirects": [
-    {
-      "source": "/:path*",
-      "has": [
-        {
-          "type": "host",
-          "value": "www.kickoffpro.in"
-        }
-      ],
-      "destination": "https://kickoffpro.in/:path*",
-      "permanent": true
-    },
-    {
-      "source": "/:path*",
-      "has": [
-        {
-          "type": "host",
-          "value": "kickoffpro.vercel.app"
-        }
-      ],
-      "destination": "https://kickoffpro.in/:path*",
-      "permanent": true
-    }
   ]
 }

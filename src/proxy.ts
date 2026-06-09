@@ -125,11 +125,13 @@ export const config = {
   matcher: [
     /*
      * Run on every path except:
-     * - Next internals (_next/static, _next/image)
-     * - Common static files
+     * - Next internals (_next/*)
+     * - Metadata files (favicon.ico, manifest.json, robots.txt, sitemap.xml)
+     * - Public asset directories (images/, fonts/)
+     * - Other static file extensions
      * The OAuth callback route (/auth/callback) MUST be matched so the
      * exchange's Set-Cookie headers survive any session refresh logic.
      */
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',
+    '/((?!_next|favicon\\.ico|manifest\\.json|robots\\.txt|sitemap\\.xml|images/|fonts/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',
   ],
 };

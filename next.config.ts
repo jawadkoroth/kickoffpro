@@ -18,14 +18,14 @@ import type { NextConfig } from "next";
 const csp = [
   "default-src 'self'",
   // Razorpay Checkout requires inline + eval; Supabase realtime requires self.
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://checkout.razorpay.com https://*.razorpay.com",
-  "style-src 'self' 'unsafe-inline'",
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://checkout.razorpay.com https://*.razorpay.com https://va.vercel-scripts.com",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "img-src 'self' data: blob: https://*.supabase.co https://*.razorpay.com",
-  "font-src 'self' data:",
+  "font-src 'self' data: https://fonts.gstatic.com",
   // Razorpay frame for the checkout sheet.
   "frame-src 'self' https://api.razorpay.com https://*.razorpay.com",
   // REST + Realtime (wss) to Supabase, Razorpay create-order endpoint.
-  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.razorpay.com https://lumberjack.razorpay.com",
+  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.razorpay.com https://lumberjack.razorpay.com https://va.vercel-scripts.com",
   // Web manifest, service worker scope.
   "manifest-src 'self'",
   "worker-src 'self' blob:",
