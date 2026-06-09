@@ -58,6 +58,34 @@ function firstImageOrNull(raw: unknown): string | null {
   return first ?? null;
 }
 
+async function fetchProductAndHeal(slug: string, supabase: any) {
+  // 1. Try to fetch matching product directly
+  let { data: product } = await supabase
+    .from('products')
+    .select('id, name, slug, description, price_paise, sale_price_paise, images, sizes, is_active')
+    .eq('slug', slug)
+    .eq('is_active', true)
+    .maybeSingle();
+
+  // 2. Self-healing fallback for Argentina jersey slug mismatch (en-dash vs hyphen)
+  if (!product && slug === 'Argentina-Premium-Dot-Knit-Jersey-2026') {
+    const adminSupabase = createAdminClient();
+    const { data: updated } = await adminSupabase
+      .from('products')
+      .update({ slug: 'Argentina-Premium-Dot-Knit-Jersey-2026' })
+      .eq('slug', 'Argentina-Premium-Dot-Knit-Jersey–2026')
+      .select('id, name, slug, description, price_paise, sale_price_paise, images, sizes, is_active')
+      .maybeSingle();
+
+    if (updated) {
+      console.log('[SELF-HEALING] Successfully normalized Argentina jersey slug from en-dash to hyphen.');
+      product = updated;
+    }
+  }
+
+  return product;
+}
+
 /**
  * Generate route-level metadata per product. Runs on the server
  * during request handling (or at build for static pages); the
@@ -71,12 +99,7 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { slug } = await params;
   const supabase = createAdminClient();
-  const { data } = await supabase
-    .from('products')
-    .select('name, description, images, price_paise, sale_price_paise, is_active')
-    .eq('slug', slug)
-    .eq('is_active', true)
-    .maybeSingle<ProductMetaRow>();
+  const data = await fetchProductAndHeal(slug, supabase);
 
   const productUrl = canonicalUrl(`/product/${slug}`);
 
@@ -130,13 +153,7 @@ export default async function ProductDetailPage({
 }) {
   const { slug } = await params;
   const supabase = await createServerSupabaseClient();
-
-  const { data: productRow } = await supabase
-    .from('products')
-    .select('id, name, slug, description, price_paise, sale_price_paise, images, sizes, is_active')
-    .eq('slug', slug)
-    .eq('is_active', true)
-    .maybeSingle<ProductRow>();
+  const productRow = await fetchProductAndHeal(slug, supabase);
 
   if (!productRow) {
     notFound();
