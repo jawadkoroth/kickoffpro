@@ -136,6 +136,12 @@ export default async function ProductDetailPage({
     .maybeSingle<ProductRow>();
 
   if (!productRow) {
+    console.log('[DIAGNOSTIC] notFound() triggered.', {
+      incomingSlug: slug,
+      normalizedSlug: normalized,
+      productRow,
+      reason: 'No active product matched the normalized slug in the database query'
+    });
     notFound();
   }
 
