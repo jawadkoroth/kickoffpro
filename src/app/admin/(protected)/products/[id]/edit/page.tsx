@@ -4,6 +4,7 @@ import { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import MediaUploader from '@/components/admin/MediaUploader';
+import { normalizeSlug, getUniqueSlug } from '@/lib/slug';
 
 const ALL_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
 
@@ -93,12 +94,16 @@ export default function AdminEditProduct({ params }: { params: Promise<{ id: str
     const salePriceVal = salePrice ? Math.round(parseFloat(salePrice) * 100) : null;
 
 
-    // Update product
+    // 1. Get a unique normalized slug
+    const baseSlug = slug.trim() || name.trim();
+    const finalSlug = await getUniqueSlug(baseSlug, id, supabase);
+
+    // 2. Update product
     const { error: prodErr } = await supabase
       .from('products')
       .update({
         name: name.trim(),
-        slug,
+        slug: finalSlug,
         description: description.trim(),
         price_paise: priceVal,
         sale_price_paise: salePriceVal,

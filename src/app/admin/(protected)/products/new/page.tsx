@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import MediaUploader from '@/components/admin/MediaUploader';
+import { normalizeSlug, getUniqueSlug } from '@/lib/slug';
 
 const ALL_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
 
@@ -23,7 +24,7 @@ export default function AdminNewProduct() {
 
   function handleNameChange(val: string) {
     setName(val);
-    setSlug(val.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''));
+    setSlug(normalizeSlug(val));
   }
 
   function toggleSize(s: string) {
@@ -41,12 +42,16 @@ export default function AdminNewProduct() {
     const price = Math.round(parseFloat(pricePaise) * 100);
     const salePrice = salePricePaise ? Math.round(parseFloat(salePricePaise) * 100) : null;
 
-    // 1. Insert product
+    // 1. Get a unique normalized slug
+    const baseSlug = slug.trim() || name.trim();
+    const finalSlug = await getUniqueSlug(baseSlug, null, supabase);
+
+    // 2. Insert product
     const { data: product, error: prodErr } = await supabase
       .from('products')
       .insert({
         name: name.trim(),
-        slug: slug || name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+        slug: finalSlug,
         description: description.trim(),
         price_paise: price,
         sale_price_paise: salePrice,
