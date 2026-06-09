@@ -265,16 +265,23 @@ export default function ProductDetailClient({
             {/* Compact Shipping Strip */}
             <div className={styles.shippingStrip}>
               <div className={styles.shippingItem}>
-                <span>🚚</span> <span>Delivery in 2–5 Business Days</span>
+                <Truck size={16} className={styles.shippingIcon} />
+                <span>Delivery in 2–5 Business Days</span>
               </div>
-              <div className={styles.shippingItem}>
+            </div>
+
+            {/* Trust Badges */}
+            <div className={styles.trustBadges}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <span>📦</span> <span>COD Available</span>
               </div>
-              <div className={styles.shippingItem}>
-                <span>🔄</span> <span>7-Day Size Exchange</span>
+              <span>·</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <RefreshCw size={14} /> <span>7-Day Size Exchange</span>
               </div>
-              <div className={styles.shippingItem}>
-                <span>🛡</span> <span>Damage Protection</span>
+              <span>·</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <ShieldCheck size={14} /> <span>Damage Protection</span>
               </div>
             </div>
 
