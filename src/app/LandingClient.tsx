@@ -16,22 +16,49 @@ import {
   Heart, 
   MessageSquare 
 } from 'lucide-react';
+import { getPublicUrl } from '@/lib/media';
 import styles from './page.module.css';
 
 interface LandingClientProps {
   products: ProductCardData[];
 }
 
-// Popular national teams mapping for Quick Access
+// Popular national teams mapping for Quick Access and category deductions
 const POPULAR_NATIONAL_TEAMS = [
   'Argentina', 'Brazil', 'Portugal', 'France', 'Germany', 'Spain', 'England', 'Italy'
 ];
 
+// Popular clubs mapping for category showcases
+const POPULAR_CLUBS = [
+  'Real Madrid', 'Barcelona', 'Manchester United', 'Manchester City', 'Liverpool', 'Arsenal', 'Chelsea', 'PSG', 'Bayern Munich', 'Juventus'
+];
+
 export default function LandingClient({ products }: LandingClientProps) {
-  // Try to deduce available national teams from products
+  // Helper to extract team name from product name
+  const getTeamName = (p: ProductCardData) => {
+    const team = POPULAR_NATIONAL_TEAMS.find(t => p.name.toLowerCase().includes(t.toLowerCase()));
+    return team || p.name;
+  };
+
+  // Helper to extract club name from product name
+  const getClubName = (p: ProductCardData) => {
+    const club = POPULAR_CLUBS.find(c => p.name.toLowerCase().includes(c.toLowerCase()));
+    return club || p.name;
+  };
+
+  // Try to deduce available national teams from products for quick access pills
   const availableTeams = POPULAR_NATIONAL_TEAMS.filter(team => 
     products.some(p => p.name.toLowerCase().includes(team.toLowerCase()))
   );
+
+  // Filter products for homepage featured nation and club showcases
+  const featuredNations = products
+    .filter(p => p.homepage_feature_enabled && p.category?.toLowerCase() === 'national team')
+    .slice(0, 4);
+
+  const featuredClubs = products
+    .filter(p => p.homepage_feature_enabled && p.category?.toLowerCase() === 'club jersey')
+    .slice(0, 4);
 
   // Trending (Top 8)
   const trendingProducts = products.slice(0, 8);
@@ -191,35 +218,67 @@ export default function LandingClient({ products }: LandingClientProps) {
       )}
 
       {/* SECTION 3: SHOP BY NATIONAL TEAM */}
-      {availableTeams.length > 0 && (
+      {featuredNations.length > 0 && (
         <section className={styles.section}>
           <div className={styles.sectionHeader}>
             <h2 className={styles.sectionTitle}>Shop By Nation</h2>
           </div>
           <div className={styles.teamGrid}>
-            {availableTeams.slice(0, 4).map(team => (
-              <Link key={team} href={`/products?q=${team}`} className={styles.teamCard}>
-                <div className={styles.teamImageWrap}>
-                  {(() => {
-                    const matchedProduct = products.find(p => p.name.toLowerCase().includes(team.toLowerCase()));
-                    return (
-                      <img 
-                        src={matchedProduct?.images?.[0] || '/product-1.png'} 
-                        alt={team} 
-                        loading="lazy" 
-                      />
-                    );
-                  })()}
-                </div>
-                <div className={styles.teamBody}>
-                  <h3 className={styles.teamName}>{team}</h3>
-                  <p className={styles.teamPrice}>From ₹299</p>
-                  <span className={styles.teamShopBtn}>
-                    Shop Now <ChevronRight size={14} style={{ display: 'inline', verticalAlign: 'middle' }} />
-                  </span>
-                </div>
-              </Link>
-            ))}
+            {featuredNations.map(p => {
+              const teamName = getTeamName(p);
+              const imageUrl = getPublicUrl(p.homepage_feature_image || p.images?.[0]) || '/product-1.png';
+              return (
+                <Link key={p.id} href={`/products?q=${teamName}`} className={styles.teamCard}>
+                  <div className={styles.teamImageWrap}>
+                    <img 
+                      src={imageUrl} 
+                      alt={teamName} 
+                      loading="lazy" 
+                    />
+                  </div>
+                  <div className={styles.teamBody}>
+                    <h3 className={styles.teamName}>{teamName}</h3>
+                    <p className={styles.teamPrice}>From ₹299</p>
+                    <span className={styles.teamShopBtn}>
+                      Shop Now <ChevronRight size={14} style={{ display: 'inline', verticalAlign: 'middle' }} />
+                    </span>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      {/* SECTION 3.5: SHOP BY CLUB */}
+      {featuredClubs.length > 0 && (
+        <section className={styles.sectionAlt}>
+          <div className={styles.sectionHeader}>
+            <h2 className={styles.sectionTitle}>Shop By Club</h2>
+          </div>
+          <div className={styles.teamGrid}>
+            {featuredClubs.map(p => {
+              const clubName = getClubName(p);
+              const imageUrl = getPublicUrl(p.homepage_feature_image || p.images?.[0]) || '/product-1.png';
+              return (
+                <Link key={p.id} href={`/products?q=${clubName}`} className={styles.teamCard}>
+                  <div className={styles.teamImageWrap}>
+                    <img 
+                      src={imageUrl} 
+                      alt={clubName} 
+                      loading="lazy" 
+                    />
+                  </div>
+                  <div className={styles.teamBody}>
+                    <h3 className={styles.teamName}>{clubName}</h3>
+                    <p className={styles.teamPrice}>From ₹299</p>
+                    <span className={styles.teamShopBtn}>
+                      Shop Now <ChevronRight size={14} style={{ display: 'inline', verticalAlign: 'middle' }} />
+                    </span>
+                  </div>
+                </Link>
+              );
+            })}
           </div>
         </section>
       )}

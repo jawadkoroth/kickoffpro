@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import ProductCard, { type ProductCardData } from '@/components/ProductCard';
 import SortSelect, { type SortValue } from '@/components/SortSelect';
@@ -25,6 +26,8 @@ export const metadata: Metadata = {
 
 const VALID_SORTS: SortValue[] = ['latest', 'price-asc', 'price-desc'];
 
+const POPULAR_NATIONAL_TEAMS = ['Argentina', 'Brazil', 'Portugal', 'Spain'];
+
 interface ProductRow {
   id: string;
   slug: string;
@@ -35,6 +38,8 @@ interface ProductRow {
   is_active: boolean;
   created_at: string;
   category: string | null;
+  homepage_feature_image: string | null;
+  homepage_feature_enabled: boolean;
 }
 
 interface InventoryRow {
@@ -66,7 +71,7 @@ export default async function ProductsPage({
 
   let productsQuery = supabase
     .from('products')
-    .select('id, slug, name, price_paise, sale_price_paise, images, is_active, created_at, category')
+    .select('id, slug, name, price_paise, sale_price_paise, images, is_active, created_at, category, homepage_feature_image, homepage_feature_enabled')
     .eq('is_active', true);
 
   if (sale || (category && category.toLowerCase() === 'sale')) {
@@ -119,7 +124,9 @@ export default async function ProductsPage({
     sale_price_paise: p.sale_price_paise,
     images: Array.isArray(p.images) ? (p.images as string[]) : [],
     totalStock: stockByProduct.get(p.id) ?? 0,
-    category: p.category || 'Football Jersey'
+    category: p.category || 'Football Jersey',
+    homepage_feature_image: p.homepage_feature_image,
+    homepage_feature_enabled: p.homepage_feature_enabled
   }));
 
   const collectionUrl = canonicalUrl('/products');
@@ -164,6 +171,24 @@ export default async function ProductsPage({
         </div>
         {cards.length > 0 && <SortSelect current={sort} />}
       </header>
+
+      <section className={styles.quickAccess}>
+        <div className={styles.quickAccessList}>
+          {POPULAR_NATIONAL_TEAMS.map(team => {
+            const isActive = q?.toLowerCase() === team.toLowerCase();
+            const linkHref = isActive ? '/products' : `/products?q=${team}`;
+            return (
+              <Link
+                key={team}
+                href={linkHref}
+                className={`${styles.quickAccessBtn} ${isActive ? styles.quickAccessBtnActive : ''}`}
+              >
+                {team}
+              </Link>
+            );
+          })}
+        </div>
+      </section>
 
       {cards.length === 0 ? (
         <div className={styles.emptyState}>

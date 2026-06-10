@@ -29,6 +29,8 @@ interface Product {
   is_active: boolean;
   created_at: string;
   category: string | null;
+  homepage_feature_image: string | null;
+  homepage_feature_enabled: boolean;
 }
 
 export const revalidate = 60; // Revalidate every minute
@@ -39,7 +41,7 @@ export default async function LandingPage() {
     const supabase = await createServerSupabaseClient();
     const { data } = await supabase
       .from('products')
-      .select('id, slug, name, price_paise, sale_price_paise, images, is_active, created_at, category')
+      .select('id, slug, name, price_paise, sale_price_paise, images, is_active, created_at, category, homepage_feature_image, homepage_feature_enabled')
       .eq('is_active', true)
       .order('created_at', { ascending: false })
       .limit(100);
@@ -58,7 +60,9 @@ export default async function LandingPage() {
     images: Array.isArray(p.images) ? (p.images as string[]) : [],
     category: p.category || undefined,
     created_at: p.created_at,
-    totalStock: 10 // Mock total stock for UI since we don't query variants table here
+    totalStock: 10, // Mock total stock for UI since we don't query variants table here
+    homepage_feature_image: p.homepage_feature_image || null,
+    homepage_feature_enabled: p.homepage_feature_enabled || false
   }));
 
   return (

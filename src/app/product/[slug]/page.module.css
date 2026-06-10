@@ -5,6 +5,12 @@
 .page {
   min-height: calc(100dvh - 52px);
   padding-bottom: env(safe-area-inset-bottom);
+  background: linear-gradient(
+    180deg,
+    #f4faff 0%,
+    #eef7ff 40%,
+    #ffffff 100%
+  );
 }
 
 .desktopLayout {
@@ -12,12 +18,30 @@
   flex-direction: column;
 }
 
-.galleryWrap { width: 100%; position: relative; }
+.galleryWrap { 
+  width: 100%; 
+  position: relative; 
+}
+
+.galleryWrap::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 130%;
+  height: 130%;
+  background: radial-gradient(circle, rgba(47, 169, 245, 0.04) 0%, rgba(47, 169, 245, 0) 70%);
+  z-index: 0;
+  pointer-events: none;
+}
 
 /* Embla */
 .emblaViewport {
   overflow: hidden;
   background: var(--bg-secondary);
+  position: relative;
+  z-index: 1;
 }
 .emblaContainer {
   display: flex;
@@ -222,6 +246,8 @@
     display: flex;
     gap: var(--space-3);
     margin-top: var(--space-3);
+    position: relative;
+    z-index: 1;
   }
   .thumb {
     width: 72px;

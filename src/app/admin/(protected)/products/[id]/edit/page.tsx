@@ -39,6 +39,8 @@ export default function AdminEditProduct({ params }: { params: Promise<{ id: str
   const [isActive, setIsActive] = useState(true);
   const [inventory, setInventory] = useState<{ size: string; stock: number }[]>([]);
   const [category, setCategory] = useState('National Team');
+  const [homepageFeatureImage, setHomepageFeatureImage] = useState('');
+  const [homepageFeatureEnabled, setHomepageFeatureEnabled] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -56,6 +58,8 @@ export default function AdminEditProduct({ params }: { params: Promise<{ id: str
       setImages(Array.isArray(p.images) ? p.images : []);
       setIsActive(p.is_active);
       setCategory(p.category || 'National Team');
+      setHomepageFeatureImage(p.homepage_feature_image || '');
+      setHomepageFeatureEnabled(p.homepage_feature_enabled || false);
 
       const { data: inv } = await supabase
         .from('inventory')
@@ -111,6 +115,8 @@ export default function AdminEditProduct({ params }: { params: Promise<{ id: str
         images,
         category,
         is_active: isActive,
+        homepage_feature_image: homepageFeatureImage || null,
+        homepage_feature_enabled: homepageFeatureEnabled,
       })
       .eq('id', id);
 
@@ -220,6 +226,34 @@ export default function AdminEditProduct({ params }: { params: Promise<{ id: str
               </div>
             ))}
           </div>
+        </div>
+
+        <div className="card" style={{ marginBottom: 'var(--space-4)' }}>
+          <label className="input-label" style={{ marginBottom: 'var(--space-3)' }}>Homepage Showcase</label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: 'var(--space-3)' }}>
+            <input
+              type="checkbox"
+              id="homepageFeatureEnabled"
+              checked={homepageFeatureEnabled}
+              onChange={e => setHomepageFeatureEnabled(e.target.checked)}
+              style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+            />
+            <label htmlFor="homepageFeatureEnabled" style={{ fontSize: '0.875rem', cursor: 'pointer', userSelect: 'none', color: 'var(--text-primary)' }}>
+              Show this product in homepage category showcase
+            </label>
+          </div>
+          
+          {homepageFeatureEnabled && (
+            <div style={{ marginTop: 'var(--space-3)' }}>
+              <label className="input-label" style={{ marginBottom: 'var(--space-2)' }}>Homepage Category Image</label>
+              <MediaUploader
+                value={homepageFeatureImage ? [homepageFeatureImage] : []}
+                onChange={urls => setHomepageFeatureImage(urls[0] || '')}
+                folder="products"
+                maxFiles={1}
+              />
+            </div>
+          )}
         </div>
 
         <div className="card" style={{ marginBottom: 'var(--space-5)' }}>

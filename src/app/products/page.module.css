@@ -71,3 +71,71 @@
     gap: var(--space-3, 12px);
   }
 }
+
+/* ---------- Team Quick Access ---------- */
+.quickAccess {
+  position: sticky;
+  top: 56px; /* Sticky below navbar */
+  z-index: 10;
+  width: 100%;
+  background: #FFFFFF; /* No grey backgrounds */
+  border-bottom: 1px solid var(--border-color);
+  padding: var(--space-3) 0;
+  margin-bottom: var(--space-6);
+  overflow-x: auto;
+  white-space: nowrap;
+  -webkit-overflow-scrolling: touch;
+  transition: all 0.3s ease;
+}
+
+.quickAccess::-webkit-scrollbar {
+  display: none;
+}
+
+.quickAccessList {
+  display: flex;
+  gap: var(--space-3);
+  padding: 0 var(--space-2);
+  margin: 0 auto;
+  max-width: 1200px;
+}
+
+.quickAccessBtn {
+  font-size: 0.8125rem; /* smaller height */
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #071B3A; /* Navy text */
+  background: #FFFFFF; /* White background */
+  border: 1.5px solid #071B3A; /* Navy border */
+  padding: 6px 14px; /* smaller height */
+  border-radius: var(--radius-full);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.quickAccessBtn:hover {
+  background: #071B3A; /* Navy background on hover */
+  color: #FFFFFF; /* White text */
+  border-color: #071B3A;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(7, 27, 58, 0.15);
+}
+
+.quickAccessBtnActive {
+  background: #FFC928 !important; /* Gold background */
+  color: #071B3A !important; /* Navy text */
+  border-color: #FFC928 !important;
+  box-shadow: 0 4px 12px rgba(255, 201, 40, 0.4) !important; /* subtle premium shadow */
+}
+
+.quickAccessBtnActive:hover {
+  background: #071B3A !important;
+  color: #FFFFFF !important;
+  border-color: #071B3A !important;
+  box-shadow: 0 4px 10px rgba(7, 27, 58, 0.15) !important;
+}

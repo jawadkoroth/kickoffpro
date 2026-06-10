@@ -18,6 +18,8 @@ export interface ProductCardData {
   category?: string;
   sizes?: string[];
   created_at?: string;
+  homepage_feature_image?: string | null;
+  homepage_feature_enabled?: boolean;
 }
 
 export default function ProductCard({ product }: { product: ProductCardData }) {

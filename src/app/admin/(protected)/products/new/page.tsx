@@ -21,6 +21,8 @@ export default function AdminNewProduct() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [category, setCategory] = useState('National Team');
+  const [homepageFeatureImage, setHomepageFeatureImage] = useState('');
+  const [homepageFeatureEnabled, setHomepageFeatureEnabled] = useState(false);
 
   function handleNameChange(val: string) {
     setName(val);
@@ -59,6 +61,8 @@ export default function AdminNewProduct() {
         images,
         category,
         is_active: true,
+        homepage_feature_image: homepageFeatureImage || null,
+        homepage_feature_enabled: homepageFeatureEnabled,
       })
       .select('id')
       .single();
@@ -165,6 +169,34 @@ export default function AdminNewProduct() {
               </div>
             ))}
           </div>
+        </div>
+
+        <div className="card" style={{ marginBottom: 'var(--space-4)' }}>
+          <label className="input-label" style={{ marginBottom: 'var(--space-3)' }}>Homepage Showcase</label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: 'var(--space-3)' }}>
+            <input
+              type="checkbox"
+              id="homepageFeatureEnabled"
+              checked={homepageFeatureEnabled}
+              onChange={e => setHomepageFeatureEnabled(e.target.checked)}
+              style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+            />
+            <label htmlFor="homepageFeatureEnabled" style={{ fontSize: '0.875rem', cursor: 'pointer', userSelect: 'none', color: 'var(--text-primary)' }}>
+              Show this product in homepage category showcase
+            </label>
+          </div>
+          
+          {homepageFeatureEnabled && (
+            <div style={{ marginTop: 'var(--space-3)' }}>
+              <label className="input-label" style={{ marginBottom: 'var(--space-2)' }}>Homepage Category Image</label>
+              <MediaUploader
+                value={homepageFeatureImage ? [homepageFeatureImage] : []}
+                onChange={urls => setHomepageFeatureImage(urls[0] || '')}
+                folder="products"
+                maxFiles={1}
+              />
+            </div>
+          )}
         </div>
 
         <div className="card" style={{ marginBottom: 'var(--space-5)' }}>
