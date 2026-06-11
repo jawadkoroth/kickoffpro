@@ -48,7 +48,7 @@ export const BRAND = {
   titleSuffix: 'KickoffPro',
   /** Fallback description for pages that don't supply their own. */
   description:
-    'Affordable Football Jerseys For Every Fan. High quality club, national, and retro jerseys starting at ₹250.',
+    'Affordable Football Jerseys For Every Fan. High quality club, national, and retro jerseys with budget-friendly pricing.',
   /**
    * Country of operation. Used by Merchant Center feed defaults and
    * Organization schema `addressCountry`.

@@ -155,7 +155,7 @@ export default function LandingClient({ products }: LandingClientProps) {
     {
       author: 'Aditya M.',
       rating: 5,
-      text: 'Excellent value for money. ₹299 is a steal for this print quality. Will be ordering the Portugal home jersey next!'
+      text: 'Excellent value for money. ₹549 is a steal for this print quality. Will be ordering the Portugal home jersey next!'
     }
   ];
 
@@ -190,7 +190,7 @@ export default function LandingClient({ products }: LandingClientProps) {
             Support Your Team
           </h1>
           <p className={styles.heroSubtitle}>
-            Premium Quality Football Jerseys Starting At ₹299. Get ready for the ultimate matchday experience.
+            Premium Quality Football Jerseys Starting At ₹549. Get ready for the ultimate matchday experience.
           </p>
           
           <div className={styles.heroCtaGroup}>
@@ -238,7 +238,7 @@ export default function LandingClient({ products }: LandingClientProps) {
                   </div>
                   <div className={styles.teamBody}>
                     <h3 className={styles.teamName}>{teamName}</h3>
-                    <p className={styles.teamPrice}>From ₹299</p>
+                    <p className={styles.teamPrice}>From ₹549</p>
                     <span className={styles.teamShopBtn}>
                       Shop Now <ChevronRight size={14} style={{ display: 'inline', verticalAlign: 'middle' }} />
                     </span>
@@ -271,7 +271,7 @@ export default function LandingClient({ products }: LandingClientProps) {
                   </div>
                   <div className={styles.teamBody}>
                     <h3 className={styles.teamName}>{clubName}</h3>
-                    <p className={styles.teamPrice}>From ₹299</p>
+                    <p className={styles.teamPrice}>From ₹549</p>
                     <span className={styles.teamShopBtn}>
                       Shop Now <ChevronRight size={14} style={{ display: 'inline', verticalAlign: 'middle' }} />
                     </span>

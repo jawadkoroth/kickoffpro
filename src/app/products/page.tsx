@@ -7,13 +7,15 @@ import { JsonLd } from '@/components/seo/JsonLd';
 import { breadcrumbLd, collectionLd } from '@/lib/seo/jsonLd';
 import { BRAND, absoluteUrl, canonicalUrl } from '@/lib/seo/site';
 import styles from './page.module.css';
+import DatabaseErrorPanel from '@/components/DatabaseErrorPanel';
+import { handleSupabaseQueryResult } from '@/lib/supabase/query-helper';
 
 export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
   title: 'Football Jerseys Catalog',
   description:
-    'Browse our full catalogue of affordable club, national team, and retro football jerseys priced between ₹250 and ₹350.',
+    'Browse our full catalogue of affordable club, national team, and retro football jerseys with budget-friendly pricing.',
   alternates: { canonical: canonicalUrl('/products') },
   openGraph: {
     type: 'website',
@@ -88,8 +90,24 @@ export default async function ProductsPage({
     productsQuery = productsQuery.order('created_at', { ascending: false });
   }
 
-  const { data: productRows } = await productsQuery;
-  let products = (productRows ?? []) as ProductRow[];
+  const response = await productsQuery;
+  const result = handleSupabaseQueryResult(response, 'products_catalog.products_fetch');
+  
+  if (result.error) {
+    return (
+      <div className={styles.page}>
+        <header className={styles.header}>
+          <div>
+            <p className={styles.eyebrow}>CATALOG ERROR</p>
+            <h1 className={styles.title}>Error Loading Jerseys</h1>
+          </div>
+        </header>
+        <DatabaseErrorPanel error={result.error} title="Failed to load product catalog" />
+      </div>
+    );
+  }
+
+  let products = (result.data ?? []) as ProductRow[];
 
   const effectivePrice = (p: ProductRow) => p.sale_price_paise ?? p.price_paise;
 
@@ -159,7 +177,7 @@ export default async function ProductsPage({
       <JsonLd
         data={collectionLd({
           name: displayTitle,
-          description: `Buy high quality ${displayTitle} starting from ₹250. Fast shipping in India.`,
+          description: `Buy high quality ${displayTitle} with budget-friendly pricing. Fast shipping in India.`,
           url: collectionUrl,
           items: featuredForSchema,
         })}

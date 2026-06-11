@@ -4,6 +4,8 @@ import { JsonLd } from '@/components/seo/JsonLd';
 import { organizationLd, webSiteLd } from '@/lib/seo/jsonLd';
 import { BRAND, SITE_URL } from '@/lib/seo/site';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
+import DatabaseErrorPanel from '@/components/DatabaseErrorPanel';
+import { handleSupabaseQueryResult, QueryResultError } from '@/lib/supabase/query-helper';
 
 export const metadata: Metadata = {
   title: { absolute: `${BRAND.name} — Affordable Football Jerseys, India` },
@@ -37,17 +39,36 @@ export const revalidate = 60; // Revalidate every minute
 
 export default async function LandingPage() {
   let products: Product[] = [];
+  let dbError: QueryResultError | null = null;
+
   try {
     const supabase = await createServerSupabaseClient();
-    const { data } = await supabase
+    const response = await supabase
       .from('products')
       .select('id, slug, name, price_paise, sale_price_paise, images, is_active, created_at, category, homepage_feature_image, homepage_feature_enabled')
       .eq('is_active', true)
       .order('created_at', { ascending: false })
       .limit(100);
-    products = (data ?? []) as Product[];
+
+    const result = handleSupabaseQueryResult(response, 'homepage.products_fetch');
+    if (result.error) {
+      dbError = result.error;
+    } else {
+      products = (result.data ?? []) as Product[];
+    }
   } catch (err) {
-    console.error('[HOMEPAGE_PRODUCTS_FETCH]', err);
+    if (err && (err instanceof Error && (err.message.includes('Dynamic server usage') || (err as any).digest === 'DYNAMIC_SERVER_USAGE'))) {
+      throw err;
+    }
+    console.error('[HOMEPAGE_PRODUCTS_FETCH_EXCEPTION]', err);
+    dbError = {
+      message: err instanceof Error ? err.message : String(err),
+      correlationId: `exc-${Math.random().toString(36).substring(2, 9).toUpperCase()}-${Date.now().toString(36).toUpperCase()}`,
+    };
+  }
+
+  if (dbError) {
+    return <DatabaseErrorPanel error={dbError} title="Failed to load homepage products" />;
   }
 
   // Parse images helper
