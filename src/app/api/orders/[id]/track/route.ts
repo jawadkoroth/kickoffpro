@@ -48,10 +48,11 @@ export async function GET(
       } else if (queryPhone && orderPhone) {
         const normQuery = queryPhone.replace(/\D/g, '');
         const normOrder = orderPhone.replace(/\D/g, '');
-        // Match if query is at least 10 digits and ends with order phone, or if they match exactly
+        // Match if one phone number is at least 10 digits and ends with the other, or if they match exactly
         if (
-          (normQuery.length >= 10 && normOrder.length >= 10 && normQuery.endsWith(normOrder)) ||
-          normQuery === normOrder
+          normQuery === normOrder ||
+          (normQuery.length >= 10 && normOrder.endsWith(normQuery)) ||
+          (normOrder.length >= 10 && normQuery.endsWith(normOrder))
         ) {
           authorized = true;
         }
