@@ -17,7 +17,7 @@ file, table, or endpoint that you can grep.
   used in API routes that need to bypass RLS for admin / system writes.
 - **Payments** — Razorpay (online) + COD. Webhook is the source of
   truth for payment state; client-side `payments/verify` is advisory.
-- **Email** — Resend, all sends behind the job queue.
+- **Email** — Zoho SMTP (via Nodemailer), all sends behind the job queue.
 - **Push** — VAPID web push to admin browsers + service worker
   (`public/sw-admin.js`).
 - **Cron** — Vercel Cron → `/api/jobs/run` every minute. See
@@ -42,7 +42,7 @@ Required:
 - `RAZORPAY_KEY_SECRET`
 - `RAZORPAY_WEBHOOK_SECRET` — must match what Razorpay dashboard
   shows; mismatch yields 400 on every webhook.
-- `RESEND_API_KEY`
+- `SMTP_HOST`, `SMTP_PORT`, `SMTP_HELLO_USER`, and `SMTP_HELLO_PASS` — SMTP configuration for transactional mail. Optionally `SMTP_ORDERS_USER` / `SMTP_ORDERS_PASS` and `SMTP_SUPPORT_USER` / `SMTP_SUPPORT_PASS` for mailbox separation.
 - `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY` — admin web push.
 - `VAPID_SUBJECT` — e.g. `mailto:ops@yourbrand.com`.
 - `CRON_SECRET` — guards `/api/jobs/run`. Vercel Cron sends it as
@@ -212,7 +212,7 @@ the order endpoint says.
    - `failed` → cron will retry; backoff is exponential up to 5
      attempts.
    - `dead` → click **Retry** after fixing the root cause (e.g.
-     re-enable Resend API key).
+     correct SMTP_HELLO_PASS).
 2. If the row doesn't exist at all, the enqueue at the call site
    was skipped or threw. Check the parent route's events for the
    request id (e.g. `payment.webhook_received` → no
@@ -309,7 +309,7 @@ src/
     coupons/evaluateCoupon.ts        — single source of truth coupon logic
     audit/logAdminAction.ts          — admin audit log writer
     push/webPush.ts                  — VAPID send + notifyAdmins
-    email/sendOrderEmail.ts          — Resend wrappers
+    email/sendOrderEmail.ts          — Zoho SMTP / Nodemailer wrappers
   proxy.ts                           — request id, auth gate, cookie refresh
 public/
   sw-admin.js                        — service worker (admin push)

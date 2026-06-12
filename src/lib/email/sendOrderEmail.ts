@@ -1,4 +1,4 @@
-import { Resend } from 'resend';
+import nodemailer from 'nodemailer';
 import { logEvent } from '@/lib/log';
 import { getPublicUrl } from '@/lib/media';
 
@@ -93,17 +93,59 @@ export type OrderStatusForEmail =
   | 'cancelled';
 
 /* ------------------------------------------------------------------ */
-/* Lazy Resend client                                                  */
+/* Extensible Nodemailer SMTP transports                              */
 /* ------------------------------------------------------------------ */
 
-let resendClient: Resend | null = null;
+export type MailboxKey = 'hello' | 'orders' | 'support';
 
-function getResend(): Resend | null {
-  if (resendClient) return resendClient;
-  const key = process.env.RESEND_API_KEY;
-  if (!key) return null;
-  resendClient = new Resend(key);
-  return resendClient;
+const transporters: Record<MailboxKey, nodemailer.Transporter | null> = {
+  hello: null,
+  orders: null,
+  support: null,
+};
+
+function getTransporter(mailbox: MailboxKey = 'hello'): nodemailer.Transporter | null {
+  if (transporters[mailbox]) {
+    return transporters[mailbox];
+  }
+
+  const host = process.env.SMTP_HOST || 'smtppro.zoho.in';
+  const port = parseInt(process.env.SMTP_PORT || '465', 10);
+
+  let user: string | undefined;
+  let pass: string | undefined;
+
+  switch (mailbox) {
+    case 'orders':
+      user = process.env.SMTP_ORDERS_USER || process.env.SMTP_HELLO_USER;
+      pass = process.env.SMTP_ORDERS_PASS || process.env.SMTP_HELLO_PASS;
+      break;
+    case 'support':
+      user = process.env.SMTP_SUPPORT_USER || process.env.SMTP_HELLO_USER;
+      pass = process.env.SMTP_SUPPORT_PASS || process.env.SMTP_HELLO_PASS;
+      break;
+    case 'hello':
+    default:
+      user = process.env.SMTP_HELLO_USER;
+      pass = process.env.SMTP_HELLO_PASS;
+      break;
+  }
+
+  if (!user || !pass) {
+    return null;
+  }
+
+  transporters[mailbox] = nodemailer.createTransport({
+    host,
+    port,
+    secure: port === 465, // true for 465, false for other ports (587)
+    auth: {
+      user,
+      pass,
+    },
+  });
+
+  return transporters[mailbox];
 }
 
 function siteUrl(): string {
@@ -397,10 +439,11 @@ interface DispatchOpts {
   html: string;
   /** Order number for log context. */
   orderNumber: string;
+  mailbox?: MailboxKey;
 }
 
 async function dispatch(opts: DispatchOpts): Promise<void> {
-  const { kind, to, subject, html, orderNumber } = opts;
+  const { kind, to, subject, html, orderNumber, mailbox = 'hello' } = opts;
 
   if (!to) {
     console.log(
@@ -409,22 +452,27 @@ async function dispatch(opts: DispatchOpts): Promise<void> {
     return;
   }
 
-  const resend = getResend();
-  if (!resend) {
+  const mailer = getTransporter(mailbox);
+  if (!mailer) {
     console.log(
-      `[EMAIL_SKIP] ${kind}: RESEND_API_KEY not configured (order ${orderNumber})`,
+      `[EMAIL_SKIP] ${kind}: Zoho SMTP credentials not fully configured for mailbox "${mailbox}" (order ${orderNumber})`,
     );
     return;
   }
 
+  // Resolve sender username dynamically for fallback
+  const senderUser = mailbox === 'orders' ? (process.env.SMTP_ORDERS_USER || process.env.SMTP_HELLO_USER)
+                   : mailbox === 'support' ? (process.env.SMTP_SUPPORT_USER || process.env.SMTP_HELLO_USER)
+                   : process.env.SMTP_HELLO_USER;
+
   try {
-    await resend.emails.send({
-      from: process.env.EMAIL_FROM || 'KickoffPro <onboarding@resend.dev>',
+    const info = await mailer.sendMail({
+      from: process.env.EMAIL_FROM || `KickoffPro Hello <${senderUser}>`,
       to,
       subject,
       html,
     });
-    console.log(`[EMAIL_SENT] ${kind} order ${orderNumber}`);
+    console.log(`[EMAIL_SENT] ${kind} order ${orderNumber} via ${mailbox} (Message ID: ${info.messageId})`);
   } catch (err) {
     // Never throw: callers are fire-and-forget.
     logEvent('email.failed', {
@@ -432,7 +480,7 @@ async function dispatch(opts: DispatchOpts): Promise<void> {
       order_number: orderNumber,
       error: err instanceof Error ? err.message : String(err),
     });
-    console.error(`[EMAIL_FAILED] ${kind} order ${orderNumber}:`, err);
+    console.error(`[EMAIL_FAILED] ${kind} order ${orderNumber} via ${mailbox}:`, err);
   }
 }
 
