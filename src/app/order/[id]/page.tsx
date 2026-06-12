@@ -53,7 +53,29 @@ export default function OrderPage({ params }: { params: Promise<{ id: string }> 
 
   async function fetchOrder() {
     try {
-      const res = await fetch(`/api/orders/${id}/track`);
+      let email = null;
+      let phone = null;
+      if (typeof window !== 'undefined') {
+        const searchParams = new URLSearchParams(window.location.search);
+        email = searchParams.get('email');
+        phone = searchParams.get('phone');
+        if (!email) {
+          email = window.sessionStorage.getItem('kickoffpro_checkout_email');
+        }
+        if (!phone) {
+          phone = window.sessionStorage.getItem('kickoffpro_checkout_phone');
+        }
+      }
+
+      let url = `/api/orders/${id}/track`;
+      const queryParts: string[] = [];
+      if (email) queryParts.push(`email=${encodeURIComponent(email)}`);
+      if (phone) queryParts.push(`phone=${encodeURIComponent(phone)}`);
+      if (queryParts.length > 0) {
+        url += `?${queryParts.join('&')}`;
+      }
+
+      const res = await fetch(url);
       const data = await res.json();
       if (data.success) {
         setOrder(data.order);

@@ -567,13 +567,25 @@ function CheckoutContent() {
         // who dismisses the modal or whose payment fails keeps
         // their cart intact for a retry.
         clientRequestIdRef.current = null;
+        if (typeof window !== 'undefined') {
+          window.sessionStorage.setItem('kickoffpro_checkout_email', email || '');
+          window.sessionStorage.setItem('kickoffpro_checkout_phone', phone || '');
+        }
         await openRazorpay(data, submittedLines);
       } else {
         // COD: order is "placed" the moment the row exists. Clear
         // every submitted line now, before navigation.
         clientRequestIdRef.current = null;
         clearSubmittedLines(submittedLines);
-        router.push(`/order/${data.order_id}`);
+        if (typeof window !== 'undefined') {
+          window.sessionStorage.setItem('kickoffpro_checkout_email', email || '');
+          window.sessionStorage.setItem('kickoffpro_checkout_phone', phone || '');
+        }
+        const queryParams = new URLSearchParams();
+        if (email) queryParams.set('email', email);
+        if (phone) queryParams.set('phone', phone);
+        const queryStr = queryParams.toString();
+        router.push(`/order/${data.order_id}${queryStr ? '?' + queryStr : ''}`);
       }
     } catch (err) {
       console.error('[ORDER_ERROR]', err);
@@ -639,6 +651,10 @@ function CheckoutContent() {
       },
       theme: { color: '#1A1A1A' },
       handler: async function (response: { razorpay_payment_id: string; razorpay_signature: string }) {
+        const queryParams = new URLSearchParams();
+        if (orderData.customer.email) queryParams.set('email', orderData.customer.email);
+        if (orderData.customer.phone) queryParams.set('phone', orderData.customer.phone);
+
         try {
           const verifyRes = await fetch('/api/payments/verify', {
             method: 'POST',
@@ -655,18 +671,29 @@ function CheckoutContent() {
             // captures `submittedLines` so a user adding new
             // items between submit and verify keeps those.
             clearSubmittedLines(submittedLines);
-            router.push(`/order/${orderData.order_id}`);
+            const successQuery = new URLSearchParams(queryParams);
+            const queryStr = successQuery.toString();
+            router.push(`/order/${orderData.order_id}${queryStr ? '?' + queryStr : ''}`);
           } else {
-            router.push(`/order/${orderData.order_id}?payment=failed`);
+            const failQuery = new URLSearchParams(queryParams);
+            failQuery.set('payment', 'failed');
+            router.push(`/order/${orderData.order_id}?${failQuery.toString()}`);
           }
         } catch {
-          router.push(`/order/${orderData.order_id}?payment=failed`);
+          const failQuery = new URLSearchParams(queryParams);
+          failQuery.set('payment', 'failed');
+          router.push(`/order/${orderData.order_id}?${failQuery.toString()}`);
         }
       },
       modal: {
         ondismiss: function () {
           setSubmitting(false);
-          router.push(`/order/${orderData.order_id}?payment=pending`);
+          const queryParams = new URLSearchParams();
+          if (orderData.customer.email) queryParams.set('email', orderData.customer.email);
+          if (orderData.customer.phone) queryParams.set('phone', orderData.customer.phone);
+          const pendingQuery = new URLSearchParams(queryParams);
+          pendingQuery.set('payment', 'pending');
+          router.push(`/order/${orderData.order_id}?${pendingQuery.toString()}`);
         },
       },
     });

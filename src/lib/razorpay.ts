@@ -45,5 +45,14 @@ export function verifyPaymentSignature(
     .update(body)
     .digest('hex');
 
-  return expectedSignature === signature;
+  const expectedBuffer = Buffer.from(expectedSignature, 'hex');
+  const signatureBuffer = Buffer.from(signature.toLowerCase(), 'hex');
+
+  if (expectedBuffer.length !== signatureBuffer.length) {
+    // Perform dummy timingSafeEqual against expectedBuffer to consume constant time
+    crypto.timingSafeEqual(expectedBuffer, expectedBuffer);
+    return false;
+  }
+
+  return crypto.timingSafeEqual(expectedBuffer, signatureBuffer);
 }

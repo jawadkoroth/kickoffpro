@@ -46,6 +46,7 @@ export class ShiprocketProvider implements ShippingProvider {
   private readonly authPasswordEncrypted: string | null;
   private readonly webhookSecret: string | null;
   private readonly pickupName: string;
+  private readonly pickupPincodeValue: string;
   private token: string | null;
 
   constructor(config: ProviderConfig) {
@@ -54,6 +55,7 @@ export class ShiprocketProvider implements ShippingProvider {
     this.authPasswordEncrypted = config.auth_password_encrypted ?? null;
     this.webhookSecret = config.webhook_secret ?? null;
     this.pickupName = config.pickup_name ?? '';
+    this.pickupPincodeValue = config.pickup_pincode ?? '';
     this.token = config.token ?? null;
   }
 
@@ -306,6 +308,35 @@ export class ShiprocketProvider implements ShippingProvider {
       };
     }
 
+    // Pickup pincode configured
+    if (!this.pickupPincodeValue) {
+      return {
+        provider: 'shiprocket',
+        status_code: 0,
+        message: 'Pickup pincode not configured',
+        meaning: 'No pickup pincode is configured in provider settings.',
+        suggested_fix: 'Configure pickup pincode in Admin → Shipping → Provider settings.',
+        retry_safe: false,
+        operational_category: 'pickup_not_registered',
+        severity: 'high',
+        raw: null,
+      };
+    }
+
+    if (!/^\d{6}$/.test(this.pickupPincodeValue)) {
+      return {
+        provider: 'shiprocket',
+        status_code: 0,
+        message: 'Invalid pickup pincode format',
+        meaning: 'The configured pickup pincode is invalid.',
+        suggested_fix: 'Configure a valid 6-digit pickup pincode in Admin → Shipping → Provider settings.',
+        retry_safe: false,
+        operational_category: 'pickup_not_registered',
+        severity: 'high',
+        raw: { pickup_pincode: this.pickupPincodeValue },
+      };
+    }
+
     // Auth token available
     if (!this.token) {
       return {
@@ -448,8 +479,9 @@ export class ShiprocketProvider implements ShippingProvider {
 
   async checkServiceability(pincode: string): Promise<ServiceabilityResponse> {
     try {
+      const pickupPin = this.pickupPincode;
       const res = await fetch(
-        `${this.baseUrl}/courier/serviceability/?pickup_postcode=${this.pickupPincode}&delivery_postcode=${pincode}&cod=1&weight=0.5`,
+        `${this.baseUrl}/courier/serviceability/?pickup_postcode=${pickupPin}&delivery_postcode=${pincode}&cod=1&weight=0.5`,
         { headers: this.authHeader() },
       );
       const data = await res.json() as Record<string, unknown>;
@@ -460,13 +492,29 @@ export class ShiprocketProvider implements ShippingProvider {
         cod_available: couriers.some((c: Record<string, unknown>) => c['cod'] === 1),
         raw: data,
       };
-    } catch {
+    } catch (err) {
+      console.error('[SHIPROCKET_SERVICEABILITY_ERROR]', err);
+      logEvent('shipping.shiprocket.serviceability_failed', {
+        pincode,
+        error: err instanceof Error ? err.message : String(err),
+      }, { source: 'api', severity: 'error' });
       return { serviceable: false, cod_available: false };
     }
   }
 
   private get pickupPincode(): string {
-    return '';
+    if (!this.pickupPincodeValue) {
+      throw new Error(
+        'Shiprocket: pickup pincode not configured. ' +
+        'Configure pickup_pincode in Admin -> Shipping -> Provider settings.'
+      );
+    }
+    if (!/^\d{6}$/.test(this.pickupPincodeValue)) {
+      throw new Error(
+        `Shiprocket: pickup pincode "${this.pickupPincodeValue}" is invalid (must be 6 digits).`
+      );
+    }
+    return this.pickupPincodeValue;
   }
 
   verifyWebhook(

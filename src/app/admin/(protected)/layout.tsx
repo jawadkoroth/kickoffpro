@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
+import { headers } from 'next/headers';
 import AdminShell from './AdminShell';
 
 /**
@@ -28,10 +29,19 @@ export default async function ProtectedAdminLayout({
     redirect('/admin');
   }
 
-  const isDev = process.env.NODE_ENV === 'development';
+  // Harden local admin bypass: must be explicitly enabled AND host must be localhost/127.0.0.1
+  const headerList = await headers();
+  const host = headerList.get('host') || '';
+  const isLocalhost =
+    host.startsWith('localhost:') ||
+    host === 'localhost' ||
+    host.startsWith('127.0.0.1:') ||
+    host === '127.0.0.1';
+
+  const isLocalDevAdminBypass = process.env.LOCAL_DEV_ADMIN === 'true' && isLocalhost;
   let isAdmin = false;
 
-  if (isDev) {
+  if (isLocalDevAdminBypass) {
     isAdmin = true;
   } else {
     const { data: adminUser } = await supabase

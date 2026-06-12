@@ -491,7 +491,10 @@ function addressLines(addr?: OrderEmailAddress): string[] {
   return [line1, line2];
 }
 
-function viewOrderHref(orderId: string): string {
+function viewOrderHref(orderId: string, email?: string): string {
+  if (email) {
+    return `${siteUrl()}/order/${orderId}?email=${encodeURIComponent(email)}`;
+  }
   return `${siteUrl()}/order/${orderId}`;
 }
 
@@ -583,7 +586,7 @@ export async function sendOrderCreatedEmail(order: OrderEmailData): Promise<void
     items: order.items,
     summary: commonSummary(order),
     address: addressLines(order.shipping_address),
-    cta: { label: 'View order', href: viewOrderHref(order.id) },
+    cta: { label: 'View order', href: viewOrderHref(order.id, order.customer.email) },
   });
 
   await dispatch({
@@ -611,7 +614,7 @@ export async function sendPaymentSuccessEmail(order: OrderEmailData): Promise<vo
     items: order.items,
     summary: commonSummary(order),
     address: addressLines(order.shipping_address),
-    cta: { label: 'View order', href: viewOrderHref(order.id) },
+    cta: { label: 'View order', href: viewOrderHref(order.id, order.customer.email) },
   });
 
   await dispatch({
@@ -637,7 +640,7 @@ export async function sendPaymentFailedEmail(order: OrderEmailData): Promise<voi
     summary: commonSummary(order),
     outro:
       'You can retry payment from the order page. If the amount was debited from your account, it will be refunded by your bank within 5–7 business days.',
-    cta: { label: 'Retry payment', href: viewOrderHref(order.id) },
+    cta: { label: 'Retry payment', href: viewOrderHref(order.id, order.customer.email) },
   });
 
   await dispatch({
@@ -696,7 +699,7 @@ export async function sendOrderStatusEmail(
     summary: commonSummary(order),
     address: status === 'cancelled' ? undefined : addressLines(order.shipping_address),
     outro: preset.outro,
-    cta: { label: 'View order', href: viewOrderHref(order.id) },
+    cta: { label: 'View order', href: viewOrderHref(order.id, order.customer.email) },
   });
 
   await dispatch({

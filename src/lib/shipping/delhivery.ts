@@ -18,11 +18,11 @@ import { logEvent } from '@/lib/log';
  * KickoffPro — Delhivery Error Forensics
  * Parses Delhivery API errors into actionable diagnostics.
  */
-function parseDelhiveryError(status: number, data: Record<string, unknown>, context?: string): ParsedProviderError {
+function parseDelhiveryError(status: number, data: Record<string, unknown>, _context?: string): ParsedProviderError {
   const base: Omit<ParsedProviderError, 'message'> = {
     provider: 'delhivery',
     status_code: status,
-    raw: data,
+    raw: _context ? { ...data, context: _context } : data,
     retry_safe: false,
     operational_category: 'unknown',
     severity: 'high',
@@ -379,7 +379,7 @@ export class DelhiveryProvider implements ShippingProvider {
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: requestHeaders,
-        body: formData.toString(),
+        body: formData,
       });
 
       const latencyMs = Date.now() - t0;
