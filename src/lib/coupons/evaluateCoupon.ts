@@ -23,7 +23,8 @@ export type CouponRejectReason =
   | 'new_users_only_guest'
   | 'new_users_only_repeat'
   | 'per_user_limit'
-  | 'usage_limit';
+  | 'usage_limit'
+  | 'auth_required';
 
 export interface CouponRow {
   id: string;
@@ -84,6 +85,7 @@ const REJECT_COPY: Record<CouponRejectReason, string> = {
   new_users_only_repeat: 'This coupon is only valid on your first order.',
   per_user_limit: 'You have already used this coupon the maximum number of times.',
   usage_limit: 'This coupon has reached its usage limit.',
+  auth_required: 'Please sign in to use this coupon.',
 };
 
 function reject(reason: CouponRejectReason, extra: Partial<EvaluateRejected> = {}): EvaluateRejected {
@@ -160,7 +162,9 @@ export async function evaluateCoupon(
 
   // per_user_limit: count this user's prior non-cancelled orders
   // that already used this coupon code.
-  if (coupon.per_user_limit && coupon.per_user_limit > 0 && input.userId) {
+  if (coupon.per_user_limit && coupon.per_user_limit > 0) {
+    if (!input.userId) return reject('auth_required');
+    
     const { count: usedByUser, error: puErr } = await supabase
       .from('orders')
       .select('id', { count: 'exact', head: true })

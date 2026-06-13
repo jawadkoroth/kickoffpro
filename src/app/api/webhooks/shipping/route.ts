@@ -33,6 +33,7 @@ import type { NormalisedShipmentEvent } from '@/lib/shipping/types';
 import { DelhiveryProvider } from '@/lib/shipping/delhivery';
 import { ShiprocketProvider } from '@/lib/shipping/shiprocket';
 import type { ProviderConfig } from '@/lib/shipping/types';
+import { enqueue } from '@/lib/jobs/queue';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -197,9 +198,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     provider_name: providerName,
     external_event_id,
     tracking_id,
-    raw_payload: raw as object,
-    canonical_status,
-    shipment_id: shipment?.id ?? null,
+    payload: raw as object,
+    linked_shipment_id: shipment?.id ?? null,
     received_at: new Date().toISOString(),
   });
 
@@ -244,6 +244,66 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       .from('orders')
       .update({ order_status: orderStatus, updated_at: new Date().toISOString() })
       .eq('id', shipment.order_id);
+
+    // Automatically trigger transactional emails for shipped/delivered milestones
+    if (orderStatus === 'shipped' || orderStatus === 'delivered') {
+      try {
+        const { data: order } = await supabase
+          .from('orders')
+          .select('id, order_number, customer, shipping_address, subtotal_paise, discount_paise, shipping_paise, cod_fee_paise, total_paise, payment_method')
+          .eq('id', shipment.order_id)
+          .single();
+
+        if (order) {
+          const { data: itemRows } = await supabase
+            .from('order_items')
+            .select('product_name, size, quantity, unit_price_paise, subtotal_paise, image_url')
+            .eq('order_id', order.id)
+            .order('created_at', { ascending: true });
+
+          const items = (itemRows ?? []).map((row) => ({
+            name: (row as { product_name: string }).product_name,
+            size: (row as { size: string }).size,
+            quantity: (row as { quantity: number }).quantity,
+            unit_price_paise: (row as { unit_price_paise: number }).unit_price_paise,
+            subtotal_paise: (row as { subtotal_paise: number }).subtotal_paise,
+            image_url: (row as { image_url: string | null }).image_url,
+          }));
+          const firstItem = items[0];
+
+          await enqueue({
+            kind: 'email.order_status',
+            idempotencyKey: `email.order_status.${order.id}.${orderStatus}`,
+            payload: {
+              order: {
+                id: order.id,
+                order_number: order.order_number,
+                customer: order.customer,
+                product_name: firstItem?.name || 'Product',
+                size: firstItem?.size || '',
+                quantity: firstItem?.quantity ?? 1,
+                subtotal_paise: order.subtotal_paise,
+                discount_paise: order.discount_paise,
+                shipping_paise: order.shipping_paise,
+                cod_fee_paise: order.cod_fee_paise,
+                total_paise: order.total_paise,
+                payment_method: order.payment_method,
+                shipping_address: order.shipping_address,
+                image_url: firstItem?.image_url || null,
+                items,
+              },
+              status: orderStatus,
+            },
+          }, supabase);
+          logEvent('shipping.webhook.email_enqueued', { order_id: order.id, status: orderStatus }, { source: 'webhook' });
+        }
+      } catch (err) {
+        logEvent('shipping.webhook.email_failed', {
+          order_id: shipment.order_id,
+          error: err instanceof Error ? err.message : String(err),
+        }, { source: 'webhook', severity: 'error' });
+      }
+    }
   }
 
   logEvent('shipping.webhook.processed', {

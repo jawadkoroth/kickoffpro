@@ -179,10 +179,11 @@ export default function OrderPage({ params }: { params: Promise<{ id: string }> 
     );
   }
 
-  const isPendingPayment = order.payment_method === 'online' && order.payment_status === 'pending' && order.order_status !== 'cancelled';
-  const isPaid = order.payment_status === 'paid';
   const isCancelled = order.order_status === 'cancelled';
-  const canRetry = isPendingPayment && order.retry_count < 3;
+  const isSuccess = !isCancelled && (order.payment_method === 'cod' || order.payment_status === 'paid');
+  const isFailedPayment = order.payment_method === 'online' && order.payment_status === 'failed' && order.order_status !== 'cancelled';
+  const isPendingPayment = order.payment_method === 'online' && order.payment_status === 'pending' && order.order_status !== 'cancelled';
+  const canRetry = (isPendingPayment || isFailedPayment) && order.retry_count < 3;
 
   const statusSteps = [
     { key: 'pending', label: 'Placed', done: true, time: order.created_at },
@@ -197,11 +198,38 @@ export default function OrderPage({ params }: { params: Promise<{ id: string }> 
         {/* HERO */}
         <div className={styles.hero}>
           <div className={styles.heroGlow} />
-          {!isCancelled && !isPendingPayment && (
+          {isSuccess && (
             <>
               <div className={styles.successIcon}>✓</div>
               <h1 className={styles.heroTitle}>Order Placed!</h1>
               <p className={styles.heroSubtitle}>Your jersey order is being processed. Thank you for shopping with KickoffPro!</p>
+            </>
+          )}
+
+          {isFailedPayment && (
+            <>
+              <div className={styles.cancelledIcon}>✕</div>
+              <h1 className={styles.heroTitle} style={{ color: 'var(--error, #EF4444)' }}>Payment Failed</h1>
+              <p className={styles.heroSubtitle}>Your online payment attempt could not be processed. Please retry your payment to complete the order.</p>
+              {canRetry ? (
+                <div style={{ marginBottom: '16px' }}>
+                  <button
+                    className={styles.btnPrimary}
+                    onClick={handleRetryPayment}
+                    disabled={retrying}
+                    style={{ margin: '0 auto' }}
+                  >
+                    {retrying ? 'Retrying...' : 'RETRY PAYMENT'}
+                  </button>
+                  <p className="text-xs" style={{ marginTop: '8px', opacity: 0.8 }}>
+                    Attempt {order.retry_count} of 3
+                  </p>
+                </div>
+              ) : (
+                <p className="text-sm" style={{ color: 'var(--error, #EF4444)', fontWeight: 500, marginBottom: '16px' }}>
+                  Maximum payment retry attempts reached. Please place a new order.
+                </p>
+              )}
             </>
           )}
 
@@ -401,6 +429,17 @@ export default function OrderPage({ params }: { params: Promise<{ id: string }> 
                 style={{ width: '100%', marginTop: '16px', fontWeight: 700 }}
               >
                 Track Delhivery Shipment →
+              </a>
+            )}
+            {order.shipping_provider === 'shiprocket' && (
+              <a
+                href={`https://shiprocket.co/tracking/${order.tracking_id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={styles.btnSecondary}
+                style={{ width: '100%', marginTop: '16px', fontWeight: 700 }}
+              >
+                Track Shiprocket Shipment →
               </a>
             )}
           </section>

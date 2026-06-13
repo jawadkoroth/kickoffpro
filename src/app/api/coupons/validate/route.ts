@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
       return apiError(
         result.reason === 'not_found' || result.reason === 'inactive'
           ? 404
-          : result.reason === 'new_users_only_guest'
+          : result.reason === 'new_users_only_guest' || result.reason === 'auth_required'
             ? 401
             : 403,
         result.message,

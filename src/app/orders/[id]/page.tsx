@@ -51,6 +51,8 @@ type OrderDetail = {
   cancel_reason: string | null;
   created_at: string;
   updated_at: string;
+  tracking_id: string | null;
+  shipping_provider: string | null;
 };
 
 const ALLOWED_STATUSES = [
@@ -142,7 +144,8 @@ export default async function OrderDetailPage({
       id, order_number, user_id,
       subtotal_paise, discount_paise, shipping_paise, cod_fee_paise, total_paise,
       coupon_code, payment_method, payment_status, order_status,
-      customer, shipping_address, cancel_reason, created_at, updated_at
+      customer, shipping_address, cancel_reason, created_at, updated_at,
+      tracking_id, shipping_provider
       `,
     )
     .eq('id', id)
@@ -265,6 +268,45 @@ export default async function OrderDetailPage({
               );
             })}
           </div>
+        </section>
+      )}
+
+      {/* Tracking info */}
+      {order.tracking_id && (
+        <section className={styles.section}>
+          <p className={styles.sectionLabel}>Tracking Info</p>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+            <div>
+              <p className="text-xs text-muted" style={{ margin: 0, opacity: 0.7, fontSize: '0.75rem' }}>Courier Provider</p>
+              <p style={{ fontWeight: 700, textTransform: 'capitalize', margin: '2px 0 0 0', fontSize: '0.9rem' }}>{order.shipping_provider || 'Pending dispatch'}</p>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <p className="text-xs text-muted" style={{ margin: 0, opacity: 0.7, fontSize: '0.75rem' }}>Tracking Waybill</p>
+              <p style={{ fontWeight: 700, fontFamily: 'monospace', margin: '2px 0 0 0', fontSize: '0.9rem' }}>{order.tracking_id}</p>
+            </div>
+          </div>
+          {order.shipping_provider === 'delhivery' && (
+            <a
+              href={`https://www.delhivery.com/track/package/${order.tracking_id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={styles.cardBtnSecondary}
+              style={{ display: 'block', marginTop: '16px', fontWeight: 800 }}
+            >
+              Track Delhivery Shipment →
+            </a>
+          )}
+          {order.shipping_provider === 'shiprocket' && (
+            <a
+              href={`https://shiprocket.co/tracking/${order.tracking_id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={styles.cardBtnSecondary}
+              style={{ display: 'block', marginTop: '16px', fontWeight: 800 }}
+            >
+              Track Shiprocket Shipment →
+            </a>
+          )}
         </section>
       )}
 

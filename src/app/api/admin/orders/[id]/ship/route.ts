@@ -37,21 +37,69 @@ export async function POST(
     if (order.order_status !== 'confirmed') return apiError(400, 'Order must be confirmed first');
     if (order.tracking_id) return apiError(400, 'Shipment already created');
 
-    // 3. Get product info (shared by both paths)
-    const { data: product } = await supabase
-      .from('products')
-      .select('name')
-      .eq('id', order.product_id)
-      .single();
+    // 3. Get product info or line items
+    let productName = 'Product';
+    let totalWeightGrams = 500; // default safe fallback weight
+
+    const { data: pricingRules } = await supabase
+      .from('shipping_pricing_rules')
+      .select('default_weight_grams')
+      .limit(1)
+      .maybeSingle();
+    const defaultWeight = pricingRules?.default_weight_grams ?? 500;
+
+    if (order.product_id) {
+      const { data: product } = await supabase
+        .from('products')
+        .select('*')
+        .eq('id', order.product_id)
+        .single();
+      productName = product?.name || 'Product';
+      const itemWeight = (product && 'weight_grams' in product && typeof product.weight_grams === 'number')
+        ? product.weight_grams
+        : defaultWeight;
+      totalWeightGrams = itemWeight * order.quantity;
+    } else {
+      // Load from order_items for multi-line order
+      const { data: items } = await supabase
+        .from('order_items')
+        .select('product_id, product_name, quantity, size')
+        .eq('order_id', id);
+      
+      if (items && items.length > 0) {
+        // Build name: "Item A (M) x2, Item B (L) x1"
+        productName = items
+          .map((it: any) => `${it.product_name} (${it.size}) x${it.quantity}`)
+          .join(', ')
+          .substring(0, 80); // Cap description length for shipping APIs
+        
+        // Load all products to get their weight_grams
+        const productIds = items.map((it: any) => it.product_id).filter(Boolean);
+        const { data: products } = await supabase
+          .from('products')
+          .select('*')
+          .in('id', productIds);
+        
+        const productMap = new Map((products ?? []).map((p: any) => [p.id, p]));
+        
+        totalWeightGrams = items.reduce((sum: number, it: any) => {
+          const prod = productMap.get(it.product_id);
+          const itemWeight = (prod && 'weight_grams' in prod && typeof prod.weight_grams === 'number')
+            ? prod.weight_grams
+            : defaultWeight;
+          return sum + (itemWeight * (it.quantity ?? 1));
+        }, 0);
+      }
+    }
 
     const shipmentReq = {
       order_number: order.order_number,
       customer: order.customer,
       address: order.shipping_address,
       product: {
-        name: product?.name || 'Product',
+        name: productName,
         quantity: order.quantity,
-        weight_grams: 300,
+        weight_grams: totalWeightGrams,
       },
       payment: {
         method: (order.payment_method === 'cod' ? 'cod' : 'prepaid') as 'cod' | 'prepaid',

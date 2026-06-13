@@ -224,6 +224,8 @@ async function handlePOST(req: NextRequest) {
           code: coupon_code.toUpperCase().trim(),
           reason: evalResult.reason,
         });
+        const status = (evalResult.reason === 'auth_required' || evalResult.reason === 'new_users_only_guest') ? 401 : 409;
+        return apiError(status, evalResult.message, { reason: evalResult.reason });
       }
     }
 
@@ -300,14 +302,42 @@ async function handlePOST(req: NextRequest) {
         return apiError(409, 'Some items in your cart are no longer available. Please review your cart.');
       }
 
-      // Coupon caps: P0002 / P0003.
+      // Coupon validation errors mapped from database custom errors (P0002, P0003, P0006-P0012)
+      if (code === 'P0006' || msg.includes('COUPON_NOT_FOUND')) {
+        logEvent('order.coupon_rejected_db', { code: appliedCoupon, reason: 'not_found' });
+        return apiError(409, 'Invalid or expired coupon code', { reason: 'not_found' });
+      }
+      if (code === 'P0007' || msg.includes('COUPON_INACTIVE')) {
+        logEvent('order.coupon_rejected_db', { code: appliedCoupon, reason: 'inactive' });
+        return apiError(409, 'Invalid or expired coupon code', { reason: 'inactive' });
+      }
+      if (code === 'P0008' || msg.includes('COUPON_NOT_STARTED')) {
+        logEvent('order.coupon_rejected_db', { code: appliedCoupon, reason: 'not_started' });
+        return apiError(409, 'This coupon is not active yet.', { reason: 'not_started' });
+      }
+      if (code === 'P0009' || msg.includes('COUPON_EXPIRED')) {
+        logEvent('order.coupon_rejected_db', { code: appliedCoupon, reason: 'expired' });
+        return apiError(409, 'This coupon has expired.', { reason: 'expired' });
+      }
+      if (code === 'P0010' || msg.includes('COUPON_NEW_USERS_ONLY_GUEST')) {
+        logEvent('order.coupon_rejected_db', { code: appliedCoupon, reason: 'new_users_only_guest' });
+        return apiError(401, 'This coupon is only valid for new accounts. Please sign in to apply it.', { reason: 'new_users_only_guest' });
+      }
+      if (code === 'P0011' || msg.includes('COUPON_NEW_USERS_ONLY_REPEAT')) {
+        logEvent('order.coupon_rejected_db', { code: appliedCoupon, reason: 'new_users_only_repeat' });
+        return apiError(409, 'This coupon is only valid on your first order.', { reason: 'new_users_only_repeat' });
+      }
+      if (code === 'P0012' || msg.includes('COUPON_AUTH_REQUIRED')) {
+        logEvent('order.coupon_rejected_db', { code: appliedCoupon, reason: 'auth_required' });
+        return apiError(401, 'Please sign in to use this coupon.', { reason: 'auth_required' });
+      }
       if (code === 'P0002' || msg.includes('COUPON_PER_USER_LIMIT')) {
         logEvent('order.coupon_per_user_limit_race', { code: appliedCoupon });
-        return apiError(409, 'You have already used this coupon.');
+        return apiError(409, 'You have already used this coupon the maximum number of times.', { reason: 'per_user_limit' });
       }
       if (code === 'P0003' || msg.includes('COUPON_USAGE_LIMIT')) {
         logEvent('order.coupon_usage_limit_race', { code: appliedCoupon });
-        return apiError(409, 'This coupon has reached its usage limit.');
+        return apiError(409, 'This coupon has reached its usage limit.', { reason: 'usage_limit' });
       }
 
       // Empty / invalid items array (defensive — schema already gates).
@@ -358,7 +388,7 @@ async function handlePOST(req: NextRequest) {
       image_url: li.image_url,
     }));
 
-    if (!wasExisting) {
+    if (!wasExisting && payment_method === 'cod') {
       try {
         await enqueue({
           kind: 'email.order_created',

@@ -77,7 +77,7 @@ export async function GET(): Promise<NextResponse> {
     const { data: adminUser } = await supabaseAuth
       .from('admin_users')
       .select('role')
-      .eq('user_id', user.id)
+      .eq('id', user.id)
       .maybeSingle();
 
     if (!adminUser) {
@@ -245,12 +245,26 @@ export async function GET(): Promise<NextResponse> {
       .is('orders.id', null);
 
     // Without history: shipments with no status history entries
-    const { data: shipmentsWithoutHistory } = await supabase
-      .from('shipments')
-      .select('id')
-      .not('id', 'in', supabase
-        .from('shipment_status_history')
-        .select('shipment_id'));
+    const { data: historyRows } = await supabase
+      .from('shipment_status_history')
+      .select('shipment_id');
+    const historyShipmentIds = (historyRows ?? [])
+      .map(h => h.shipment_id)
+      .filter(Boolean) as string[];
+
+    let shipmentsWithoutHistory: { id: string }[] = [];
+    if (historyShipmentIds.length === 0) {
+      const { data } = await supabase
+        .from('shipments')
+        .select('id');
+      shipmentsWithoutHistory = data ?? [];
+    } else {
+      const { data } = await supabase
+        .from('shipments')
+        .select('id')
+        .not('id', 'in', `(${historyShipmentIds.join(',')})`);
+      shipmentsWithoutHistory = data ?? [];
+    }
 
     // Recent invalid state transitions (detected via app_events)
     const { count: invalidTransitions } = await supabase

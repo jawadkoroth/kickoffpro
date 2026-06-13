@@ -169,7 +169,7 @@ async function handlePOST(req: NextRequest) {
   const { data: order, error: lookupError } = await supabase
     .from('orders')
     .select(
-      'id, order_number, payment_status, webhook_event_id, product_id, size, quantity, customer, shipping_address, subtotal_paise, discount_paise, shipping_paise, cod_fee_paise, total_paise, payment_method',
+      'id, order_number, payment_status, order_status, webhook_event_id, product_id, size, quantity, customer, shipping_address, subtotal_paise, discount_paise, shipping_paise, cod_fee_paise, total_paise, payment_method',
     )
     .eq('razorpay_order_id', payment.order_id)
     .single();
@@ -219,13 +219,18 @@ async function handlePOST(req: NextRequest) {
     // double-write. `.select('id')` lets us count actually-mutated
     // rows so we only fire the success email on a genuine
     // pending → paid transition (never twice).
+    const updateFields: Record<string, any> = {
+      payment_status: 'paid',
+      razorpay_payment_id: payment.id,
+      webhook_event_id: eventId,
+    };
+    if (order.order_status === 'pending') {
+      updateFields.order_status = 'confirmed';
+    }
+
     const { data: capturedRows, error: updErr } = await supabase
       .from('orders')
-      .update({
-        payment_status: 'paid',
-        razorpay_payment_id: payment.id,
-        webhook_event_id: eventId,
-      })
+      .update(updateFields)
       .eq('id', order.id)
       .eq('payment_status', 'pending')
       .select('id');
@@ -429,4 +434,22 @@ async function enqueuePaymentEmail(
     },
     supabase,
   );
+
+  if (kind === 'success') {
+    try {
+      await enqueue(
+        {
+          kind: 'email.order_created',
+          idempotencyKey: `email.order_created.${order.id}`,
+          payload: { order: orderPayload },
+        },
+        supabase,
+      );
+    } catch (err) {
+      logEvent('payment.webhook_order_created_email_failed', {
+        order_id: order.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
 }

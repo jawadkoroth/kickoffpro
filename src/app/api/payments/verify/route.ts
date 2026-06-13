@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { apiSuccess, apiError } from '@/lib/api-response';
 import { verifyPaymentSignature } from '@/lib/razorpay';
 import { logEvent } from '@/lib/log';
+import { enqueue } from '@/lib/jobs/queue';
 
 /**
  * POST /api/payments/verify
@@ -83,18 +84,24 @@ export async function POST(req: NextRequest) {
       return apiError(400, 'Payment verification failed');
     }
 
+    const updateFields: Record<string, any> = {
+      payment_status: 'paid',
+      razorpay_payment_id,
+      razorpay_signature,
+    };
+    if (order.order_status === 'pending') {
+      updateFields.order_status = 'confirmed';
+    }
+
     // 4. Conditional flip: only `pending → paid`. If the webhook
     // landed between step 2 and step 4, the WHERE clause keeps us
     // from clobbering its state.
-    const { error: updateError } = await supabase
+    const { data: updatedOrders, error: updateError } = await supabase
       .from('orders')
-      .update({
-        payment_status: 'paid',
-        razorpay_payment_id,
-        razorpay_signature,
-      })
+      .update(updateFields)
       .eq('id', order_id)
-      .eq('payment_status', 'pending');
+      .eq('payment_status', 'pending')
+      .select('id');
 
     if (updateError) {
       logEvent('payment.verify_update_failed', {
@@ -109,15 +116,58 @@ export async function POST(req: NextRequest) {
       order_number: order.order_number,
     });
 
-    // 5. NO email send here.
-    //
-    // The Razorpay webhook is the single source of truth for
-    // payment lifecycle email (`sendPaymentSuccessEmail` /
-    // `sendPaymentFailedEmail`). Sending from this browser fast
-    // path AND the webhook would risk a double-send on the
-    // verify-vs-webhook race — the webhook arrives within seconds
-    // anyway. The order-created email was already sent at
-    // /api/orders, so the customer is not silent in the meantime.
+    // 5. Enqueue order_created email if we won the transition race
+    if (updatedOrders && updatedOrders.length > 0) {
+      try {
+        const { data: itemRows } = await supabase
+          .from('order_items')
+          .select('product_name, size, quantity, unit_price_paise, subtotal_paise, image_url')
+          .eq('order_id', order.id)
+          .order('created_at', { ascending: true });
+
+        const items = (itemRows ?? []).map((row) => ({
+          name: (row as { product_name: string }).product_name,
+          size: (row as { size: string }).size,
+          quantity: (row as { quantity: number }).quantity,
+          unit_price_paise: (row as { unit_price_paise: number }).unit_price_paise,
+          subtotal_paise: (row as { subtotal_paise: number }).subtotal_paise,
+          image_url: (row as { image_url: string | null }).image_url,
+        }));
+
+        const firstItem = items[0];
+        const orderPayload = {
+          id: order.id,
+          order_number: order.order_number,
+          customer: order.customer,
+          product_name: firstItem?.name || 'Product',
+          size: firstItem?.size || '',
+          quantity: firstItem?.quantity ?? 1,
+          subtotal_paise: order.subtotal_paise,
+          discount_paise: order.discount_paise,
+          shipping_paise: order.shipping_paise,
+          cod_fee_paise: order.cod_fee_paise,
+          total_paise: order.total_paise,
+          payment_method: order.payment_method,
+          shipping_address: order.shipping_address,
+          image_url: firstItem?.image_url ?? null,
+          items,
+        };
+
+        await enqueue(
+          {
+            kind: 'email.order_created',
+            idempotencyKey: `email.order_created.${order.id}`,
+            payload: { order: orderPayload },
+          },
+          supabase,
+        );
+      } catch (err) {
+        logEvent('payment.verify_order_created_email_failed', {
+          order_id: order.id,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
 
     return apiSuccess({ message: 'Payment verified successfully' });
   } catch (err) {

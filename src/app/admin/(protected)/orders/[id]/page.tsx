@@ -197,13 +197,29 @@ export default function AdminOrderDetail({ params }: { params: Promise<{ id: str
 
       if (action === 'cancel') {
         if (!cancelReason.trim()) { setActionLoading(''); return; }
-        await supabase.from('orders').update({ order_status: 'cancelled', cancel_reason: cancelReason }).eq('id', id);
-        // Restore stock for every line in the order. Multi-line aware
-        // — `restore_order_stock` loops over every order_items row;
-        // legacy single-line orders backfilled by migration 022 also
-        // have an order_items row, so this works uniformly.
-        await supabase.rpc('restore_order_stock', { p_order_id: id });
-        statusChanged = true;
+        
+        // Fetch current status to ensure transition safety (not_cancelled -> cancelled)
+        const { data: currentOrder } = await supabase
+          .from('orders')
+          .select('order_status, payment_status')
+          .eq('id', id)
+          .single();
+
+        if (currentOrder && currentOrder.order_status !== 'cancelled') {
+          const { data: updatedOrders, error: updateError } = await supabase
+            .from('orders')
+            .update({ order_status: 'cancelled', cancel_reason: cancelReason })
+            .eq('id', id)
+            .in('order_status', ['pending', 'confirmed'])
+            .select('id');
+
+          if (updatedOrders && updatedOrders.length > 0) {
+            if (currentOrder.payment_status !== 'failed') {
+              await supabase.rpc('restore_order_stock', { p_order_id: id });
+            }
+            statusChanged = true;
+          }
+        }
       }
 
       if (action === 'ship') {

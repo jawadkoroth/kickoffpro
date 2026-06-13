@@ -27,11 +27,10 @@ export async function POST(_req: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Verify admin role via admin_users table
     const { data: adminUser } = await supabase
       .from('admin_users')
       .select('role')
-      .eq('user_id', user.id)
+      .eq('id', user.id)
       .maybeSingle();
 
     if (!adminUser) {

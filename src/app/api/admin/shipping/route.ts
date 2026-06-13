@@ -224,5 +224,88 @@ export async function PATCH(req: NextRequest) {
     }
   }
 
+  // Sync state to the new tables to prevent configuration drift
+  const { data: finalSettings } = await auth.supabase
+    .from('shipping_settings')
+    .select('*')
+    .limit(1)
+    .single();
+
+  if (finalSettings) {
+    const providerName = finalSettings.provider_name ?? 'delhivery';
+    const providerUpdate: Record<string, any> = {
+      name: providerName,
+      is_active: finalSettings.provider_enabled ?? false,
+      api_url: finalSettings.api_url ?? null,
+      pickup_name: finalSettings.pickup_name ?? null,
+      pickup_phone: finalSettings.pickup_phone ?? null,
+      pickup_line1: finalSettings.pickup_address_line1 ?? null,
+      pickup_line2: finalSettings.pickup_address_line2 ?? null,
+      pickup_city: finalSettings.pickup_city ?? null,
+      pickup_state: finalSettings.pickup_state ?? null,
+      pickup_pincode: finalSettings.pickup_pincode ?? null,
+      features_cod: finalSettings.cod_enabled ?? true,
+    };
+    if (finalSettings.api_key) {
+      providerUpdate.api_key = finalSettings.api_key;
+    }
+
+    const { data: upsertedProvider } = await auth.supabase
+      .from('shipping_providers')
+      .upsert(providerUpdate, { onConflict: 'name' })
+      .select('id')
+      .single();
+
+    if (upsertedProvider?.id && finalSettings.provider_enabled) {
+      await auth.supabase.rpc('activate_shipping_provider', {
+        p_provider_id: upsertedProvider.id,
+      });
+    }
+
+    // Sync to shipping_pricing_rules
+    const pricingUpdate = {
+      free_shipping_threshold_paise: finalSettings.free_shipping_threshold_paise ?? 0,
+      default_charge_paise: finalSettings.default_shipping_charge_paise ?? 0,
+    };
+    const { data: existingPricing } = await auth.supabase
+      .from('shipping_pricing_rules')
+      .select('id')
+      .limit(1)
+      .maybeSingle();
+
+    if (existingPricing?.id) {
+      await auth.supabase
+        .from('shipping_pricing_rules')
+        .update(pricingUpdate)
+        .eq('id', existingPricing.id);
+    } else {
+      await auth.supabase
+        .from('shipping_pricing_rules')
+        .insert(pricingUpdate);
+    }
+
+    // Sync to cod_rules
+    const codUpdate = {
+      enabled: finalSettings.cod_enabled ?? true,
+      fee_paise: finalSettings.cod_fee_paise ?? 0,
+    };
+    const { data: existingCod } = await auth.supabase
+      .from('cod_rules')
+      .select('id')
+      .limit(1)
+      .maybeSingle();
+
+    if (existingCod?.id) {
+      await auth.supabase
+        .from('cod_rules')
+        .update(codUpdate)
+        .eq('id', existingCod.id);
+    } else {
+      await auth.supabase
+        .from('cod_rules')
+        .insert(codUpdate);
+    }
+  }
+
   return apiSuccess({ updated: true });
 }

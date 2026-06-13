@@ -248,6 +248,21 @@ export async function POST(req: NextRequest) {
       return apiError(400, 'Unsupported action');
   }
 
+  // Fetch previous order states to verify transition safety
+  const { data: previousOrders, error: fetchError } = await admin
+    .from('orders')
+    .select('id, order_status, payment_status')
+    .in('id', ids);
+
+  if (fetchError) {
+    console.error('[ADMIN_ORDERS_BULK_FETCH]', fetchError);
+    return apiError(500, 'Failed to fetch order states');
+  }
+
+  const previousMap = new Map(
+    (previousOrders ?? []).map((o) => [o.id, o as { id: string; order_status: string; payment_status: string }])
+  );
+
   // Constrain by `allowedFromStatus` to avoid stomping rows that
   // are already past this stage (e.g. cancel after shipped).
   const { data, error } = await admin
@@ -260,6 +275,15 @@ export async function POST(req: NextRequest) {
   if (error) {
     console.error('[ADMIN_ORDERS_BULK]', error);
     return apiError(500, 'Bulk action failed');
+  }
+
+  if (action === 'cancel' && data && data.length > 0) {
+    for (const item of data) {
+      const prev = previousMap.get(item.id);
+      if (prev && prev.order_status !== 'cancelled' && prev.payment_status !== 'failed') {
+        await admin.rpc('restore_order_stock', { p_order_id: item.id });
+      }
+    }
   }
 
   return apiSuccess({
