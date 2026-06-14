@@ -55,33 +55,11 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
 }
 
 async function ensureServiceWorker(): Promise<ServiceWorkerRegistration | null> {
-  if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) {
-    return null;
-  }
-  try {
-    return await navigator.serviceWorker.register('/sw-admin.js', { scope: '/admin' });
-  } catch (err) {
-    console.error('[PUSH_SW_REGISTER]', err);
-    return null;
-  }
+  return null;
 }
 
 async function alreadySubscribed(): Promise<boolean> {
-  try {
-    // Prefer the scoped registration we own; fall back to whichever
-    // registration the browser has for this origin. Some iOS / Chrome
-    // combos return null from getRegistration(scope) even after a
-    // successful register() call earlier in the session.
-    const reg =
-      (await navigator.serviceWorker.getRegistration('/admin')) ||
-      (await navigator.serviceWorker.getRegistration()) ||
-      null;
-    if (!reg) return false;
-    const sub = await reg.pushManager.getSubscription();
-    return !!sub;
-  } catch {
-    return false;
-  }
+  return false;
 }
 
 export default function AdminPushPrompt() {
@@ -91,15 +69,6 @@ export default function AdminPushPrompt() {
     if (typeof window === 'undefined') return;
 
     if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) {
-      // iOS Safari only exposes PushManager when the site is installed
-      // as a PWA (iOS 16.4+). If we detect iOS Safari that's NOT in
-      // standalone mode, show an install hint instead of a dead end.
-      if (isIosSafari() && !isStandalonePwa()) {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setState('ios-install');
-        return;
-      }
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setState('unsupported');
       return;
     }
@@ -192,27 +161,8 @@ export default function AdminPushPrompt() {
     }
   }
 
-  if (state === 'unsupported' || state === 'denied' || state === 'pending') {
+  if (state === 'unsupported' || state === 'denied' || state === 'pending' || state === 'ios-install') {
     return null;
-  }
-
-  // iOS Safari (not installed): one-line nudge to install the PWA
-  // because Apple gates Web Push behind Home-Screen installation.
-  if (state === 'ios-install') {
-    return (
-      <span
-        title="Install KickoffPro Admin to your Home Screen to enable push notifications"
-        style={{
-          fontSize: '0.65rem',
-          letterSpacing: '0.08em',
-          color: 'var(--text-muted, #9A9A9A)',
-          marginRight: 8,
-          whiteSpace: 'nowrap',
-        }}
-      >
-        📱 Install to enable alerts
-      </span>
-    );
   }
 
   if (state === 'subscribed') {

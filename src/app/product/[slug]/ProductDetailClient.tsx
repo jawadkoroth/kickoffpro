@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import useEmblaCarousel from 'embla-carousel-react';
 import { useCart } from '@/lib/cart';
@@ -54,7 +54,14 @@ export default function ProductDetailClient({
   const [addedToCart, setAddedToCart] = useState(false);
   const [showSizeGuide, setShowSizeGuide] = useState(false);
 
+  const sizeSelectorRef = useRef<HTMLDivElement>(null);
+
   const isSoldOut = totalStock <= 0;
+
+  // Scroll to top on mount
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
 
   // Embla Carousel
   const [emblaRef, emblaApi] = useEmblaCarousel({ loop: true, dragFree: false });
@@ -110,6 +117,7 @@ export default function ProductDetailClient({
   function handleAddToCart() {
     if (!selectedSize) {
       setSizeError(true);
+      sizeSelectorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       return;
     }
     if (isSoldOut) return;
@@ -132,6 +140,7 @@ export default function ProductDetailClient({
   function handleBuyNow() {
     if (!selectedSize) {
       setSizeError(true);
+      sizeSelectorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       return;
     }
     if (isSoldOut) return;
@@ -221,7 +230,7 @@ export default function ProductDetailClient({
             <p className={styles.description}>{product.description}</p>
 
             {/* Size Selector */}
-            <div className={styles.section}>
+            <div ref={sizeSelectorRef} className={styles.section}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                 <label className="input-label" style={{ margin: 0 }}>Select Size</label>
                 <button

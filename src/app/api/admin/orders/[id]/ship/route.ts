@@ -129,7 +129,12 @@ export async function POST(
       }
       await supabase
         .from('orders')
-        .update({ order_status: 'shipped' })
+        .update({
+          order_status: 'shipped',
+          tracking_id: newPipeResult.trackingId ?? null,
+          label_url: newPipeResult.labelUrl ?? null,
+          label_url_original: newPipeResult.labelUrl ?? null,
+        })
         .eq('id', id);
 
       return apiSuccess({

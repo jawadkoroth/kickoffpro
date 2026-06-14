@@ -465,7 +465,7 @@ async function handlePOST(req: NextRequest) {
           order_number: finalOrderNumber,
           razorpay_order_id: existing.razorpay_order_id,
           amount: existing.total_paise ?? total,
-          key_id: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
+          key_id: process.env.RAZORPAY_KEY_ID || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
           customer,
           idempotent_replay: true,
         });
@@ -516,7 +516,7 @@ async function handlePOST(req: NextRequest) {
       order_number: finalOrderNumber,
       razorpay_order_id: razorpayOrderId,
       amount: total,
-      key_id: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
+      key_id: process.env.RAZORPAY_KEY_ID || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
       customer,
       idempotent_replay: wasExisting,
     });

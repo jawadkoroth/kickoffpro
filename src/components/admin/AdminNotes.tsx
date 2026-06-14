@@ -169,7 +169,7 @@ export default function AdminNotes({ orderId }: AdminNotesProps) {
       background: 'var(--bg-secondary, #141414)',
       border: '1px solid var(--border-color, rgba(255,255,255,0.08))',
       borderRadius: '12px',
-      overflow: 'hidden',
+      overflow: 'visible',
     }}>
       {/* Header */}
       <div style={{
@@ -212,7 +212,7 @@ export default function AdminNotes({ orderId }: AdminNotesProps) {
 
       {/* Notes Thread */}
       <div style={{ 
-        maxHeight: '400px', 
+        maxHeight: '600px', 
         overflowY: 'auto',
         padding: notes.length === 0 ? '32px 20px' : '16px 0',
       }}>

@@ -1,7 +1,6 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
-import { PWADiagnostics } from '@/components/PWADiagnostics';
 import styles from './diagnostics.module.css';
 
 /**
@@ -115,10 +114,7 @@ export default async function DiagnosticsPage({
         <TabNav active={tab} sp={sp} />
       </header>
 
-      {/* PWA Status Section */}
-      <section style={{ marginBottom: 24 }}>
-        <PWADiagnostics />
-      </section>
+
 
       {tab === 'events' ? (
         <EventsView sp={sp} />

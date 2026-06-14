@@ -4,7 +4,7 @@ import crypto from 'crypto';
 let razorpayInstance: Razorpay | null = null;
 
 export function getRazorpay(): Razorpay {
-  const keyId = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
+  const keyId = process.env.RAZORPAY_KEY_ID || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
   const keySecret = process.env.RAZORPAY_KEY_SECRET;
 
   if (!keyId || !keySecret) {
@@ -12,7 +12,7 @@ export function getRazorpay(): Razorpay {
       hasKeyId: !!keyId,
       hasKeySecret: !!keySecret,
     });
-    throw new Error('Razorpay API keys not configured. Check NEXT_PUBLIC_RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET in environment variables.');
+    throw new Error('Razorpay API keys not configured. Check RAZORPAY_KEY_ID / NEXT_PUBLIC_RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET in environment variables.');
   }
 
   if (!razorpayInstance) {
