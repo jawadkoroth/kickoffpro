@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
@@ -273,13 +273,13 @@ export default function AdminRealtimeProvider() {
         ))}
       </div>
 
-      {/* â”€â”€ Mute toggle pill â”€â”€ */}
+      {/* ── Mute toggle pill — positioned top-left below header ── */}
       <button
         onClick={handleMuteToggle}
         style={{
           position: 'fixed',
-          bottom: 'calc(80px + env(safe-area-inset-bottom, 0px))',
-          right: 'max(16px, env(safe-area-inset-right, 0px))',
+          top: 'calc(60px + env(safe-area-inset-top, 0px) + 12px)',
+          left: 'max(16px, env(safe-area-inset-left, 0px))',
           zIndex: 999,
           background: 'rgba(18,18,18,0.88)',
           backdropFilter: 'blur(14px)',
@@ -300,18 +300,18 @@ export default function AdminRealtimeProvider() {
         }}
         title={isMuted ? 'Unmute alerts' : 'Mute alerts'}
       >
-        <span style={{ fontSize: '0.85rem' }}>{isMuted ? 'ðŸ”‡' : 'ðŸ””'}</span>
+        <span style={{ fontSize: '0.85rem' }}>{isMuted ? '🔇' : '🔔'}</span>
         <span>{isMuted ? 'MUTED' : 'SOUND ON'}</span>
       </button>
 
-      {/* â”€â”€ Mute flash indicator â”€â”€ */}
+      {/* ── Mute flash indicator ── */}
       {showMuteIndicator && (
         <div
           style={{
             position: 'fixed',
-            bottom: 'calc(136px + env(safe-area-inset-bottom, 0px))',
-            left: '50%',
-            transform: 'translateX(-50%)',
+            top: 'calc(60px + env(safe-area-inset-top, 0px) + 48px)',
+            left: 'max(16px, env(safe-area-inset-left, 0px))',
+            transform: 'none',
             zIndex: 10000,
             background: 'rgba(18,18,18,0.92)',
             backdropFilter: 'blur(10px)',

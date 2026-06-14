@@ -6,11 +6,11 @@ import FeedbackButton from '@/components/FeedbackButton';
 import Footer from '@/components/footer/Footer';
 import FooterGate from '@/components/footer/FooterGate';
 import { AuthProvider } from '@/lib/auth/AuthProvider';
-import { PWAProvider } from '@/components/PWAProvider';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { SITE_URL, BRAND } from '@/lib/seo/site';
 import { Analytics } from '@vercel/analytics/next';
 import { SpeedInsights } from '@vercel/speed-insights/next';
+import ScrollToTop from '@/components/ScrollToTop';
 
 /**
  * Root metadata.
@@ -62,12 +62,6 @@ export const metadata: Metadata = {
     icon: '/favicon.ico',
     apple: '/icons/icon-192x192.png',
   },
-  manifest: '/manifest.json',
-  appleWebApp: {
-    capable: true,
-    statusBarStyle: 'black-translucent',
-    title: 'KickoffPro Admin',
-  },
 };
 
 /**
@@ -77,6 +71,8 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
+  maximumScale: 5,
+  userScalable: true,
   viewportFit: 'cover',
   themeColor: '#FFFFFF',
 };
@@ -110,6 +106,22 @@ export default async function RootLayout({
             `
           }}
         />
+        {/* Unregister any lingering service workers from previous PWA setup */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                try {
+                  if ('serviceWorker' in navigator) {
+                    navigator.serviceWorker.getRegistrations().then(function(regs) {
+                      regs.forEach(function(r) { r.unregister(); });
+                    });
+                  }
+                } catch (e) {}
+              })();
+            `
+          }}
+        />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link
@@ -118,20 +130,19 @@ export default async function RootLayout({
         />
       </head>
       <body>
-        <PWAProvider>
-          <AuthProvider initialUser={user}>
-            <CartProvider>
-              <Navbar />
-              {children}
-              <FooterGate>
-                <Footer />
-              </FooterGate>
-              <FeedbackButton />
-              <Analytics />
-              <SpeedInsights />
-            </CartProvider>
-          </AuthProvider>
-        </PWAProvider>
+        <AuthProvider initialUser={user}>
+          <CartProvider>
+            <Navbar />
+            {children}
+            <FooterGate>
+              <Footer />
+            </FooterGate>
+            <ScrollToTop />
+            <FeedbackButton />
+            <Analytics />
+            <SpeedInsights />
+          </CartProvider>
+        </AuthProvider>
       </body>
     </html>
   );

@@ -173,7 +173,7 @@ export default function LandingClient({ products }: LandingClientProps) {
       {/* SECTION 1: WORLD CUP HERO */}
       <section className={styles.hero}>
         <div className={styles.heroBackground}>
-          <img src="/product-2.png" alt="Stadium Jersey Atmosphere" loading="eager" />
+          <img src="/hero-stadium.png" alt="Stadium Jersey Atmosphere" loading="eager" />
         </div>
         <div className={styles.heroOverlay} />
         

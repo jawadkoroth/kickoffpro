@@ -299,12 +299,36 @@ img {
 .btn-loading::after {
   content: '';
   position: absolute;
+  top: 50%;
+  left: 50%;
   width: 20px;
   height: 20px;
+  margin-top: -10px;
+  margin-left: -10px;
   border: 2px solid transparent;
   border-top-color: var(--bg-primary);
   border-radius: 50%;
   animation: spin 0.6s linear infinite;
+}
+
+.btn-primary.btn-loading::after {
+  border-top-color: var(--bg-primary);
+}
+
+.btn-secondary.btn-loading::after {
+  border-top-color: var(--text-primary);
+}
+
+.btn-danger.btn-loading::after {
+  border-top-color: #ffffff;
+}
+
+.btn-success.btn-loading::after {
+  border-top-color: #ffffff;
+}
+
+.btn-ghost.btn-loading::after {
+  border-top-color: var(--text-secondary);
 }
 
 @keyframes spin {
@@ -1073,108 +1097,19 @@ img {
 }
 
 /* =============================================
-   PWA — Progressive Web App Styles
+   Mobile — Input Zoom Prevention
    ============================================= */
 
-/* Standalone/PWA mode optimizations */
-@media (display-mode: standalone) {
-  /* Remove browser chrome effects in standalone mode */
-  body {
-    overscroll-behavior-y: none;
-  }
-  
-  /* Prevent pull-to-refresh on mobile */
-  .admin-layout {
-    overscroll-behavior-y: contain;
-  }
-  
-  /* Ensure content doesn't get hidden under nav */
-  .admin-content {
-    padding-bottom: calc(var(--space-8) + 80px);
-  }
-}
-
-/* iOS safe area support */
-@supports (padding-top: env(safe-area-inset-top)) {
-  .admin-header {
-    padding-top: max(var(--space-4), env(safe-area-inset-top));
-  }
-  
-  .admin-content {
-    padding-left: max(var(--space-5), env(safe-area-inset-left));
-    padding-right: max(var(--space-5), env(safe-area-inset-right));
-  }
-}
-
-/* Mobile keyboard handling */
 @media (max-width: 768px) {
   /* Prevent zoom on input focus for iOS */
   input, select, textarea {
     font-size: 16px;
   }
-  
-  /* Ensure fixed elements stay in viewport */
-  .admin-nav {
-    position: fixed;
-    transform: translateZ(0);
-    will-change: transform;
-  }
 }
 
 /* Touch feedback optimization */
 @media (hover: none) and (pointer: coarse) {
-  .admin-nav-item {
-    -webkit-tap-highlight-color: transparent;
-  }
-  
   .btn, button {
     -webkit-tap-highlight-color: rgba(255, 255, 255, 0.05);
   }
-}
-
-/* Offline state indicator styling */
-.offline-indicator {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 9999;
-  background: var(--error);
-  color: white;
-  font-size: 0.6875rem;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-align: center;
-  padding: 6px 12px;
-  text-transform: uppercase;
-}
-
-/* PWA install prompt animations */
-@keyframes slideUp {
-  from {
-    transform: translateY(100%);
-    opacity: 0;
-  }
-  to {
-    transform: translateY(0);
-    opacity: 1;
-  }
-}
-
-.pwa-install-prompt {
-  animation: slideUp 0.3s var(--ease-out);
-}
-
-/* Update available toast */
-.update-toast {
-  position: fixed;
-  bottom: calc(80px + env(safe-area-inset-bottom));
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 9999;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  padding: 12px 20px;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
 }
