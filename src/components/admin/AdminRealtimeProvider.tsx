@@ -47,18 +47,6 @@ interface ToastEntry {
 
 const TOAST_TTL_MS = 6000;
 const MAX_TOASTS = 5;
-const MUTE_STORAGE_KEY = 'kickoffpro_admin_sound_muted';
-
-function getMuteState(): boolean {
-  if (typeof window === 'undefined') return false;
-  try { return localStorage.getItem(MUTE_STORAGE_KEY) === 'true'; } catch { return false; }
-}
-
-function setMuteState(muted: boolean): void {
-  if (typeof window === 'undefined') return;
-  try { localStorage.setItem(MUTE_STORAGE_KEY, muted ? 'true' : 'false'); } catch { /* ignore */ }
-}
-
 function formatPrice(paise: number): string {
   return 'â‚¹' + (paise / 100).toLocaleString('en-IN');
 }
@@ -66,59 +54,6 @@ function formatPrice(paise: number): string {
 function isAppVisible(): boolean {
   if (typeof document === 'undefined') return true;
   return document.visibilityState === 'visible';
-}
-
-/**
- * Premium synthesised SFX â€” zero deps, bandwidth-free.
- * order    â†’ cash register double bell
- * return   â†’ soft neutral descend
- * cancel   â†’ low warning double pulse
- * exchange â†’ bright single ping
- */
-type SoundType = 'order' | 'return' | 'cancel' | 'exchange';
-
-function playAlertSound(type: SoundType = 'order'): void {
-  if (typeof window === 'undefined' || getMuteState()) return;
-  try {
-    const Ctx =
-      (window as unknown as { AudioContext?: typeof AudioContext }).AudioContext ||
-      (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (!Ctx) return;
-    const ctx = new Ctx();
-    const now = ctx.currentTime;
-    const master = ctx.createGain();
-    master.gain.value = 0.14;
-    master.connect(ctx.destination);
-
-    const tone = (freq: number, start: number, dur: number, shape: OscillatorType = 'sine') => {
-      const osc = ctx.createOscillator();
-      const g = ctx.createGain();
-      osc.type = shape;
-      osc.frequency.setValueAtTime(freq, now + start);
-      g.gain.setValueAtTime(0, now + start);
-      g.gain.linearRampToValueAtTime(1, now + start + 0.02);
-      g.gain.exponentialRampToValueAtTime(0.001, now + start + dur);
-      osc.connect(g).connect(master);
-      osc.start(now + start);
-      osc.stop(now + start + dur + 0.05);
-    };
-
-    if (type === 'order') {
-      tone(880, 0, 0.25);         // A5
-      tone(1108.73, 0.09, 0.3);   // C#6 â€” sweet third
-      tone(1318.51, 0.18, 0.25);  // E6 â€” fifth completes triad
-    } else if (type === 'return') {
-      tone(659.25, 0, 0.2);       // E5 â€” soft
-      tone(523.25, 0.12, 0.25);   // C5 â€” descend
-    } else if (type === 'cancel') {
-      tone(293.66, 0, 0.18, 'triangle'); // D4
-      tone(261.63, 0.14, 0.2, 'triangle'); // C4 â€” minor resolve
-    } else if (type === 'exchange') {
-      tone(1174.66, 0, 0.18);     // D6 â€” bright ping
-    }
-
-    setTimeout(() => { ctx.close().catch(() => { }); }, 900);
-  } catch { /* ignore */ }
 }
 
 function vibrate(pattern: number[] = [60, 40, 80]): void {
@@ -151,28 +86,13 @@ function notifyViaServiceWorker(payload: OrderInsertPayload): void {
 
 export default function AdminRealtimeProvider() {
   const [toasts, setToasts] = useState<ToastEntry[]>([]);
-  const [isMuted, setIsMuted] = useState(false);
-  const [showMuteIndicator, setShowMuteIndicator] = useState(false);
   const mountedRef = useRef(true);
   const seenIds = useRef<Set<string>>(new Set());
   const toastIdRef = useRef(0);
 
-  useEffect(() => { 
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setIsMuted(getMuteState()); 
-  }, []);
-
   const dismissToast = useCallback((id: number) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
-
-  const handleMuteToggle = useCallback(() => {
-    const next = !isMuted;
-    setIsMuted(next);
-    setMuteState(next);
-    setShowMuteIndicator(true);
-    setTimeout(() => setShowMuteIndicator(false), 1600);
-  }, [isMuted]);
 
   const handleNewOrder = useCallback((payload: OrderInsertPayload) => {
     if (seenIds.current.has(payload.id)) return;
@@ -204,7 +124,6 @@ export default function AdminRealtimeProvider() {
         if (mountedRef.current) setToasts((prev) => prev.filter((t) => t.id !== entry.id));
       }, TOAST_TTL_MS);
 
-      playAlertSound('order');
       vibrate();
     } else {
       // â”€â”€ Background: route to service worker for rich push â”€â”€
@@ -273,71 +192,7 @@ export default function AdminRealtimeProvider() {
         ))}
       </div>
 
-      {/* ── Mute toggle pill — positioned top-left below header ── */}
-      <button
-        onClick={handleMuteToggle}
-        style={{
-          position: 'fixed',
-          top: 'calc(60px + env(safe-area-inset-top, 0px) + 12px)',
-          left: 'max(16px, env(safe-area-inset-left, 0px))',
-          zIndex: 999,
-          background: 'rgba(18,18,18,0.88)',
-          backdropFilter: 'blur(14px)',
-          WebkitBackdropFilter: 'blur(14px)',
-          border: '1px solid rgba(47,169,245,0.22)',
-          borderRadius: '999px',
-          padding: '7px 14px',
-          fontSize: '0.7rem',
-          fontWeight: 600,
-          letterSpacing: '0.07em',
-          color: isMuted ? 'var(--text-muted, #8A8A8A)' : 'rgba(47,169,245,0.8)',
-          cursor: 'pointer',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '6px',
-          transition: 'all 200ms ease',
-          boxShadow: '0 4px 20px rgba(0,0,0,0.35)',
-        }}
-        title={isMuted ? 'Unmute alerts' : 'Mute alerts'}
-      >
-        <span style={{ fontSize: '0.85rem' }}>{isMuted ? '🔇' : '🔔'}</span>
-        <span>{isMuted ? 'MUTED' : 'SOUND ON'}</span>
-      </button>
-
-      {/* ── Mute flash indicator ── */}
-      {showMuteIndicator && (
-        <div
-          style={{
-            position: 'fixed',
-            top: 'calc(60px + env(safe-area-inset-top, 0px) + 48px)',
-            left: 'max(16px, env(safe-area-inset-left, 0px))',
-            transform: 'none',
-            zIndex: 10000,
-            background: 'rgba(18,18,18,0.92)',
-            backdropFilter: 'blur(10px)',
-            border: '1px solid rgba(47,169,245,0.25)',
-            borderRadius: '8px',
-            padding: '9px 16px',
-            fontSize: '0.75rem',
-            fontWeight: 600,
-            letterSpacing: '0.06em',
-            color: 'var(--blue, #2FA9F5)',
-            pointerEvents: 'none',
-            animation: 'kickoffpro-fade-inout 1.6s ease forwards',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          {isMuted ? 'ðŸ”‡  Alerts muted' : 'ðŸ””  Sound enabled'}
-        </div>
-      )}
-
       <style jsx global>{`
-        @keyframes kickoffpro-fade-inout {
-          0%   { opacity: 0; transform: translateX(-50%) translateY(6px); }
-          12%  { opacity: 1; transform: translateX(-50%) translateY(0); }
-          80%  { opacity: 1; transform: translateX(-50%) translateY(0); }
-          100% { opacity: 0; transform: translateX(-50%) translateY(-6px); }
-        }
         @keyframes kickoffpro-toast-slide-down {
           0%   { opacity: 0; transform: translateY(-18px) scale(0.97); }
           45%  { opacity: 1; transform: translateY(3px) scale(1.005); }

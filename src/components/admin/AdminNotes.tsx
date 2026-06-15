@@ -166,15 +166,15 @@ export default function AdminNotes({ orderId }: AdminNotesProps) {
 
   return (
     <div style={{
-      background: 'var(--bg-secondary, #141414)',
-      border: '1px solid var(--border-color, rgba(255,255,255,0.08))',
+      background: 'var(--bg-secondary, #0A244D)',
+      border: '1px solid var(--border-color)',
       borderRadius: '12px',
       overflow: 'visible',
     }}>
       {/* Header */}
       <div style={{
         padding: '16px 20px',
-        borderBottom: '1px solid var(--border-color, rgba(255,255,255,0.08))',
+        borderBottom: '1px solid var(--border-color)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
@@ -250,8 +250,8 @@ export default function AdminNotes({ orderId }: AdminNotesProps) {
                   key={note.id}
                   style={{
                     padding: '14px 20px',
-                    borderBottom: isLast ? 'none' : '1px solid rgba(255,255,255,0.03)',
-                    background: index % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.015)',
+                    borderBottom: isLast ? 'none' : '1px solid var(--border-color)',
+                    background: index % 2 === 0 ? 'transparent' : 'var(--hover-wash)',
                   }}
                 >
                   <div style={{ display: 'flex', gap: '12px' }}>
@@ -286,14 +286,14 @@ export default function AdminNotes({ orderId }: AdminNotesProps) {
                         <span style={{
                           fontSize: '0.75rem',
                           fontWeight: 600,
-                          color: 'var(--text, #ECECEC)',
+                          color: 'var(--text-primary)',
                           letterSpacing: '-0.01em',
                         }}>
                           {note.admin_email.split('@')[0]}
                         </span>
                         <span style={{
                           fontSize: '0.625rem',
-                          color: 'var(--text-muted, #9A9A9A)',
+                          color: 'var(--text-muted)',
                           fontFamily: 'var(--font-mono, ui-monospace), monospace',
                         }}>
                           {formatTime(note.created_at)}
@@ -328,12 +328,12 @@ export default function AdminNotes({ orderId }: AdminNotesProps) {
                             onChange={(e) => setEditContent(e.target.value)}
                             style={{
                               width: '100%',
-                              background: 'var(--bg-input, #1a1a1a)',
-                              border: '1px solid var(--border-color, rgba(255,255,255,0.1))',
+                              background: 'var(--bg-input)',
+                              border: '1px solid var(--border-color)',
                               borderRadius: '8px',
                               padding: '10px 12px',
                               fontSize: '0.8125rem',
-                              color: 'var(--text, #ECECEC)',
+                              color: 'var(--text-primary)',
                               fontFamily: 'inherit',
                               lineHeight: 1.5,
                               resize: 'vertical',
@@ -351,9 +351,9 @@ export default function AdminNotes({ orderId }: AdminNotesProps) {
                                 fontSize: '0.6875rem',
                                 padding: '6px 12px',
                                 background: 'transparent',
-                                border: '1px solid var(--border-color, rgba(255,255,255,0.15))',
+                                border: '1px solid var(--border-color)',
                                 borderRadius: '6px',
-                                color: 'var(--text-muted, #9A9A9A)',
+                                color: 'var(--text-muted)',
                                 cursor: 'pointer',
                               }}
                             >
@@ -380,7 +380,7 @@ export default function AdminNotes({ orderId }: AdminNotesProps) {
                         <div style={{
                           fontSize: '0.8125rem',
                           lineHeight: 1.6,
-                          color: 'var(--text, #ECECEC)',
+                          color: 'var(--text-primary)',
                           whiteSpace: 'pre-wrap',
                           wordBreak: 'break-word',
                         }}>
@@ -401,7 +401,7 @@ export default function AdminNotes({ orderId }: AdminNotesProps) {
         onSubmit={handleSubmit}
         style={{
           padding: '16px 20px',
-          borderTop: '1px solid var(--border-color, rgba(255,255,255,0.08))',
+          borderTop: '1px solid var(--border-color)',
           background: 'rgba(0,0,0,0.2)',
         }}
       >
@@ -416,12 +416,12 @@ export default function AdminNotes({ orderId }: AdminNotesProps) {
             placeholder="Add an internal note..."
             style={{
               flex: 1,
-              background: 'var(--bg-input, #1a1a1a)',
-              border: '1px solid var(--border-color, rgba(255,255,255,0.1))',
+              background: 'var(--bg-input)',
+              border: '1px solid var(--border-color)',
               borderRadius: '10px',
               padding: '12px 14px',
               fontSize: '0.8125rem',
-              color: 'var(--text, #ECECEC)',
+              color: 'var(--text-primary)',
               fontFamily: 'inherit',
               lineHeight: 1.5,
               resize: 'vertical',
@@ -461,7 +461,7 @@ export default function AdminNotes({ orderId }: AdminNotesProps) {
           alignItems: 'center',
           marginTop: '10px',
           fontSize: '0.6875rem',
-          color: 'var(--text-muted, #9A9A9A)',
+          color: 'var(--text-muted)',
         }}>
           <span>Cmd+Enter to submit quickly • {newNote.length}/{MAX_NOTE_LENGTH}</span>
           <span style={{ opacity: 0.6 }}>Visible to admins only</span>

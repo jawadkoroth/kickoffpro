@@ -250,6 +250,7 @@ export default function AdminOrderDetail({ params }: { params: Promise<{ id: str
       }
 
       await fetchOrder();
+      await fetchShipmentData();
       showToast('Action successful', 'success');
     } catch (err) {
       console.error('Action failed:', err);
