@@ -1,8 +1,8 @@
 name: Drain job queue
 
 on:
-  schedule:
-    - cron: '*/5 * * * *'
+  schedul:
+    - cron:
   workflow_dispatch: {}
 
 concurrency:
