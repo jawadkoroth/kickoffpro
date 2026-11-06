@@ -6,6 +6,7 @@ import useEmblaCarousel from 'embla-carousel-react';
 import { useCart } from '@/lib/cart';
 import { formatPaise } from '@/lib/format';
 import { getPublicUrl } from '@/lib/media';
+import { trackViewContent, trackAddToCart } from '@/lib/tracking/client';
 import { Truck, ShieldCheck, RefreshCw, ShoppingCart, Check } from 'lucide-react';
 import styles from './page.module.css';
 
@@ -58,10 +59,26 @@ export default function ProductDetailClient({
 
   const isSoldOut = totalStock <= 0;
 
-  // Scroll to top on mount
+  // Scroll to top on mount and track ViewContent
   useEffect(() => {
     window.scrollTo(0, 0);
-  }, []);
+    trackViewContent({
+      id: product.id,
+      name: product.name,
+      price: (product.sale_price_paise ?? product.price_paise) / 100,
+    });
+  }, [product.id, product.name, product.price_paise, product.sale_price_paise]);
+
+  // Auto-select size from URL search parameter (e.g. from Google/Meta feed links)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const querySize = params.get('size');
+      if (querySize && product.sizes?.includes(querySize)) {
+        setSelectedSize(querySize);
+      }
+    }
+  }, [product.sizes]);
 
   // Embla Carousel
   const [emblaRef, emblaApi] = useEmblaCarousel({ loop: true, dragFree: false });
@@ -124,14 +141,25 @@ export default function ProductDetailClient({
     const sizeStock = getStock(selectedSize);
     if (sizeStock <= 0) return;
     const images = getImages();
-    addItem({
-      product_id: product.id,
+    addItem(
+      {
+        product_id: product.id,
+        name: product.name,
+        slug: product.slug,
+        size: selectedSize,
+        price_paise: finalPrice,
+        image: images[0],
+        maxStock: sizeStock,
+      },
+      1,
+      { openDrawer: true },
+    );
+    trackAddToCart({
+      id: product.id,
       name: product.name,
-      slug: product.slug,
       size: selectedSize,
-      price_paise: finalPrice,
-      image: images[0],
-      maxStock: sizeStock,
+      price: finalPrice / 100,
+      quantity: 1,
     });
     setAddedToCart(true);
     setTimeout(() => setAddedToCart(false), 2000);
@@ -148,15 +176,19 @@ export default function ProductDetailClient({
     if (sizeStock <= 0) return;
 
     const images = getImages();
-    addItem({
-      product_id: product.id,
-      name: product.name,
-      slug: product.slug,
-      size: selectedSize,
-      price_paise: finalPrice,
-      image: images[0],
-      maxStock: sizeStock,
-    });
+    addItem(
+      {
+        product_id: product.id,
+        name: product.name,
+        slug: product.slug,
+        size: selectedSize,
+        price_paise: finalPrice,
+        image: images[0],
+        maxStock: sizeStock,
+      },
+      1,
+      { openDrawer: false },
+    );
 
     const params = new URLSearchParams({
       product_id: product.id,

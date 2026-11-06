@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { formatPaise } from '@/lib/format';
 import { getPublicUrl } from '@/lib/media';
 import { useCart } from '@/lib/cart';
+import { trackAddToCart } from '@/lib/tracking/client';
 import styles from './ProductCard.module.css';
 
 export interface ProductCardData {
@@ -54,6 +55,14 @@ export default function ProductCard({ product }: { product: ProductCardData }) {
       price_paise: finalPrice,
       image: cover,
       maxStock: 10, // Default fallback
+    });
+
+    trackAddToCart({
+      id: product.id,
+      name: product.name,
+      size: size,
+      price: finalPrice / 100,
+      quantity: 1,
     });
 
     setSelectedSize(size);

@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect, use } from 'react';
+import { useState, useEffect, useRef, use } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth/AuthProvider';
+import { trackPurchase, clearCheckoutEventId } from '@/lib/tracking/client';
 import styles from './page.module.css';
 
 interface OrderLine {
@@ -38,6 +39,7 @@ interface Order {
   updated_at: string;
   retry_count: number;
   cancel_reason?: string | null;
+  tracking_event_id?: string | null;
 }
 
 export default function OrderPage({ params }: { params: Promise<{ id: string }> }) {
@@ -46,6 +48,7 @@ export default function OrderPage({ params }: { params: Promise<{ id: string }> 
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [retrying, setRetrying] = useState(false);
+  const hasTrackedPurchaseRef = useRef(false);
 
   useEffect(() => {
     fetchOrder();
@@ -77,8 +80,41 @@ export default function OrderPage({ params }: { params: Promise<{ id: string }> 
 
       const res = await fetch(url);
       const data = await res.json();
-      if (data.success) {
-        setOrder(data.order);
+      if (data.success && data.order) {
+        const ord = data.order as Order;
+        setOrder(ord);
+
+        // Fire client-side Purchase pixel with matching event_id for deduplication
+        const isSuccessOrder =
+          ord.payment_status.toLowerCase() === 'paid' ||
+          ord.payment_method.toLowerCase() === 'cod';
+
+        if (isSuccessOrder && !hasTrackedPurchaseRef.current) {
+          hasTrackedPurchaseRef.current = true;
+          const searchParams = new URLSearchParams(window.location.search);
+          const eventId =
+            searchParams.get('event_id') ||
+            ord.tracking_event_id ||
+            window.sessionStorage.getItem('kickoffpro_checkout_event_id') ||
+            `order-${ord.id}`;
+
+          trackPurchase({
+            orderId: ord.id,
+            orderNumber: ord.order_number,
+            items: (ord.items ?? []).map((it) => ({
+              id: it.product_id,
+              name: it.product_name,
+              size: it.size,
+              price: it.unit_price_paise / 100,
+              quantity: it.quantity,
+            })),
+            value: ord.total_paise / 100,
+            eventId,
+            customer: ord.customer,
+          });
+
+          clearCheckoutEventId();
+        }
       }
     } catch (err) {
       console.error('Failed to fetch order:', err);

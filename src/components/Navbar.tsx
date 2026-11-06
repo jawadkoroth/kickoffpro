@@ -11,7 +11,7 @@ import styles from './Navbar.module.css';
 
 export default function Navbar() {
   const pathname = usePathname();
-  const { totalItems } = useCart();
+  const { totalItems, openDrawer } = useCart();
   const { user } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -41,10 +41,15 @@ export default function Navbar() {
         </div>
 
         <div className={styles.actions}>
-          <Link href="/cart" className={styles.iconBtn} aria-label="Cart">
+          <button
+            type="button"
+            className={styles.iconBtn}
+            onClick={openDrawer}
+            aria-label="Open Shopping Cart Drawer"
+          >
             <ShoppingCart size={20} />
             {totalItems > 0 && <span className={styles.badge}>{totalItems}</span>}
-          </Link>
+          </button>
 
           <Link href={user ? '/profile' : '/auth'} className={styles.iconBtn} aria-label="Profile">
             <User size={20} />

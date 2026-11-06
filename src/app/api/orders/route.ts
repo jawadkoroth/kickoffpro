@@ -117,7 +117,19 @@ async function handlePOST(req: NextRequest) {
       payment_method,
       coupon_code,
       client_request_id,
+      tracking_event_id,
+      fbp,
+      fbc,
+      gclid,
+      utm_source,
+      utm_medium,
+      utm_campaign,
+      utm_term,
+      utm_content,
     } = parsed.data;
+
+    const clientIp = req.headers.get('x-forwarded-for')?.split(',')[0].trim() || req.headers.get('x-real-ip') || null;
+    const clientUserAgent = req.headers.get('user-agent') || null;
 
     const supabase = createAdminClient();
 
@@ -373,6 +385,33 @@ async function handlePOST(req: NextRequest) {
       was_existing: wasExisting,
     });
 
+    // Save attribution and tracking_event_id on the order
+    const attributionData = {
+      fbp: fbp || null,
+      fbc: fbc || null,
+      gclid: gclid || null,
+      utm_source: utm_source || null,
+      utm_medium: utm_medium || null,
+      utm_campaign: utm_campaign || null,
+      utm_term: utm_term || null,
+      utm_content: utm_content || null,
+      clientIp,
+      clientUserAgent,
+    };
+
+    if (!wasExisting && (tracking_event_id || fbp || fbc || gclid || clientIp || utm_source)) {
+      await supabase
+        .from('orders')
+        .update({
+          tracking_event_id: tracking_event_id || null,
+          attribution_data: attributionData,
+          utm_source: utm_source || null,
+          utm_medium: utm_medium || null,
+          utm_campaign: utm_campaign || null,
+        })
+        .eq('id', orderId);
+    }
+
     // 9. Lifecycle email + admin push, durably enqueued. Email
     //    payload carries BOTH the new `items: [...]` array AND
     //    legacy fields populated from the FIRST line so the current
@@ -437,6 +476,39 @@ async function handlePOST(req: NextRequest) {
         tag: `order-${orderId}`,
         url: `/admin/orders/${orderId}`,
       });
+
+      // Enqueue server-side Conversions API (Meta CAPI, Google, Snapchat)
+      try {
+        await enqueue(
+          {
+            kind: 'tracking.capi_purchase',
+            idempotencyKey: `tracking.capi_purchase.${orderId}`,
+            payload: {
+              orderId,
+              orderNumber: finalOrderNumber,
+              totalPaise: total,
+              eventId: tracking_event_id || `order-${orderId}`,
+              customer,
+              shippingAddress: shipping_address,
+              items: lineItems.map((li) => ({
+                product_id: li.product_id,
+                product_name: li.product_name,
+                size: li.size,
+                quantity: li.quantity,
+                unit_price_paise: li.unit_price_paise,
+                subtotal_paise: li.subtotal_paise,
+              })),
+              attribution: attributionData,
+            },
+          },
+          supabase,
+        );
+      } catch (err) {
+        logEvent('order.tracking_enqueue_failed', {
+          order_id: orderId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
     }
 
     // 10. COD short-circuits here; online proceeds to Razorpay handoff.
@@ -445,6 +517,7 @@ async function handlePOST(req: NextRequest) {
         order_id: orderId,
         order_number: finalOrderNumber,
         total_paise: total,
+        tracking_event_id: tracking_event_id || null,
         idempotent_replay: wasExisting,
       });
     }
@@ -518,6 +591,7 @@ async function handlePOST(req: NextRequest) {
       amount: total,
       key_id: process.env.RAZORPAY_KEY_ID || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
       customer,
+      tracking_event_id: tracking_event_id || null,
       idempotent_replay: wasExisting,
     });
   } catch (err) {

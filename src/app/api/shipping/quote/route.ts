@@ -7,17 +7,40 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 /**
+ * GET /api/shipping/quote
+ *
+ * Expose public shipping settings (threshold, default charge, cod fee)
+ * so storefront components (Cart Drawer, Banner, PDP) can dynamically
+ * track free shipping thresholds and calculate savings without requiring
+ * hardcoded values.
+ */
+export async function GET() {
+  try {
+    const supabase = createAdminClient();
+    const { data: settings } = await supabase
+      .from('shipping_settings')
+      .select(
+        'free_shipping_threshold_paise, default_shipping_charge_paise, cod_enabled, cod_fee_paise',
+      )
+      .limit(1)
+      .maybeSingle();
+
+    return apiSuccess({
+      free_shipping_threshold_paise: settings?.free_shipping_threshold_paise ?? 99900,
+      default_shipping_charge_paise: settings?.default_shipping_charge_paise ?? 9900,
+      cod_enabled: settings?.cod_enabled !== false,
+      cod_fee_paise: settings?.cod_fee_paise ?? 5000,
+    });
+  } catch (err) {
+    console.error('[SHIPPING_SETTINGS_GET_ERROR]', err);
+    return apiError(500, 'Failed to fetch shipping settings');
+  }
+}
+
+/**
  * POST /api/shipping/quote
  *
- * Estimate shipping + COD fee + total for the checkout UI. This
- * route is a pure read: it loads the singleton `shipping_settings`
- * row server-side, runs the shared `calcShipping` rules, and
- * returns the breakdown. No DB writes, no authentication required
- * (guests check out too).
- *
- * The returned numbers are NOT authoritative — `/api/orders` re-runs
- * `calcShipping` with the same inputs at order creation time and
- * persists the authoritative total to the DB.
+ * Estimate shipping + COD fee + total for the checkout & cart UI.
  */
 export async function POST(req: NextRequest) {
   try {
@@ -33,8 +56,6 @@ export async function POST(req: NextRequest) {
       paymentMethodRaw === 'cod' ? 'cod' : 'online';
 
     const supabase = createAdminClient();
-    // Expose ONLY pricing-relevant columns — never the API key or
-    // pickup PII — to keep this public route tight.
     const { data: settings } = await supabase
       .from('shipping_settings')
       .select(
@@ -55,6 +76,9 @@ export async function POST(req: NextRequest) {
       totalPaise: result.totalPaise,
       codAllowed: result.codAllowed,
       codEnabled: settings?.cod_enabled !== false,
+      freeShippingThresholdPaise: settings?.free_shipping_threshold_paise ?? 99900,
+      defaultShippingChargePaise: settings?.default_shipping_charge_paise ?? 9900,
+      codFeePaiseSetting: settings?.cod_fee_paise ?? 5000,
     });
   } catch (err) {
     console.error('[SHIPPING_QUOTE_ERROR]', err);

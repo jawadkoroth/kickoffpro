@@ -15,6 +15,7 @@ const NAV_ITEMS = [
   { href: '/admin/customers', label: 'Customers', icon: '👥' },
   { href: '/admin/coupons', label: 'Coupons', icon: '🏷️' },
   { href: '/admin/shipping', label: 'Shipping', icon: '🚚' },
+  { href: '/admin/ads', label: 'Ads & CAPI', icon: '🎯' },
   { href: '/admin/diagnostics', label: 'Diagnostics', icon: '🩺' },
 ];
 

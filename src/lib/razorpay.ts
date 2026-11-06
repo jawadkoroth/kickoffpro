@@ -39,6 +39,15 @@ export function verifyPaymentSignature(
     return false;
   }
 
+  if (!orderId || !paymentId || !signature) {
+    return false;
+  }
+
+  const trimmedSig = signature.trim().toLowerCase();
+  if (!/^[0-9a-f]{64}$/.test(trimmedSig)) {
+    return false;
+  }
+
   const body = `${orderId}|${paymentId}`;
   const expectedSignature = crypto
     .createHmac('sha256', keySecret)
@@ -46,13 +55,50 @@ export function verifyPaymentSignature(
     .digest('hex');
 
   const expectedBuffer = Buffer.from(expectedSignature, 'hex');
-  const signatureBuffer = Buffer.from(signature.toLowerCase(), 'hex');
+  const signatureBuffer = Buffer.from(trimmedSig, 'hex');
 
   if (expectedBuffer.length !== signatureBuffer.length) {
-    // Perform dummy timingSafeEqual against expectedBuffer to consume constant time
     crypto.timingSafeEqual(expectedBuffer, expectedBuffer);
     return false;
   }
 
   return crypto.timingSafeEqual(expectedBuffer, signatureBuffer);
+}
+
+/**
+ * Verify Cashfree webhook signature using HMAC-SHA256.
+ * Supports standard timestamp + rawBody HMAC-SHA256 base64 or hex digest.
+ */
+export function verifyCashfreeWebhookSignature(
+  rawBody: string,
+  signature: string,
+  timestamp: string,
+  secret: string
+): boolean {
+  if (!rawBody || !signature || !secret || !timestamp) {
+    return false;
+  }
+
+  const payload = `${timestamp}${rawBody}`;
+  const expectedBase64 = crypto
+    .createHmac('sha256', secret)
+    .update(payload)
+    .digest('base64');
+  const expectedHex = crypto
+    .createHmac('sha256', secret)
+    .update(payload)
+    .digest('hex');
+
+  const sigBuf = Buffer.from(signature.trim());
+  const expBase64Buf = Buffer.from(expectedBase64);
+  const expHexBuf = Buffer.from(expectedHex);
+
+  if (sigBuf.length === expBase64Buf.length && crypto.timingSafeEqual(sigBuf, expBase64Buf)) {
+    return true;
+  }
+  if (sigBuf.length === expHexBuf.length && crypto.timingSafeEqual(sigBuf, expHexBuf)) {
+    return true;
+  }
+
+  return false;
 }

@@ -41,7 +41,7 @@ import {
  *    To swap in a database-backed cart later, replace `loadCart` /
  *    `saveCart` and the corresponding effects; the public context
  *    surface (addItem / updateQuantity / removeItem / clearCart /
- *    applyValidation / getTotal) is intentionally storage-agnostic.
+ *    swapSize / applyValidation / getTotal) is intentionally storage-agnostic.
  */
 export interface CartItem {
   product_id: string;
@@ -89,9 +89,10 @@ interface ApplyValidationSummary {
 
 interface CartContextType {
   items: CartItem[];
-  addItem: (item: Omit<CartItem, 'quantity'>, qty?: number) => void;
+  addItem: (item: Omit<CartItem, 'quantity'>, qty?: number, options?: { openDrawer?: boolean }) => void;
   removeItem: (product_id: string, size: string) => void;
   updateQuantity: (product_id: string, size: string, qty: number) => void;
+  swapSize: (product_id: string, currentSize: string, newSize: string) => void;
   clearCart: () => void;
   applyValidation: (result: CartValidationResult) => ApplyValidationSummary;
   totalItems: number;
@@ -110,6 +111,12 @@ interface CartContextType {
   validatedAt: number | null;
   /** True if a non-zero number of items have been validated and not mutated since. */
   isValidationFresh: (maxAgeMs?: number) => boolean;
+
+  /** Slide-out "Magic" Cart Drawer state & controls */
+  isDrawerOpen: boolean;
+  openDrawer: () => void;
+  closeDrawer: () => void;
+  toggleDrawer: () => void;
 }
 
 const CartContext = createContext<CartContextType | null>(null);
@@ -168,6 +175,11 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [validatedAt, setValidatedAt] = useState<number | null>(null);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+
+  const openDrawer = useCallback(() => setIsDrawerOpen(true), []);
+  const closeDrawer = useCallback(() => setIsDrawerOpen(false), []);
+  const toggleDrawer = useCallback(() => setIsDrawerOpen(prev => !prev), []);
 
   // Tracks the last JSON we wrote to localStorage so the storage
   // listener can ignore echoes of our own writes.
@@ -192,11 +204,6 @@ export function CartProvider({ children }: { children: ReactNode }) {
   }, [items, loaded]);
 
   // Multi-tab sync: respond to writes in sibling tabs only.
-  //
-  // Bursts of writes from another tab (e.g. holding the `+` button)
-  // would otherwise trigger a re-render per event. We coalesce by
-  // recording the latest payload and applying it on a short timer;
-  // a fresh event resets the timer so only the final value lands.
   useEffect(() => {
     if (typeof window === 'undefined') return;
     let pendingPayload: string | null = null;
@@ -219,9 +226,6 @@ export function CartProvider({ children }: { children: ReactNode }) {
         if (reserialized === lastSerializedRef.current) return;
         lastSerializedRef.current = reserialized;
         setItems(sanitized);
-        // A sibling-tab mutation invalidates our last server
-        // validation snapshot — quantities or composition just
-        // changed without going through `applyValidation`.
         setValidatedAt(null);
       } catch {
         // Ignore malformed payloads from other tabs.
@@ -245,9 +249,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const addItem = useCallback(
-    (item: Omit<CartItem, 'quantity'>, qty = 1) => {
-      // Defence-in-depth: PDP should already block this, but never
-      // silently push a sold-out line into the cart.
+    (item: Omit<CartItem, 'quantity'>, qty = 1, options?: { openDrawer?: boolean }) => {
       if (!item.maxStock || item.maxStock <= 0) return;
       const safeQty = Math.max(1, Math.floor(qty));
 
@@ -257,8 +259,6 @@ export function CartProvider({ children }: { children: ReactNode }) {
         );
         if (idx >= 0) {
           const existing = prev[idx];
-          // Always overwrite maxStock with the freshest snapshot the
-          // PDP just observed.
           const merged = {
             ...existing,
             ...item,
@@ -274,8 +274,12 @@ export function CartProvider({ children }: { children: ReactNode }) {
           { ...item, quantity: Math.min(safeQty, item.maxStock) },
         ];
       });
-      // Local mutation invalidates the validation snapshot.
       setValidatedAt(null);
+
+      // Open drawer on add unless explicitly disabled
+      if (options?.openDrawer ?? true) {
+        setIsDrawerOpen(true);
+      }
     },
     [],
   );
@@ -298,9 +302,6 @@ export function CartProvider({ children }: { children: ReactNode }) {
           i.product_id === product_id && i.size === size
             ? {
               ...i,
-              // Clamp to `[1, maxStock]`. If maxStock is 0 (legacy
-              // entry pre-revalidation), keep the existing quantity
-              // rather than zero it out — revalidation will fix it.
               quantity:
                 i.maxStock > 0
                   ? Math.min(Math.max(1, Math.floor(qty)), i.maxStock)
@@ -312,6 +313,56 @@ export function CartProvider({ children }: { children: ReactNode }) {
       setValidatedAt(null);
     },
     [removeItem],
+  );
+
+  const swapSize = useCallback(
+    (product_id: string, currentSize: string, newSize: string) => {
+      if (currentSize === newSize) return;
+
+      setItems(prev => {
+        const currentItemIndex = prev.findIndex(
+          i => i.product_id === product_id && i.size === currentSize,
+        );
+        if (currentItemIndex === -1) return prev;
+
+        const currentItem = prev[currentItemIndex];
+        const existingTargetIndex = prev.findIndex(
+          i => i.product_id === product_id && i.size === newSize,
+        );
+
+        if (existingTargetIndex !== -1) {
+          // Merge current line into existing target size
+          const targetItem = prev[existingTargetIndex];
+          const mergedQty = targetItem.quantity + currentItem.quantity;
+          const clampedQty = targetItem.maxStock > 0
+            ? Math.min(mergedQty, targetItem.maxStock)
+            : mergedQty;
+
+          return prev
+            .filter((_, idx) => idx !== currentItemIndex)
+            .map(item => {
+              if (item.product_id === product_id && item.size === newSize) {
+                return { ...item, quantity: clampedQty };
+              }
+              return item;
+            });
+        }
+
+        // Clean size swap
+        return prev.map((item, idx) => {
+          if (idx === currentItemIndex) {
+            return {
+              ...item,
+              size: newSize,
+            };
+          }
+          return item;
+        });
+      });
+
+      setValidatedAt(null);
+    },
+    [],
   );
 
   const clearCart = useCallback(() => {
@@ -327,7 +378,6 @@ export function CartProvider({ children }: { children: ReactNode }) {
       };
 
       setItems(prev => {
-        // Map by composite key for O(1) lookup against validation rows.
         const byKey = new Map<string, CartValidationEntry>();
         for (const entry of result.items) {
           byKey.set(`${entry.product_id}::${entry.size}`, entry);
@@ -337,19 +387,10 @@ export function CartProvider({ children }: { children: ReactNode }) {
         for (const line of prev) {
           const entry = byKey.get(`${line.product_id}::${line.size}`);
           if (!entry) {
-            // Server didn't return this line (shouldn't happen, but
-            // be defensive: keep it untouched).
             next.push(line);
             continue;
           }
 
-          // Hard-remove any line that the server says is unsellable.
-          // `removed` covers inactive products and missing inventory
-          // rows; `maxStock === 0` covers the common case of an
-          // active product whose size is currently out of stock
-          // (server returns removed=false, maxStock=0). Both must
-          // drop the line outright — never clamp to 1, never keep
-          // a ghost line that would block checkout downstream.
           if (entry.removed || entry.maxStock <= 0) {
             summary.removedItems.push(line);
             continue;
@@ -359,8 +400,6 @@ export function CartProvider({ children }: { children: ReactNode }) {
           if (clampedQty !== line.quantity || entry.maxStock !== line.maxStock) {
             const updated = {
               ...line,
-              // Safe floor of 1 here only because the entry has
-              // already been proven sellable (maxStock > 0).
               quantity: Math.max(1, clampedQty),
               maxStock: entry.maxStock,
             };
@@ -375,11 +414,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         return next;
       });
 
-      // Mark as freshly validated so consumers (e.g. checkout) can
-      // skip a redundant round-trip when they navigate immediately
-      // after a successful /cart validation.
       setValidatedAt(Date.now());
-
       return summary;
     },
     [],
@@ -410,6 +445,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       addItem,
       removeItem,
       updateQuantity,
+      swapSize,
       clearCart,
       applyValidation,
       totalItems,
@@ -417,12 +453,17 @@ export function CartProvider({ children }: { children: ReactNode }) {
       getTotal,
       validatedAt,
       isValidationFresh,
+      isDrawerOpen,
+      openDrawer,
+      closeDrawer,
+      toggleDrawer,
     }),
     [
       items,
       addItem,
       removeItem,
       updateQuantity,
+      swapSize,
       clearCart,
       applyValidation,
       totalItems,
@@ -430,6 +471,10 @@ export function CartProvider({ children }: { children: ReactNode }) {
       getTotal,
       validatedAt,
       isValidationFresh,
+      isDrawerOpen,
+      openDrawer,
+      closeDrawer,
+      toggleDrawer,
     ],
   );
 

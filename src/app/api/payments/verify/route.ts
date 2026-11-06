@@ -4,6 +4,7 @@ import { apiSuccess, apiError } from '@/lib/api-response';
 import { verifyPaymentSignature } from '@/lib/razorpay';
 import { logEvent } from '@/lib/log';
 import { enqueue } from '@/lib/jobs/queue';
+import { notifyAdminsBestEffort } from '@/lib/push/webPush';
 
 /**
  * POST /api/payments/verify
@@ -60,7 +61,7 @@ export async function POST(req: NextRequest) {
       return apiSuccess({ message: 'Payment already verified' });
     }
 
-    // 3. Verify the signature.
+    // 3. Verify the signature cryptographically using HMAC-SHA256 with constant-time equality.
     const isValid = verifyPaymentSignature(
       order.razorpay_order_id,
       razorpay_payment_id,
@@ -116,7 +117,7 @@ export async function POST(req: NextRequest) {
       order_number: order.order_number,
     });
 
-    // 5. Enqueue order_created email if we won the transition race
+    // 5. Enqueue lifecycle jobs and send admin push if we won the transition race
     if (updatedOrders && updatedOrders.length > 0) {
       try {
         const { data: itemRows } = await supabase
@@ -153,6 +154,16 @@ export async function POST(req: NextRequest) {
           items,
         };
 
+        // Enqueue payment success and order created emails with idempotent keys
+        await enqueue(
+          {
+            kind: 'email.payment_success',
+            idempotencyKey: `email.payment_success.${order.id}.${razorpay_payment_id}`,
+            payload: { order: orderPayload },
+          },
+          supabase,
+        );
+
         await enqueue(
           {
             kind: 'email.order_created',
@@ -161,8 +172,60 @@ export async function POST(req: NextRequest) {
           },
           supabase,
         );
+
+        // Record in payment_webhook_events table for uniform audit & idempotency
+        await supabase
+          .from('payment_webhook_events')
+          .insert({
+            provider: 'razorpay_verify',
+            event_id: razorpay_payment_id,
+            order_id: order.id,
+            event_type: 'payment.verified',
+            payload: { razorpay_order_id: order.razorpay_order_id, razorpay_payment_id },
+          });
+
+        // Fire-and-forget push notification to store admins
+        const lineSummary =
+          items.length === 1
+            ? `${firstItem?.name || 'Item'} · ${firstItem?.size || ''} × ${firstItem?.quantity || 1}`
+            : `${items.length} items`;
+        await notifyAdminsBestEffort(supabase, {
+          title: `New paid order ${order.order_number}`,
+          body: `${lineSummary} — ₹${(order.total_paise / 100).toLocaleString('en-IN')}`,
+          tag: `order-${order.id}`,
+          url: `/admin/orders/${order.id}`,
+        });
+
+        // Enqueue server-side Conversions API (Meta CAPI, Google, Snapchat)
+        const trackingEventId = order.tracking_event_id || `order-${order.id}`;
+        const attribution = order.attribution_data || {};
+
+        await enqueue(
+          {
+            kind: 'tracking.capi_purchase',
+            idempotencyKey: `tracking.capi_purchase.${order.id}`,
+            payload: {
+              orderId: order.id,
+              orderNumber: order.order_number,
+              totalPaise: order.total_paise,
+              eventId: trackingEventId,
+              customer: order.customer,
+              shippingAddress: order.shipping_address,
+              items: items.map((i) => ({
+                product_id: i.name,
+                product_name: i.name,
+                size: i.size,
+                quantity: i.quantity,
+                unit_price_paise: i.unit_price_paise,
+                subtotal_paise: i.subtotal_paise,
+              })),
+              attribution,
+            },
+          },
+          supabase,
+        );
       } catch (err) {
-        logEvent('payment.verify_order_created_email_failed', {
+        logEvent('payment.verify_enqueue_failed', {
           order_id: order.id,
           error: err instanceof Error ? err.message : String(err),
         });

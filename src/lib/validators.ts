@@ -51,6 +51,16 @@ export const createOrderSchema = z.object({
    * of creating a duplicate or double-decrementing inventory.
    */
   client_request_id: z.string().uuid(),
+  /** Optional attribution and CAPI deduplication fields */
+  tracking_event_id: z.string().optional(),
+  fbp: z.string().optional(),
+  fbc: z.string().optional(),
+  gclid: z.string().optional(),
+  utm_source: z.string().optional(),
+  utm_medium: z.string().optional(),
+  utm_campaign: z.string().optional(),
+  utm_term: z.string().optional(),
+  utm_content: z.string().optional(),
 });
 
 export const validateCouponSchema = z.object({

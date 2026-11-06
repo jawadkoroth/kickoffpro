@@ -1,0 +1,640 @@
+/* ==========================================================================
+   KickoffPro Admin — Ads Management & CAPI Observability Stylesheet
+   Modular theme design powered by customizable CSS custom properties.
+   ========================================================================== */
+
+.page {
+  /* Brand-ready CSS Variables: easily interchangeable for future brand themes */
+  --ads-bg-page: transparent;
+  --ads-card-bg: var(--bg-elevated, #ffffff);
+  --ads-card-secondary: var(--bg-secondary, #f8fafc);
+  --ads-border: var(--border-color, #e2e8f0);
+  --ads-border-light: var(--border-light, #cbd5e1);
+  --ads-border-focus: var(--brand-blue, #2fa9f5);
+  
+  --ads-text-primary: var(--text-primary, #071b3a);
+  --ads-text-secondary: var(--text-secondary, #334155);
+  --ads-text-muted: var(--text-muted, #64748b);
+  
+  --ads-primary: var(--brand-blue, #2fa9f5);
+  --ads-gold: var(--accent-gold, #ffc928);
+  --ads-navy: var(--brand-navy, #071b3a);
+  
+  --ads-success: var(--success, #22c55e);
+  --ads-warning: var(--warning, #ffc928);
+  --ads-error: var(--error, #ef4444);
+  --ads-info: var(--info, #2fa9f5);
+  
+  --ads-radius-sm: var(--radius-sm, 6px);
+  --ads-radius-md: var(--radius-md, 10px);
+  --ads-radius-lg: var(--radius-lg, 16px);
+  --ads-radius-pill: var(--radius-full, 9999px);
+
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6, 24px);
+  color: var(--ads-text-primary);
+  padding-bottom: var(--space-12, 48px);
+}
+
+/* Header & Action Bar */
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4, 16px);
+}
+
+.titleArea {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.title {
+  font-family: var(--font-sans);
+  font-size: 1.5rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--ads-navy);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.subtitle {
+  font-size: 0.85rem;
+  color: var(--ads-text-muted);
+  margin: 0;
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.refreshButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--ads-card-bg);
+  border: 1px solid var(--ads-border);
+  border-radius: var(--ads-radius-pill);
+  padding: 6px 14px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--ads-text-secondary);
+  cursor: pointer;
+  transition: all 180ms ease;
+}
+
+.refreshButton:hover:not(:disabled) {
+  border-color: var(--ads-primary);
+  color: var(--ads-primary);
+  background: var(--ads-card-secondary);
+}
+
+.refreshButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.lastUpdated {
+  font-size: 0.72rem;
+  color: var(--ads-text-muted);
+}
+
+/* Overview KPI Cards Grid */
+.overviewGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: var(--space-4, 16px);
+}
+
+.kpiCard {
+  background: var(--ads-card-bg);
+  border: 1px solid var(--ads-border);
+  border-radius: var(--ads-radius-md);
+  padding: var(--space-4, 16px) var(--space-5, 20px);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.kpiCardTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.kpiLabel {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ads-text-muted);
+}
+
+.kpiIcon {
+  font-size: 1.1rem;
+}
+
+.kpiValue {
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: var(--ads-navy);
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.kpiSubtext {
+  font-size: 0.75rem;
+  color: var(--ads-text-muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.badgeHighlight {
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(47, 169, 245, 0.1);
+  color: var(--ads-primary);
+}
+
+.badgeSuccess {
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(34, 197, 94, 0.1);
+  color: var(--ads-success);
+}
+
+/* Sections */
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3, 12px);
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.sectionTitle {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--ads-navy);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sectionDesc {
+  font-size: 0.8rem;
+  color: var(--ads-text-muted);
+  margin: 0;
+}
+
+/* CAPI Observability Grid */
+.capiGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+  gap: var(--space-4, 16px);
+}
+
+.capiProviderCard {
+  background: var(--ads-card-bg);
+  border: 1px solid var(--ads-border);
+  border-radius: var(--ads-radius-md);
+  padding: var(--space-5, 20px);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  position: relative;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.capiProviderHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.providerBrand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.providerLogo {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 0.9rem;
+}
+
+.metaLogo {
+  background: #1877f2;
+  color: #ffffff;
+}
+
+.googleLogo {
+  background: #ea4335;
+  color: #ffffff;
+}
+
+.snapLogo {
+  background: #fffc00;
+  color: #000000;
+}
+
+.queueLogo {
+  background: var(--ads-navy);
+  color: #ffffff;
+}
+
+.providerName {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--ads-navy);
+}
+
+.providerSub {
+  font-size: 0.72rem;
+  color: var(--ads-text-muted);
+}
+
+.statusPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: var(--ads-radius-pill);
+  letter-spacing: 0.02em;
+}
+
+.statusPillOnline {
+  background: rgba(34, 197, 94, 0.12);
+  color: var(--ads-success);
+  border: 1px solid rgba(34, 197, 94, 0.25);
+}
+
+.statusPillOffline {
+  background: rgba(239, 68, 68, 0.12);
+  color: var(--ads-error);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+.statusPillPending {
+  background: rgba(255, 201, 40, 0.15);
+  color: #b48300;
+  border: 1px solid rgba(255, 201, 40, 0.35);
+}
+
+.pulseDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  display: inline-block;
+}
+
+.capiStatsRow {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  background: var(--ads-card-secondary);
+  border-radius: var(--ads-radius-sm);
+  padding: 10px;
+}
+
+.capiStatItem {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 2px;
+}
+
+.capiStatVal {
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: var(--ads-navy);
+}
+
+.capiStatLbl {
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--ads-text-muted);
+}
+
+.rateBarWrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rateBarLabels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--ads-text-secondary);
+}
+
+.rateTrack {
+  height: 6px;
+  background: var(--ads-border);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.rateFill {
+  height: 100%;
+  background: var(--ads-success);
+  border-radius: 3px;
+  transition: width 400ms ease;
+}
+
+.rateFillWarning {
+  background: var(--ads-warning);
+}
+
+.rateFillError {
+  background: var(--ads-error);
+}
+
+.lastEventText {
+  font-size: 0.7rem;
+  color: var(--ads-text-muted);
+}
+
+/* Campaign Performance & Filters */
+.cardContainer {
+  background: var(--ads-card-bg);
+  border: 1px solid var(--ads-border);
+  border-radius: var(--ads-radius-md);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  overflow: hidden;
+}
+
+.toolbar {
+  padding: var(--space-4, 16px);
+  border-bottom: 1px solid var(--ads-border);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--ads-card-secondary);
+}
+
+.filterChips {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip {
+  padding: 5px 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: var(--ads-radius-pill);
+  border: 1px solid var(--ads-border);
+  background: var(--ads-card-bg);
+  color: var(--ads-text-secondary);
+  cursor: pointer;
+  transition: all 160ms ease;
+}
+
+.chip:hover {
+  border-color: var(--ads-primary);
+  color: var(--ads-primary);
+}
+
+.chipActive {
+  background: var(--ads-navy);
+  border-color: var(--ads-navy);
+  color: #ffffff;
+}
+
+.searchBox {
+  display: flex;
+  align-items: center;
+  background: var(--ads-card-bg);
+  border: 1px solid var(--ads-border);
+  border-radius: var(--ads-radius-pill);
+  padding: 4px 12px;
+  width: 240px;
+}
+
+.searchInput {
+  border: none;
+  background: transparent;
+  outline: none;
+  font-size: 0.8rem;
+  color: var(--ads-text-primary);
+  width: 100%;
+}
+
+.searchInput::placeholder {
+  color: var(--ads-text-muted);
+}
+
+/* Data Table */
+.tableWrapper {
+  overflow-x: auto;
+  width: 100%;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 0.82rem;
+}
+
+.th {
+  background: var(--ads-card-bg);
+  color: var(--ads-text-muted);
+  font-weight: 700;
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--ads-border);
+  white-space: nowrap;
+}
+
+.thSortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.thSortable:hover {
+  color: var(--ads-text-primary);
+}
+
+.td {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--ads-border);
+  color: var(--ads-text-primary);
+  vertical-align: middle;
+}
+
+.tr:hover {
+  background: rgba(15, 23, 42, 0.02);
+}
+
+.sourcePill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+
+.sourceMeta {
+  background: rgba(24, 119, 242, 0.1);
+  color: #1877f2;
+}
+
+.sourceGoogle {
+  background: rgba(234, 67, 53, 0.1);
+  color: #ea4335;
+}
+
+.sourceSnap {
+  background: rgba(255, 252, 0, 0.25);
+  color: #7a6e00;
+}
+
+.sourceOrganic {
+  background: rgba(100, 116, 139, 0.1);
+  color: #64748b;
+}
+
+.campaignName {
+  font-weight: 600;
+  color: var(--ads-navy);
+}
+
+.mediumTag {
+  font-size: 0.72rem;
+  color: var(--ads-text-muted);
+  font-family: monospace;
+}
+
+.metricBold {
+  font-weight: 700;
+  color: var(--ads-navy);
+}
+
+.conversionBar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.miniProgress {
+  width: 50px;
+  height: 5px;
+  background: var(--ads-border);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.miniFill {
+  height: 100%;
+  background: var(--ads-success);
+  border-radius: 3px;
+}
+
+.emptyState {
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--ads-text-muted);
+  font-size: 0.85rem;
+}
+
+/* Recent Logs Drawer / Collapsible List */
+.logsTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+}
+
+.logEventTag {
+  font-family: monospace;
+  font-weight: 600;
+  font-size: 0.75rem;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--ads-card-secondary);
+  border: 1px solid var(--ads-border);
+}
+
+.logSuccess {
+  color: var(--ads-success);
+}
+
+.logError {
+  color: var(--ads-error);
+}
+
+.logInfo {
+  color: var(--ads-info);
+}
+
+.logPayloadJson {
+  font-family: monospace;
+  font-size: 0.7rem;
+  background: #0f172a;
+  color: #38bdf8;
+  padding: 8px 12px;
+  border-radius: 6px;
+  margin-top: 6px;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* Loading & Skeletons */
+.skeleton {
+  background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: 4px;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+

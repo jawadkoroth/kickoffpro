@@ -14,7 +14,7 @@ export async function GET(
     // Fetch the order using admin client to get user_id and customer info for auth checks
     const { data: order, error } = await supabaseAdmin
       .from('orders')
-      .select('id, user_id, order_number, subtotal_paise, discount_paise, shipping_paise, cod_fee_paise, total_paise, payment_method, payment_status, order_status, customer, shipping_address, tracking_id, shipping_provider, created_at, updated_at, retry_count')
+      .select('id, user_id, order_number, subtotal_paise, discount_paise, shipping_paise, cod_fee_paise, total_paise, payment_method, payment_status, order_status, customer, shipping_address, tracking_id, shipping_provider, created_at, updated_at, retry_count, tracking_event_id')
       .eq('id', id)
       .single();
 

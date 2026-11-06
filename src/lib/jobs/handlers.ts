@@ -8,6 +8,10 @@ import {
   type OrderStatusForEmail,
 } from '@/lib/email';
 import { notifyAdmins, type AdminPushPayload } from '@/lib/push/webPush';
+import {
+  dispatchServerPurchaseTracking,
+  type ServerPurchaseEventData,
+} from '@/lib/tracking/server';
 
 /**
  * KickoffPro — job handler registry.
@@ -72,6 +76,16 @@ const handlers: Record<string, JobHandler> = {
     if (result.sent === 0 && result.errored > 0 && result.pruned === 0) {
       throw new Error(`push fan-out errored: ${result.errored} subs`);
     }
+  },
+
+  // ---- tracking.* -------------------------------------------------
+  'tracking.capi_purchase': async (payload) => {
+    const data = (payload as { trackingData?: ServerPurchaseEventData })?.trackingData ||
+      (payload as unknown as ServerPurchaseEventData);
+    if (!data || !data.orderId || !data.orderNumber) {
+      throw new Error('tracking.capi_purchase payload missing order details');
+    }
+    await dispatchServerPurchaseTracking(data);
   },
 };
 

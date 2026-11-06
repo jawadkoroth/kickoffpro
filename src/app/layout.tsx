@@ -2,7 +2,9 @@ import type { Metadata, Viewport } from 'next';
 import '@/styles/globals.css';
 import { CartProvider } from '@/lib/cart';
 import Navbar from '@/components/Navbar';
+import CartDrawer from '@/components/cart/CartDrawer';
 import FeedbackButton from '@/components/FeedbackButton';
+import PixelScripts from '@/components/tracking/PixelScripts';
 import Footer from '@/components/footer/Footer';
 import FooterGate from '@/components/footer/FooterGate';
 import { AuthProvider } from '@/lib/auth/AuthProvider';
@@ -133,12 +135,14 @@ export default async function RootLayout({
         <AuthProvider initialUser={user}>
           <CartProvider>
             <Navbar />
+            <CartDrawer />
             {children}
             <FooterGate>
               <Footer />
             </FooterGate>
             <ScrollToTop />
             <FeedbackButton />
+            <PixelScripts />
             <Analytics />
             <SpeedInsights />
           </CartProvider>

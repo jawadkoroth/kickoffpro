@@ -5,6 +5,14 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { useCart } from '@/lib/cart';
+import {
+  getOrCreateCheckoutEventId,
+  getFbp,
+  getFbc,
+  getGclid,
+  getUtmParameters,
+  trackInitiateCheckout,
+} from '@/lib/tracking/client';
 import styles from './page.module.css';
 
 /**
@@ -88,6 +96,34 @@ function CheckoutContent() {
     }
     return cartItems;
   }, [isBuyNow, productId, sizeParam, cartItems]);
+
+  // CAPI & Ad tracking event_id persistence (UUID)
+  const trackingEventIdRef = useRef<string>('');
+  const hasTrackedInitiateRef = useRef(false);
+
+  useEffect(() => {
+    if (!trackingEventIdRef.current) {
+      trackingEventIdRef.current = getOrCreateCheckoutEventId();
+    }
+  }, []);
+
+  useEffect(() => {
+    if (checkoutItems.length > 0 && !hasTrackedInitiateRef.current) {
+      hasTrackedInitiateRef.current = true;
+      const subtotal = checkoutItems.reduce((s, i) => s + (i.price_paise * i.quantity), 0);
+      trackInitiateCheckout({
+        items: checkoutItems.map((i) => ({
+          id: i.product_id,
+          name: i.name,
+          size: i.size,
+          price: i.price_paise / 100,
+          quantity: i.quantity,
+        })),
+        value: subtotal / 100,
+        eventId: trackingEventIdRef.current,
+      });
+    }
+  }, [checkoutItems]);
 
   // Server-authoritative coupon state. `discountPaise` is what
   // /api/coupons/validate returns for the CURRENT subtotal; it
@@ -518,6 +554,11 @@ function CheckoutContent() {
           payment_method: paymentMethod,
           coupon_code: couponCode || undefined,
           client_request_id: clientRequestId,
+          tracking_event_id: trackingEventIdRef.current || undefined,
+          fbp: getFbp() || undefined,
+          fbc: getFbc() || undefined,
+          gclid: getGclid() || undefined,
+          ...getUtmParameters(),
         }),
       });
 
@@ -584,6 +625,7 @@ function CheckoutContent() {
         const queryParams = new URLSearchParams();
         if (email) queryParams.set('email', email);
         if (phone) queryParams.set('phone', phone);
+        if (trackingEventIdRef.current) queryParams.set('event_id', trackingEventIdRef.current);
         const queryStr = queryParams.toString();
         router.push(`/order/${data.order_id}${queryStr ? '?' + queryStr : ''}`);
       }
@@ -654,6 +696,7 @@ function CheckoutContent() {
         const queryParams = new URLSearchParams();
         if (orderData.customer.email) queryParams.set('email', orderData.customer.email);
         if (orderData.customer.phone) queryParams.set('phone', orderData.customer.phone);
+        if (trackingEventIdRef.current) queryParams.set('event_id', trackingEventIdRef.current);
 
         try {
           const verifyRes = await fetch('/api/payments/verify', {

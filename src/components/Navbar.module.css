@@ -92,6 +92,9 @@
   justify-content: center;
   padding: var(--space-2);
   border-radius: 50%;
+  background: transparent;
+  border: none;
+  cursor: pointer;
   transition: background-color 0.2s ease, transform 0.2s ease;
 }
 
