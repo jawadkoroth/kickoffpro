@@ -66,6 +66,16 @@ const READ_COLUMNS = [
   'default_shipping_charge_paise',
   'cod_enabled',
   'cod_fee_paise',
+  'promo_banner_enabled',
+  'promo_goal_type',
+  'promo_goal_threshold_paise',
+  'promo_goal_item_count',
+  'promo_progress_template',
+  'promo_unlocked_text',
+  'promo_nudge_enabled',
+  'promo_nudge_title',
+  'promo_nudge_badge',
+  'promo_nudge_text',
 ].join(', ');
 
 export async function GET() {
@@ -189,6 +199,42 @@ export async function PATCH(req: NextRequest) {
     if (v === null && body.cod_fee_paise !== 0)
       return apiError(400, 'Invalid cod_fee_paise');
     update.cod_fee_paise = v ?? 0;
+  }
+
+  // Promotional Drawer & Banner customization
+  if (typeof (body as any).promo_banner_enabled === 'boolean') {
+    update.promo_banner_enabled = (body as any).promo_banner_enabled;
+  }
+  if (typeof (body as any).promo_goal_type === 'string') {
+    update.promo_goal_type = (body as any).promo_goal_type === 'item_count' ? 'item_count' : 'amount';
+  }
+  if ((body as any).promo_goal_threshold_paise !== undefined) {
+    const v = toIntOrNull((body as any).promo_goal_threshold_paise);
+    if (v !== null || (body as any).promo_goal_threshold_paise === 0) {
+      update.promo_goal_threshold_paise = v ?? 0;
+    }
+  }
+  if ((body as any).promo_goal_item_count !== undefined) {
+    const v = toIntOrNull((body as any).promo_goal_item_count);
+    if (v !== null) update.promo_goal_item_count = v;
+  }
+  if (typeof (body as any).promo_progress_template === 'string') {
+    update.promo_progress_template = toStringOrNull((body as any).promo_progress_template) || 'Add {remaining} more to unlock FREE SHIPPING';
+  }
+  if (typeof (body as any).promo_unlocked_text === 'string') {
+    update.promo_unlocked_text = toStringOrNull((body as any).promo_unlocked_text) || 'You unlocked FREE Standard Shipping!';
+  }
+  if (typeof (body as any).promo_nudge_enabled === 'boolean') {
+    update.promo_nudge_enabled = (body as any).promo_nudge_enabled;
+  }
+  if (typeof (body as any).promo_nudge_title === 'string') {
+    update.promo_nudge_title = toStringOrNull((body as any).promo_nudge_title) || 'Pay with UPI & Save {cod_fee}';
+  }
+  if (typeof (body as any).promo_nudge_badge === 'string') {
+    update.promo_nudge_badge = toStringOrNull((body as any).promo_nudge_badge) || 'LOWEST PRICE';
+  }
+  if (typeof (body as any).promo_nudge_text === 'string') {
+    update.promo_nudge_text = toStringOrNull((body as any).promo_nudge_text) || 'Instant UPI avoids the {cod_fee} COD handling charge and guarantees Priority Dispatch within 24 hours.';
   }
 
   if (Object.keys(update).length === 0) {

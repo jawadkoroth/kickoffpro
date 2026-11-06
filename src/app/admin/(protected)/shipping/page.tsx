@@ -22,9 +22,19 @@ interface SettingsState {
   default_shipping_charge_paise: number;
   cod_enabled: boolean;
   cod_fee_paise: number;
+  promo_banner_enabled: boolean;
+  promo_goal_type: 'amount' | 'item_count';
+  promo_goal_threshold_paise: number;
+  promo_goal_item_count: number;
+  promo_progress_template: string;
+  promo_unlocked_text: string;
+  promo_nudge_enabled: boolean;
+  promo_nudge_title: string;
+  promo_nudge_badge: string;
+  promo_nudge_text: string;
 }
 
-type Tab = 'providers' | 'pricing' | 'cod' | 'diagnostics';
+type Tab = 'providers' | 'pricing' | 'promotions' | 'cod' | 'diagnostics';
 
 /* ─────────────────────────────────────────────────────────────────────
    Constants
@@ -45,6 +55,16 @@ const EMPTY: SettingsState = {
   default_shipping_charge_paise: 0,
   cod_enabled: true,
   cod_fee_paise: 0,
+  promo_banner_enabled: true,
+  promo_goal_type: 'amount',
+  promo_goal_threshold_paise: 99900,
+  promo_goal_item_count: 2,
+  promo_progress_template: 'Add {remaining} more to unlock FREE SHIPPING',
+  promo_unlocked_text: 'You unlocked FREE Standard Shipping!',
+  promo_nudge_enabled: true,
+  promo_nudge_title: 'Pay with UPI & Save {cod_fee}',
+  promo_nudge_badge: 'LOWEST PRICE',
+  promo_nudge_text: 'Instant UPI avoids the {cod_fee} COD handling charge and guarantees Priority Dispatch within 24 hours.',
 };
 
 const PROVIDER_META: Record<string, { label: string; defaultUrl: string; description: string }> = {
@@ -170,6 +190,7 @@ function CapPill({ label, active }: { label: string; active: boolean }) {
 const TABS: { id: Tab; label: string }[] = [
   { id: 'providers', label: 'Providers' },
   { id: 'pricing', label: 'Pricing' },
+  { id: 'promotions', label: 'Drawer & Offers' },
   { id: 'cod', label: 'COD' },
   { id: 'diagnostics', label: 'Diagnostics' },
 ];
@@ -587,6 +608,268 @@ function PricingTab({
   );
 }
 
+function PromotionsTab({
+  state, onStateChange, promoThresholdRs, setPromoThresholdRs, codFeeRs, onSave, saving,
+}: {
+  state: SettingsState;
+  onStateChange: (patch: Partial<SettingsState>) => void;
+  promoThresholdRs: string; setPromoThresholdRs: (v: string) => void;
+  codFeeRs: string; onSave: () => void; saving: boolean;
+}) {
+  const currentCodFeeText = codFeeRs && Number(codFeeRs) > 0 ? `₹${codFeeRs}` : '₹50';
+  const previewRemaining = state.promo_goal_type === 'item_count' ? '1 item' : '₹349';
+
+  const previewProgressText = (state.promo_progress_template || 'Add {remaining} more to unlock FREE SHIPPING')
+    .replace(/\{remaining\}/g, previewRemaining)
+    .replace(/\{remaining_items\}/g, '1 item');
+
+  const previewNudgeTitle = (state.promo_nudge_title || 'Pay with UPI & Save {cod_fee}')
+    .replace(/\{cod_fee\}/g, currentCodFeeText);
+
+  const previewNudgeText = (state.promo_nudge_text || 'Instant UPI avoids the {cod_fee} COD handling charge and guarantees Priority Dispatch within 24 hours.')
+    .replace(/\{cod_fee\}/g, currentCodFeeText);
+
+  return (
+    <div>
+      <div style={{ marginBottom: 24 }}>
+        <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: 0, lineHeight: 1.6 }}>
+          Configure dynamic promotional messaging, bundle discount goals, and RTO-reduction nudges inside the slide-out Magic Cart Drawer.
+        </p>
+      </div>
+
+      {/* ── Live Preview Card ── */}
+      <div style={{
+        padding: '18px 20px',
+        background: 'var(--bg-input)',
+        borderRadius: 'var(--radius-md)',
+        border: '1px solid var(--border-color)',
+        marginBottom: 28,
+      }}>
+        <div style={{ fontSize: '0.5625rem', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 12 }}>
+          Live Cart Drawer Preview
+        </div>
+
+        {/* Promo Bar Preview */}
+        {state.promo_banner_enabled ? (
+          <div style={{
+            background: 'var(--bg-secondary)',
+            border: '1px solid var(--border-color)',
+            borderRadius: 8,
+            padding: '12px 14px',
+            marginBottom: 14,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>
+              <span>🚚</span>
+              <span>{previewProgressText}</span>
+            </div>
+            <div style={{ height: 6, width: '100%', background: 'var(--border-color)', borderRadius: 99, overflow: 'hidden' }}>
+              <div style={{ width: '65%', height: '100%', background: 'var(--brand-primary, #0052FF)', borderRadius: 99 }} />
+            </div>
+          </div>
+        ) : (
+          <div style={{ padding: '8px 12px', background: 'var(--bg-secondary)', borderRadius: 6, fontSize: '0.6875rem', color: 'var(--text-muted)', marginBottom: 14, border: '1px dashed var(--border-color)' }}>
+            Promotional progress bar is currently hidden.
+          </div>
+        )}
+
+        {/* Nudge Card Preview */}
+        {state.promo_nudge_enabled ? (
+          <div style={{
+            background: 'rgba(255, 179, 0, 0.08)',
+            border: '1px solid rgba(255, 179, 0, 0.25)',
+            borderRadius: 8,
+            padding: '12px 14px',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 4 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.8125rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                <span>⚡</span>
+                <span>{previewNudgeTitle}</span>
+              </div>
+              {state.promo_nudge_badge && (
+                <span style={{ fontSize: '0.5625rem', fontWeight: 700, letterSpacing: '0.08em', padding: '2px 6px', background: 'rgba(255, 179, 0, 0.2)', color: 'var(--text-primary)', borderRadius: 4 }}>
+                  {state.promo_nudge_badge}
+                </span>
+              )}
+            </div>
+            <p style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', margin: 0, lineHeight: 1.4 }}>
+              {previewNudgeText}
+            </p>
+          </div>
+        ) : (
+          <div style={{ padding: '8px 12px', background: 'var(--bg-secondary)', borderRadius: 6, fontSize: '0.6875rem', color: 'var(--text-muted)', border: '1px dashed var(--border-color)' }}>
+            Prepaid conversion nudge card is currently hidden.
+          </div>
+        )}
+      </div>
+
+      {/* ── Section 1: Progress Goal & Banner ── */}
+      <SectionRule label="Progress Bar & Goal" />
+
+      <div style={{ marginBottom: 16 }}>
+        <ToggleRow
+          title="Promotional Progress Banner"
+          subtitle="Display dynamic unlock progress tracker at the top of Cart Drawer"
+          checked={state.promo_banner_enabled}
+          onChange={(v) => onStateChange({ promo_banner_enabled: v })}
+        />
+      </div>
+
+      {state.promo_banner_enabled && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 20 }}>
+          {/* Goal Type Selector */}
+          <div className="input-group">
+            <label className="input-label">Goal Target Type</label>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <button
+                type="button"
+                onClick={() => onStateChange({ promo_goal_type: 'amount' })}
+                style={{
+                  padding: '10px 14px',
+                  borderRadius: 'var(--radius-sm)',
+                  border: `1px solid ${state.promo_goal_type === 'amount' ? 'var(--brand-primary, #0052FF)' : 'var(--border-color)'}`,
+                  background: state.promo_goal_type === 'amount' ? 'rgba(0, 82, 255, 0.08)' : 'var(--bg-input)',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                }}
+              >
+                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-primary)' }}>Order Value (₹)</div>
+                <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 2 }}>e.g. Free shipping over ₹999</div>
+              </button>
+              <button
+                type="button"
+                onClick={() => onStateChange({ promo_goal_type: 'item_count' })}
+                style={{
+                  padding: '10px 14px',
+                  borderRadius: 'var(--radius-sm)',
+                  border: `1px solid ${state.promo_goal_type === 'item_count' ? 'var(--brand-primary, #0052FF)' : 'var(--border-color)'}`,
+                  background: state.promo_goal_type === 'item_count' ? 'rgba(0, 82, 255, 0.08)' : 'var(--bg-input)',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                }}
+              >
+                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-primary)' }}>Bundle Count (Items)</div>
+                <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 2 }}>e.g. Add 2 tees for free delivery</div>
+              </button>
+            </div>
+          </div>
+
+          {/* Goal Target input */}
+          {state.promo_goal_type === 'amount' ? (
+            <Field label="Goal Threshold Amount (₹)" hint="Cart total required to unlock">
+              <input
+                className="input-field"
+                type="number"
+                min={0}
+                step={1}
+                placeholder="999"
+                value={promoThresholdRs}
+                onChange={(e) => setPromoThresholdRs(e.target.value)}
+              />
+            </Field>
+          ) : (
+            <Field label="Goal Item Count" hint="Number of items required in cart">
+              <input
+                className="input-field"
+                type="number"
+                min={1}
+                max={50}
+                step={1}
+                placeholder="2"
+                value={state.promo_goal_item_count || 2}
+                onChange={(e) => onStateChange({ promo_goal_item_count: Math.max(1, parseInt(e.target.value, 10) || 1) })}
+              />
+            </Field>
+          )}
+
+          {/* Progress Template */}
+          <Field
+            label="In-Progress Copy Template"
+            hint="Supports {remaining} or {remaining_items}"
+          >
+            <input
+              className="input-field"
+              type="text"
+              placeholder="Add {remaining} more to unlock FREE SHIPPING"
+              value={state.promo_progress_template}
+              onChange={(e) => onStateChange({ promo_progress_template: e.target.value })}
+            />
+          </Field>
+
+          {/* Unlocked Message */}
+          <Field label="Unlocked Congratulations Message" hint="Rendered when goal is reached">
+            <input
+              className="input-field"
+              type="text"
+              placeholder="You unlocked FREE Standard Shipping!"
+              value={state.promo_unlocked_text}
+              onChange={(e) => onStateChange({ promo_unlocked_text: e.target.value })}
+            />
+          </Field>
+        </div>
+      )}
+
+      {/* ── Section 2: Prepaid Conversion Nudge ── */}
+      <SectionRule label="Prepaid Nudge (Low RTO)" />
+
+      <div style={{ marginBottom: 16 }}>
+        <ToggleRow
+          title="Prepaid Conversion Nudge"
+          subtitle="Incentivize UPI prepaid checkout to eliminate COD returns and RTO losses"
+          checked={state.promo_nudge_enabled}
+          onChange={(v) => onStateChange({ promo_nudge_enabled: v })}
+        />
+      </div>
+
+      {state.promo_nudge_enabled && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div className="input-row">
+            <Field label="Nudge Title" hint="Supports {cod_fee}">
+              <input
+                className="input-field"
+                type="text"
+                placeholder="Pay with UPI & Save {cod_fee}"
+                value={state.promo_nudge_title}
+                onChange={(e) => onStateChange({ promo_nudge_title: e.target.value })}
+              />
+            </Field>
+            <Field label="Badge Text" hint="Small pill badge">
+              <input
+                className="input-field"
+                type="text"
+                placeholder="LOWEST PRICE"
+                value={state.promo_nudge_badge}
+                onChange={(e) => onStateChange({ promo_nudge_badge: e.target.value })}
+              />
+            </Field>
+          </div>
+
+          <Field label="Nudge Description Text" hint="Supports {cod_fee}">
+            <textarea
+              className="input-field"
+              rows={2}
+              style={{ resize: 'vertical', minHeight: 64 }}
+              placeholder="Instant UPI avoids the {cod_fee} COD handling charge and guarantees Priority Dispatch within 24 hours."
+              value={state.promo_nudge_text}
+              onChange={(e) => onStateChange({ promo_nudge_text: e.target.value })}
+            />
+          </Field>
+        </div>
+      )}
+
+      <div style={{ marginTop: 28, paddingTop: 20, borderTop: '1px solid var(--border-color)' }}>
+        <button
+          className={`btn btn-primary btn-sm${saving ? ' btn-loading' : ''}`}
+          onClick={onSave}
+          disabled={saving}
+          style={{ width: 'auto', minWidth: 150 }}
+        >
+          SAVE PROMOTIONS
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function CodTab({
   state, onStateChange, codFeeRs, setCodFeeRs, errors, onSave, saving,
 }: {
@@ -984,6 +1267,7 @@ export default function AdminShipping() {
   const [freeThresholdRs, setFreeThresholdRs] = useState('');
   const [shippingChargeRs, setShippingChargeRs] = useState('');
   const [codFeeRs, setCodFeeRs] = useState('');
+  const [promoThresholdRs, setPromoThresholdRs] = useState('');
   const [newApiKey, setNewApiKey] = useState('');
 
   const { toast, showToast } = useToast();
@@ -1006,11 +1290,22 @@ export default function AdminShipping() {
         pickup_city: raw.pickup_city ?? '',
         pickup_state: raw.pickup_state ?? '',
         pickup_pincode: raw.pickup_pincode ?? '',
+        promo_banner_enabled: raw.promo_banner_enabled ?? EMPTY.promo_banner_enabled,
+        promo_goal_type: raw.promo_goal_type ?? EMPTY.promo_goal_type,
+        promo_goal_threshold_paise: raw.promo_goal_threshold_paise ?? EMPTY.promo_goal_threshold_paise,
+        promo_goal_item_count: raw.promo_goal_item_count ?? EMPTY.promo_goal_item_count,
+        promo_progress_template: raw.promo_progress_template ?? EMPTY.promo_progress_template,
+        promo_unlocked_text: raw.promo_unlocked_text ?? EMPTY.promo_unlocked_text,
+        promo_nudge_enabled: raw.promo_nudge_enabled ?? EMPTY.promo_nudge_enabled,
+        promo_nudge_title: raw.promo_nudge_title ?? EMPTY.promo_nudge_title,
+        promo_nudge_badge: raw.promo_nudge_badge ?? EMPTY.promo_nudge_badge,
+        promo_nudge_text: raw.promo_nudge_text ?? EMPTY.promo_nudge_text,
       };
       setState(s);
       setFreeThresholdRs(paiseToRupees(s.free_shipping_threshold_paise));
       setShippingChargeRs(paiseToRupees(s.default_shipping_charge_paise));
       setCodFeeRs(paiseToRupees(s.cod_fee_paise));
+      setPromoThresholdRs(paiseToRupees(s.promo_goal_threshold_paise));
     } catch {
       showToast('Failed to load shipping settings', 'error');
     } finally {
@@ -1058,6 +1353,16 @@ export default function AdminShipping() {
       default_shipping_charge_paise: rupeesToPaise(shippingChargeRs),
       cod_enabled: state.cod_enabled,
       cod_fee_paise: rupeesToPaise(codFeeRs),
+      promo_banner_enabled: state.promo_banner_enabled,
+      promo_goal_type: state.promo_goal_type,
+      promo_goal_threshold_paise: rupeesToPaise(promoThresholdRs),
+      promo_goal_item_count: Number(state.promo_goal_item_count) || 2,
+      promo_progress_template: state.promo_progress_template,
+      promo_unlocked_text: state.promo_unlocked_text,
+      promo_nudge_enabled: state.promo_nudge_enabled,
+      promo_nudge_title: state.promo_nudge_title,
+      promo_nudge_badge: state.promo_nudge_badge,
+      promo_nudge_text: state.promo_nudge_text,
     };
     if (newApiKey.trim().length > 0) payload.api_key = newApiKey.trim();
     try {
@@ -1123,6 +1428,17 @@ export default function AdminShipping() {
             freeThresholdRs={freeThresholdRs} setFreeThresholdRs={setFreeThresholdRs}
             shippingChargeRs={shippingChargeRs} setShippingChargeRs={setShippingChargeRs}
             errors={errors} onSave={handleSave} saving={saving}
+          />
+        )}
+        {activeTab === 'promotions' && (
+          <PromotionsTab
+            state={state}
+            onStateChange={(patch) => setState((s) => ({ ...s, ...patch }))}
+            promoThresholdRs={promoThresholdRs}
+            setPromoThresholdRs={setPromoThresholdRs}
+            codFeeRs={codFeeRs}
+            onSave={handleSave}
+            saving={saving}
           />
         )}
         {activeTab === 'cod' && (

@@ -20,7 +20,7 @@ export async function GET() {
     const { data: settings } = await supabase
       .from('shipping_settings')
       .select(
-        'free_shipping_threshold_paise, default_shipping_charge_paise, cod_enabled, cod_fee_paise',
+        'free_shipping_threshold_paise, default_shipping_charge_paise, cod_enabled, cod_fee_paise, promo_banner_enabled, promo_goal_type, promo_goal_threshold_paise, promo_goal_item_count, promo_progress_template, promo_unlocked_text, promo_nudge_enabled, promo_nudge_title, promo_nudge_badge, promo_nudge_text',
       )
       .limit(1)
       .maybeSingle();
@@ -30,6 +30,16 @@ export async function GET() {
       default_shipping_charge_paise: settings?.default_shipping_charge_paise ?? 9900,
       cod_enabled: settings?.cod_enabled !== false,
       cod_fee_paise: settings?.cod_fee_paise ?? 5000,
+      promo_banner_enabled: settings?.promo_banner_enabled !== false,
+      promo_goal_type: settings?.promo_goal_type || 'amount',
+      promo_goal_threshold_paise: settings?.promo_goal_threshold_paise ?? settings?.free_shipping_threshold_paise ?? 99900,
+      promo_goal_item_count: settings?.promo_goal_item_count ?? 2,
+      promo_progress_template: settings?.promo_progress_template || 'Add {remaining} more to unlock FREE SHIPPING',
+      promo_unlocked_text: settings?.promo_unlocked_text || 'You unlocked FREE Standard Shipping!',
+      promo_nudge_enabled: settings?.promo_nudge_enabled !== false,
+      promo_nudge_title: settings?.promo_nudge_title || 'Pay with UPI & Save {cod_fee}',
+      promo_nudge_badge: settings?.promo_nudge_badge || 'LOWEST PRICE',
+      promo_nudge_text: settings?.promo_nudge_text || 'Instant UPI avoids the {cod_fee} COD handling charge and guarantees Priority Dispatch within 24 hours.',
     });
   } catch (err) {
     console.error('[SHIPPING_SETTINGS_GET_ERROR]', err);
@@ -59,7 +69,7 @@ export async function POST(req: NextRequest) {
     const { data: settings } = await supabase
       .from('shipping_settings')
       .select(
-        'free_shipping_threshold_paise, default_shipping_charge_paise, cod_enabled, cod_fee_paise',
+        'free_shipping_threshold_paise, default_shipping_charge_paise, cod_enabled, cod_fee_paise, promo_banner_enabled, promo_goal_type, promo_goal_threshold_paise, promo_goal_item_count, promo_progress_template, promo_unlocked_text, promo_nudge_enabled, promo_nudge_title, promo_nudge_badge, promo_nudge_text',
       )
       .limit(1)
       .maybeSingle();
@@ -79,6 +89,16 @@ export async function POST(req: NextRequest) {
       freeShippingThresholdPaise: settings?.free_shipping_threshold_paise ?? 99900,
       defaultShippingChargePaise: settings?.default_shipping_charge_paise ?? 9900,
       codFeePaiseSetting: settings?.cod_fee_paise ?? 5000,
+      promo_banner_enabled: settings?.promo_banner_enabled !== false,
+      promo_goal_type: settings?.promo_goal_type || 'amount',
+      promo_goal_threshold_paise: settings?.promo_goal_threshold_paise ?? settings?.free_shipping_threshold_paise ?? 99900,
+      promo_goal_item_count: settings?.promo_goal_item_count ?? 2,
+      promo_progress_template: settings?.promo_progress_template || 'Add {remaining} more to unlock FREE SHIPPING',
+      promo_unlocked_text: settings?.promo_unlocked_text || 'You unlocked FREE Standard Shipping!',
+      promo_nudge_enabled: settings?.promo_nudge_enabled !== false,
+      promo_nudge_title: settings?.promo_nudge_title || 'Pay with UPI & Save {cod_fee}',
+      promo_nudge_badge: settings?.promo_nudge_badge || 'LOWEST PRICE',
+      promo_nudge_text: settings?.promo_nudge_text || 'Instant UPI avoids the {cod_fee} COD handling charge and guarantees Priority Dispatch within 24 hours.',
     });
   } catch (err) {
     console.error('[SHIPPING_QUOTE_ERROR]', err);
