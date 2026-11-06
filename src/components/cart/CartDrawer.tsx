@@ -173,7 +173,7 @@ export default function CartDrawer() {
                       <span>
                         Add{' '}
                         <span className={styles.shippingHighlight}>
-                          ₹{formatPaise(remainingForFreeShipping)}
+                          {formatPaise(remainingForFreeShipping)}
                         </span>{' '}
                         more to unlock <strong>FREE SHIPPING</strong>
                       </span>
@@ -316,7 +316,7 @@ export default function CartDrawer() {
                             </div>
 
                             <span className={styles.lineTotal}>
-                              ₹{formatPaise(item.price_paise * item.quantity)}
+                              {formatPaise(item.price_paise * item.quantity)}
                             </span>
                           </div>
                         </div>
@@ -332,11 +332,11 @@ export default function CartDrawer() {
                   </div>
                   <div className={styles.nudgeContent}>
                     <div className={styles.nudgeTitle}>
-                      <span>Pay with UPI &amp; Save ₹{codFeeRupees}</span>
+                      <span>Pay with UPI &amp; Save {formatPaise(shippingSettings.cod_fee_paise)}</span>
                       <span className={styles.nudgeBadge}>LOWEST PRICE</span>
                     </div>
                     <p className={styles.nudgeText}>
-                      Instant UPI avoids the <strong>₹{codFeeRupees} COD handling charge</strong> and guarantees <strong>Priority Dispatch</strong> within 24 hours.
+                      Instant UPI avoids the <strong>{formatPaise(shippingSettings.cod_fee_paise)} COD handling charge</strong> and guarantees <strong>Priority Dispatch</strong> within 24 hours.
                     </p>
                   </div>
                 </div>
@@ -346,7 +346,7 @@ export default function CartDrawer() {
                   <div className={styles.subtotalRow}>
                     <span className={styles.subtotalLabel}>Subtotal</span>
                     <span className={styles.subtotalValue}>
-                      ₹{formatPaise(totalPaise)}
+                      {formatPaise(totalPaise)}
                     </span>
                   </div>
 
@@ -356,7 +356,7 @@ export default function CartDrawer() {
                       {hasFreeShipping ? (
                         <span className={styles.freeBadge}>FREE</span>
                       ) : (
-                        `₹${formatPaise(shippingSettings.default_shipping_charge_paise)} (or FREE over ₹${formatPaise(threshold)})`
+                        `${formatPaise(shippingSettings.default_shipping_charge_paise)} (or FREE over ${formatPaise(threshold)})`
                       )}
                     </span>
                   </div>

@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useCart, type CartValidationResult } from '@/lib/cart';
 import { formatPaise } from '@/lib/format';
 import { getPublicUrl } from '@/lib/media';
+import { Truck, CheckCircle2 } from 'lucide-react';
 import styles from './page.module.css';
 
 /**
@@ -46,6 +47,8 @@ export default function CartPage() {
     shippingPaise: number;
     codFeePaise: number;
     codEnabled: boolean;
+    freeShippingThresholdPaise?: number;
+    codFeePaiseSetting?: number;
   } | null>(null);
 
   // `isValidating` starts true whenever the cart has anything in it,
@@ -250,6 +253,8 @@ export default function CartPage() {
           shippingPaise: data.shippingPaise ?? 0,
           codFeePaise: data.codFeePaise ?? 0,
           codEnabled: data.codEnabled !== false,
+          freeShippingThresholdPaise: data.freeShippingThresholdPaise ?? 99900,
+          codFeePaiseSetting: data.codFeePaiseSetting ?? 5000,
         });
       })
       .catch(() => {
@@ -424,6 +429,11 @@ export default function CartPage() {
     }
   }
 
+  const threshold = pricingQuote?.freeShippingThresholdPaise ?? 99900;
+  const hasFreeShipping = threshold > 0 && postDiscountSubtotal >= threshold;
+  const remainingForFreeShipping = Math.max(0, threshold - postDiscountSubtotal);
+  const progressPercent = threshold > 0 ? Math.min(100, Math.round((postDiscountSubtotal / threshold) * 100)) : 100;
+
   return (
     <div className={styles.page}>
       <div className={styles.content}>
@@ -431,6 +441,39 @@ export default function CartPage() {
           Your Cart{' '}
           <span className={styles.count}>({items.length})</span>
         </h1>
+
+        {/* Free Shipping Progress Tracker (mirrors Cart Drawer & Checkout) */}
+        <div className={styles.shippingBarContainer}>
+          <div className={styles.shippingText}>
+            {hasFreeShipping ? (
+              <>
+                <CheckCircle2 size={16} className={styles.shippingUnlocked} />
+                <span className={styles.shippingUnlocked}>
+                  You unlocked FREE Standard Shipping!
+                </span>
+              </>
+            ) : (
+              <>
+                <Truck size={16} className={styles.shippingHighlight} />
+                <span>
+                  Add{' '}
+                  <span className={styles.shippingHighlight}>
+                    {formatPaise(remainingForFreeShipping)}
+                  </span>{' '}
+                  more to unlock <strong>FREE SHIPPING</strong>
+                </span>
+              </>
+            )}
+          </div>
+          <div className={styles.progressBarTrack}>
+            <div
+              className={`${styles.progressBarFill} ${
+                hasFreeShipping ? styles.progressBarFillUnlocked : ''
+              }`}
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
+        </div>
 
         {/* Explicit, item-named feedback so the user knows exactly
             what changed and why — never the vague “we adjusted your

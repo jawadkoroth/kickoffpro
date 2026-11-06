@@ -5,6 +5,9 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { useCart } from '@/lib/cart';
+import { formatPaise } from '@/lib/format';
+import { getPublicUrl } from '@/lib/media';
+import { Truck, CheckCircle2, Zap } from 'lucide-react';
 import {
   getOrCreateCheckoutEventId,
   getFbp,
@@ -79,8 +82,12 @@ function CheckoutContent() {
   // cart checkout.
   const productId = searchParams.get('product_id') || '';
   const sizeParam = searchParams.get('size') || '';
-  const couponCode = searchParams.get('coupon') || '';
   const isBuyNow = Boolean(productId && sizeParam);
+
+  // Interactive coupon code state (synced with URL or manual entry on checkout)
+  const [couponCode, setCouponCode] = useState(searchParams.get('coupon') || '');
+  const [couponInput, setCouponInput] = useState(searchParams.get('coupon') || '');
+  const [couponApplying, setCouponApplying] = useState(false);
 
   // Resolve the line set being submitted at this moment. For Buy
   // Now we filter the cart to the single matching (product_id, size)
@@ -138,6 +145,34 @@ function CheckoutContent() {
   const [paymentMethod, setPaymentMethod] = useState<'online' | 'cod'>('online');
   const [orderError, setOrderError] = useState('');
 
+  // Shipping settings sync with backend (mirrors Cart Drawer)
+  const [shippingSettings, setShippingSettings] = useState({
+    free_shipping_threshold_paise: 99900,
+    default_shipping_charge_paise: 9900,
+    cod_fee_paise: 5000,
+    cod_enabled: true,
+  });
+
+  useEffect(() => {
+    let active = true;
+    fetch('/api/shipping/quote')
+      .then((r) => r.json())
+      .then((json) => {
+        if (json.success && json.data && active) {
+          setShippingSettings({
+            free_shipping_threshold_paise: Number(json.data.free_shipping_threshold_paise) || 99900,
+            default_shipping_charge_paise: Number(json.data.default_shipping_charge_paise) || 9900,
+            cod_fee_paise: Number(json.data.cod_fee_paise) || 5000,
+            cod_enabled: json.data.cod_enabled !== false,
+          });
+        }
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
+
   // Auth state — non-null only for logged-in users.
   const [userId, setUserId] = useState<string | null>(null);
 
@@ -168,6 +203,9 @@ function CheckoutContent() {
     totalPaise: number;
     codAllowed: boolean;
     codEnabled: boolean;
+    freeShippingThresholdPaise?: number;
+    defaultShippingChargePaise?: number;
+    codFeePaiseSetting?: number;
   } | null>(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
 
@@ -270,6 +308,7 @@ function CheckoutContent() {
     }
     if (preDiscountSubtotal <= 0) return;
     let cancelled = false;
+    setCouponApplying(true);
     (async () => {
       try {
         const res = await fetch('/api/coupons/validate', {
@@ -296,12 +335,29 @@ function CheckoutContent() {
         setDiscountPaise(0);
         setCouponOk(false);
         // Silent on transport errors — orders API re-validates anyway.
+      } finally {
+        if (!cancelled) setCouponApplying(false);
       }
     })();
     return () => {
       cancelled = true;
     };
   }, [couponCode, preDiscountSubtotal]);
+
+  const handleApplyCoupon = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const trimmed = couponInput.trim().toUpperCase();
+    if (!trimmed) return;
+    setCouponCode(trimmed);
+  };
+
+  const handleRemoveCoupon = () => {
+    setCouponCode('');
+    setCouponInput('');
+    setDiscountPaise(0);
+    setCouponOk(false);
+    setCouponMessage('');
+  };
 
   useEffect(() => {
     if (preDiscountSubtotal <= 0) {
@@ -328,6 +384,9 @@ function CheckoutContent() {
             totalPaise: data.totalPaise ?? subtotalForQuote,
             codAllowed: data.codAllowed !== false,
             codEnabled: data.codEnabled !== false,
+            freeShippingThresholdPaise: data.freeShippingThresholdPaise ?? 99900,
+            defaultShippingChargePaise: data.defaultShippingChargePaise ?? 9900,
+            codFeePaiseSetting: data.codFeePaiseSetting ?? 5000,
           });
         }
       })
@@ -398,7 +457,13 @@ function CheckoutContent() {
   const codFeePaise = quote?.codFeePaise ?? 0;
   const total = quote ? quote.totalPaise : subtotal;
 
-  const formatPrice = (paise: number) => '₹' + (paise / 100).toLocaleString('en-IN');
+  const threshold = quote?.freeShippingThresholdPaise ?? shippingSettings.free_shipping_threshold_paise;
+  const hasFreeShipping = threshold > 0 && subtotalForQuote >= threshold;
+  const remainingForFreeShipping = Math.max(0, threshold - subtotalForQuote);
+  const progressPercent = threshold > 0 ? Math.min(100, Math.round((subtotalForQuote / threshold) * 100)) : 100;
+  const codFeePaiseSetting = quote?.codFeePaiseSetting ?? shippingSettings.cod_fee_paise;
+
+  const formatPrice = (paise: number) => formatPaise(paise);
 
   function validate(): boolean {
     const e: Record<string, string> = {};
@@ -763,44 +828,143 @@ function CheckoutContent() {
           </div>
         )}
 
-        {/* Order Summary */}
+        {/* Order Summary & Cart Synchronization */}
         <div className="card" style={{ marginBottom: 'var(--space-6)' }}>
-          {/* Per-line breakdown — every cart line that's being
-              submitted is rendered here so the displayed total
-              transparently maps to the items being charged. */}
-          {checkoutItems.map((line) => (
-            <div
-              key={`${line.product_id}::${line.size}`}
-              className={styles.summaryRow}
-            >
-              <span>📦 {line.name} · {line.size}{line.quantity > 1 ? ` × ${line.quantity}` : ''}</span>
-              <span>{formatPrice(line.price_paise * line.quantity)}</span>
+          {/* Free Shipping Progress Tracker (mirrors Cart Drawer) */}
+          <div className={styles.shippingBarContainer}>
+            <div className={styles.shippingText}>
+              {hasFreeShipping ? (
+                <>
+                  <CheckCircle2 size={16} className={styles.shippingUnlocked} />
+                  <span className={styles.shippingUnlocked}>
+                    You unlocked FREE Standard Shipping!
+                  </span>
+                </>
+              ) : (
+                <>
+                  <Truck size={16} className={styles.shippingHighlight} />
+                  <span>
+                    Add{' '}
+                    <span className={styles.shippingHighlight}>
+                      {formatPaise(remainingForFreeShipping)}
+                    </span>{' '}
+                    more to unlock <strong>FREE SHIPPING</strong>
+                  </span>
+                </>
+              )}
             </div>
-          ))}
+            <div className={styles.progressBarTrack}>
+              <div
+                className={`${styles.progressBarFill} ${
+                  hasFreeShipping ? styles.progressBarFillUnlocked : ''
+                }`}
+                style={{ width: `${progressPercent}%` }}
+              />
+            </div>
+          </div>
+
+          {/* Product Items Breakdown with Thumbnails & Sizes */}
+          <div style={{ marginBottom: 'var(--space-2)' }}>
+            {checkoutItems.map((line) => (
+              <div
+                key={`${line.product_id}::${line.size}`}
+                className={styles.checkoutItemRow}
+              >
+                <div className={styles.itemThumbWrap}>
+                  {line.image ? (
+                    <img
+                      src={getPublicUrl(line.image)}
+                      alt={line.name}
+                      className={styles.itemThumb}
+                    />
+                  ) : (
+                    <div className={styles.itemThumbPlaceholder}>👕</div>
+                  )}
+                  <span className={styles.qtyBadge}>{line.quantity}</span>
+                </div>
+                <div className={styles.itemMeta}>
+                  <span className={styles.itemName}>{line.name}</span>
+                  <span className={styles.itemSubtext}>Size: {line.size}</span>
+                </div>
+                <span className={styles.itemPrice}>
+                  {formatPaise(line.price_paise * line.quantity)}
+                </span>
+              </div>
+            ))}
+          </div>
+
+          {/* Interactive Coupon Code Entry & Synchronization */}
+          <div className={styles.couponSection}>
+            {couponCode && couponOk ? (
+              <div className={styles.couponAppliedBadge}>
+                <div className={styles.couponAppliedLeft}>
+                  <span className={styles.couponTagIcon}>🏷️</span>
+                  <div>
+                    <span className={styles.couponCodeText}>{couponCode}</span>
+                    <span className={styles.couponSavingsText}>
+                      Save {formatPaise(discountAmount)}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className={styles.couponRemoveBtn}
+                  onClick={handleRemoveCoupon}
+                >
+                  Remove
+                </button>
+              </div>
+            ) : (
+              <div className={styles.couponInputGroup}>
+                <input
+                  type="text"
+                  className={styles.couponInputField}
+                  placeholder="Enter coupon code"
+                  value={couponInput}
+                  onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleApplyCoupon();
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  className={styles.couponApplyBtn}
+                  disabled={!couponInput.trim() || couponApplying}
+                  onClick={handleApplyCoupon}
+                >
+                  {couponApplying ? 'APPLYING…' : 'APPLY'}
+                </button>
+              </div>
+            )}
+            {couponCode && !couponOk && couponMessage && (
+              <div className={styles.couponErrorText}>
+                <span>⚠️ {couponMessage}</span>
+              </div>
+            )}
+          </div>
+
+          {/* Subtotal Breakdown */}
           <div className={styles.summaryRow}>
             <span>Subtotal</span>
-            <span>{formatPrice(preDiscountSubtotal)}</span>
+            <span>{formatPaise(preDiscountSubtotal)}</span>
           </div>
           {discountAmount > 0 && (
             <div className={styles.summaryRow}>
               <span>Discount{couponCode ? ` (${couponCode})` : ''}</span>
-              <span className={styles.discountText}>− {formatPrice(discountAmount)}</span>
-            </div>
-          )}
-          {couponCode && !couponOk && couponMessage && (
-            <div className={styles.summaryRow} style={{ color: 'var(--warning)' }}>
-              <span>Coupon {couponCode}</span>
-              <span style={{ fontSize: '0.75rem' }}>{couponMessage}</span>
+              <span className={styles.discountText}>− {formatPaise(discountAmount)}</span>
             </div>
           )}
           <div className={styles.summaryRow}>
             <span>Shipping</span>
-            <span>
+            <span className={shippingPaise === 0 ? styles.freeShippingText : undefined}>
               {quoteLoading && !quote
                 ? '…'
-                : shippingPaise > 0
-                  ? formatPrice(shippingPaise)
-                  : 'FREE'}
+                : shippingPaise === 0
+                ? 'FREE'
+                : formatPaise(shippingPaise)}
             </span>
           </div>
           {paymentMethod === 'cod' && quote && !quote.codEnabled && (
@@ -814,11 +978,11 @@ function CheckoutContent() {
               key={`cod-${codFeePaise}`}
             >
               <span>Cash on Delivery fee</span>
-              <span>+ {formatPrice(codFeePaise)}</span>
+              <span>+ {formatPaise(codFeePaise)}</span>
             </div>
           )}
           <div className={styles.summaryTotal}>
-            Total: <strong key={`total-${total}`} className={styles.totalAmount}>{formatPrice(total)}</strong>
+            Total: <strong key={`total-${total}`} className={styles.totalAmount}>{formatPaise(total)}</strong>
           </div>
         </div>
 
@@ -959,6 +1123,22 @@ function CheckoutContent() {
               Save to my address book
             </label>
           )}
+        </div>
+
+        {/* Conversion Nudge: Highlight UPI Savings vs COD Fees */}
+        <div className={styles.checkoutNudgeCard}>
+          <div className={styles.nudgeIconWrap}>
+            <Zap size={18} />
+          </div>
+          <div className={styles.nudgeContent}>
+            <div className={styles.nudgeTitle}>
+              <span>Pay with UPI &amp; Save {formatPaise(codFeePaiseSetting)}</span>
+              <span className={styles.nudgeBadge}>LOWEST PRICE</span>
+            </div>
+            <p className={styles.nudgeText}>
+              Instant UPI avoids the <strong>{formatPaise(codFeePaiseSetting)} COD handling charge</strong> and guarantees <strong>Priority Dispatch</strong> within 24 hours.
+            </p>
+          </div>
         </div>
 
         {/* Payment Method */}
