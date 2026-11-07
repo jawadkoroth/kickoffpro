@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
-import { useCart } from '@/lib/cart';
+import { useCart, computePromoProgress } from '@/lib/cart';
 import { formatPaise } from '@/lib/format';
 import { getPublicUrl } from '@/lib/media';
 import { Truck, CheckCircle2, Zap } from 'lucide-react';
@@ -43,7 +43,12 @@ import styles from './page.module.css';
 function CheckoutContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { items: cartItems, removeItem: removeCartItem } = useCart();
+  const {
+    items: cartItems,
+    removeItem: removeCartItem,
+    shippingSettings,
+    promoProgress,
+  } = useCart();
 
   // Race controls. AbortController for the in-flight `cart/validate`
   // request, and a token bumped on every submit so a slow-arriving
@@ -144,34 +149,6 @@ function CheckoutContent() {
   const [submitting, setSubmitting] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<'online' | 'cod'>('online');
   const [orderError, setOrderError] = useState('');
-
-  // Shipping settings sync with backend (mirrors Cart Drawer)
-  const [shippingSettings, setShippingSettings] = useState({
-    free_shipping_threshold_paise: 99900,
-    default_shipping_charge_paise: 9900,
-    cod_fee_paise: 5000,
-    cod_enabled: true,
-  });
-
-  useEffect(() => {
-    let active = true;
-    fetch('/api/shipping/quote')
-      .then((r) => r.json())
-      .then((json) => {
-        if (json.success && json.data && active) {
-          setShippingSettings({
-            free_shipping_threshold_paise: Number(json.data.free_shipping_threshold_paise) || 99900,
-            default_shipping_charge_paise: Number(json.data.default_shipping_charge_paise) || 9900,
-            cod_fee_paise: Number(json.data.cod_fee_paise) || 5000,
-            cod_enabled: json.data.cod_enabled !== false,
-          });
-        }
-      })
-      .catch(() => {});
-    return () => {
-      active = false;
-    };
-  }, []);
 
   // Auth state — non-null only for logged-in users.
   const [userId, setUserId] = useState<string | null>(null);
@@ -458,6 +435,9 @@ function CheckoutContent() {
   const total = quote ? quote.totalPaise : subtotal;
 
   const threshold = quote?.freeShippingThresholdPaise ?? shippingSettings.free_shipping_threshold_paise;
+  const activeProgress = useMemo(() => {
+    return computePromoProgress(shippingSettings, subtotalForQuote, checkoutItems.length);
+  }, [shippingSettings, subtotalForQuote, checkoutItems.length]);
   const hasFreeShipping = threshold > 0 && subtotalForQuote >= threshold;
   const remainingForFreeShipping = Math.max(0, threshold - subtotalForQuote);
   const progressPercent = threshold > 0 ? Math.min(100, Math.round((subtotalForQuote / threshold) * 100)) : 100;
@@ -830,38 +810,34 @@ function CheckoutContent() {
 
         {/* Order Summary & Cart Synchronization */}
         <div className="card" style={{ marginBottom: 'var(--space-6)' }}>
-          {/* Free Shipping Progress Tracker (mirrors Cart Drawer) */}
-          <div className={styles.shippingBarContainer}>
-            <div className={styles.shippingText}>
-              {hasFreeShipping ? (
-                <>
-                  <CheckCircle2 size={16} className={styles.shippingUnlocked} />
-                  <span className={styles.shippingUnlocked}>
-                    You unlocked FREE Standard Shipping!
-                  </span>
-                </>
-              ) : (
-                <>
-                  <Truck size={16} className={styles.shippingHighlight} />
-                  <span>
-                    Add{' '}
-                    <span className={styles.shippingHighlight}>
-                      {formatPaise(remainingForFreeShipping)}
-                    </span>{' '}
-                    more to unlock <strong>FREE SHIPPING</strong>
-                  </span>
-                </>
-              )}
+          {/* Free Shipping Progress Tracker (mirrors Cart Drawer & Cart Page) */}
+          {activeProgress.isBannerVisible && (
+            <div className={styles.shippingBarContainer}>
+              <div className={styles.shippingText}>
+                {activeProgress.hasUnlockedGoal ? (
+                  <>
+                    <CheckCircle2 size={16} className={styles.shippingUnlocked} />
+                    <span className={styles.shippingUnlocked}>
+                      {activeProgress.unlockedMessage}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <Truck size={16} className={styles.shippingHighlight} />
+                    <span>{activeProgress.inProgressMessage}</span>
+                  </>
+                )}
+              </div>
+              <div className={styles.progressBarTrack}>
+                <div
+                  className={`${styles.progressBarFill} ${
+                    activeProgress.hasUnlockedGoal ? styles.progressBarFillUnlocked : ''
+                  }`}
+                  style={{ width: `${activeProgress.goalProgressPercent}%` }}
+                />
+              </div>
             </div>
-            <div className={styles.progressBarTrack}>
-              <div
-                className={`${styles.progressBarFill} ${
-                  hasFreeShipping ? styles.progressBarFillUnlocked : ''
-                }`}
-                style={{ width: `${progressPercent}%` }}
-              />
-            </div>
-          </div>
+          )}
 
           {/* Product Items Breakdown with Thumbnails & Sizes */}
           <div style={{ marginBottom: 'var(--space-2)' }}>

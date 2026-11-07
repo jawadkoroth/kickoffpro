@@ -10,6 +10,146 @@ import {
   useRef,
   ReactNode,
 } from 'react';
+import { formatPaise } from '@/lib/format';
+
+export interface ShippingSettingsSummary {
+  free_shipping_threshold_paise: number;
+  default_shipping_charge_paise: number;
+  cod_fee_paise: number;
+  cod_enabled: boolean;
+  promo_banner_enabled: boolean;
+  promo_goal_type: 'amount' | 'item_count';
+  promo_goal_threshold_paise: number;
+  promo_goal_item_count: number;
+  promo_progress_template: string;
+  promo_unlocked_text: string;
+  promo_nudge_enabled: boolean;
+  promo_nudge_title: string;
+  promo_nudge_badge: string;
+  promo_nudge_text: string;
+}
+
+export interface PromoProgressSummary {
+  /** Effective free shipping threshold in paise */
+  thresholdPaise: number;
+  /** Whether the subtotal qualifies for free shipping based on free_shipping_threshold_paise */
+  hasFreeShipping: boolean;
+  /** Remaining paise needed to reach free_shipping_threshold_paise */
+  remainingForFreeShipping: number;
+  /** Progress towards free shipping (0-100) */
+  shippingProgressPercent: number;
+
+  /** Dynamic Promo Goal (configured via admin: either order amount ₹ or item count bundle) */
+  isItemCountGoal: boolean;
+  targetGoalPaise: number;
+  targetItemCount: number;
+  hasUnlockedGoal: boolean;
+  remainingGoalPaise: number;
+  remainingGoalItems: number;
+  goalProgressPercent: number;
+
+  /** Formatted dynamic messages with placeholder replacements */
+  inProgressMessage: string;
+  unlockedMessage: string;
+  nudgeTitle: string;
+  nudgeText: string;
+  nudgeBadge: string;
+  isBannerVisible: boolean;
+  isNudgeVisible: boolean;
+}
+
+export const DEFAULT_SHIPPING_SETTINGS: ShippingSettingsSummary = {
+  free_shipping_threshold_paise: 99900,
+  default_shipping_charge_paise: 9900,
+  cod_fee_paise: 5000,
+  cod_enabled: true,
+  promo_banner_enabled: true,
+  promo_goal_type: 'amount',
+  promo_goal_threshold_paise: 99900,
+  promo_goal_item_count: 2,
+  promo_progress_template: 'Add {remaining} more to unlock FREE SHIPPING',
+  promo_unlocked_text: 'You unlocked FREE Standard Shipping!',
+  promo_nudge_enabled: true,
+  promo_nudge_title: 'Pay with UPI & Save {cod_fee}',
+  promo_nudge_badge: 'LOWEST PRICE',
+  promo_nudge_text: 'Instant UPI avoids the {cod_fee} COD handling charge and guarantees Priority Dispatch within 24 hours.',
+};
+
+export function computePromoProgress(
+  settings: ShippingSettingsSummary,
+  subtotalPaise: number,
+  totalItems: number,
+): PromoProgressSummary {
+  const isItemCountGoal = settings.promo_goal_type === 'item_count';
+  const targetGoalPaise = settings.promo_goal_threshold_paise ?? settings.free_shipping_threshold_paise;
+  const targetItemCount = Math.max(1, settings.promo_goal_item_count || 2);
+
+  const hasUnlockedGoal = isItemCountGoal
+    ? totalItems >= targetItemCount
+    : targetGoalPaise > 0 && subtotalPaise >= targetGoalPaise;
+
+  const remainingGoalPaise = Math.max(0, targetGoalPaise - subtotalPaise);
+  const remainingGoalItems = Math.max(0, targetItemCount - totalItems);
+
+  const goalProgressPercent = isItemCountGoal
+    ? Math.min(100, Math.round((totalItems / targetItemCount) * 100))
+    : targetGoalPaise > 0
+    ? Math.min(100, Math.round((subtotalPaise / targetGoalPaise) * 100))
+    : 100;
+
+  const thresholdPaise = settings.free_shipping_threshold_paise;
+  const hasFreeShipping = thresholdPaise > 0 && subtotalPaise >= thresholdPaise;
+  const remainingForFreeShipping = Math.max(0, thresholdPaise - subtotalPaise);
+  const shippingProgressPercent = thresholdPaise > 0
+    ? Math.min(100, Math.round((subtotalPaise / thresholdPaise) * 100))
+    : 100;
+
+  // Format dynamic copy for the progress banner
+  const inProgressMessage = (
+    settings.promo_progress_template || 'Add {remaining} more to unlock FREE SHIPPING'
+  )
+    .replace(/\{remaining\}/g, formatPaise(remainingGoalPaise))
+    .replace(/\{remaining_items\}/g, `${remainingGoalItems} ${remainingGoalItems === 1 ? 'item' : 'items'}`)
+    .replace(/\{item_count\}/g, String(targetItemCount))
+    .replace(/\{threshold\}/g, formatPaise(targetGoalPaise));
+
+  const unlockedMessage =
+    settings.promo_unlocked_text || 'You unlocked FREE Standard Shipping!';
+
+  // Format dynamic copy for conversion nudge
+  const codFeeFormatted = formatPaise(settings.cod_fee_paise);
+  const nudgeTitle = (
+    settings.promo_nudge_title || 'Pay with UPI & Save {cod_fee}'
+  ).replace(/\{cod_fee\}/g, codFeeFormatted);
+
+  const nudgeText = (
+    settings.promo_nudge_text ||
+    'Instant UPI avoids the {cod_fee} COD handling charge and guarantees Priority Dispatch within 24 hours.'
+  ).replace(/\{cod_fee\}/g, codFeeFormatted);
+
+  const nudgeBadge = settings.promo_nudge_badge || 'LOWEST PRICE';
+
+  return {
+    thresholdPaise,
+    hasFreeShipping,
+    remainingForFreeShipping,
+    shippingProgressPercent,
+    isItemCountGoal,
+    targetGoalPaise,
+    targetItemCount,
+    hasUnlockedGoal,
+    remainingGoalPaise,
+    remainingGoalItems,
+    goalProgressPercent,
+    inProgressMessage,
+    unlockedMessage,
+    nudgeTitle,
+    nudgeText,
+    nudgeBadge,
+    isBannerVisible: settings.promo_banner_enabled !== false,
+    isNudgeVisible: settings.promo_nudge_enabled !== false,
+  };
+}
 
 /**
  * KickoffPro cart — local, client-side, localStorage-backed.
@@ -117,6 +257,12 @@ interface CartContextType {
   openDrawer: () => void;
   closeDrawer: () => void;
   toggleDrawer: () => void;
+
+  /** Dynamic shipping & promotional settings sync */
+  shippingSettings: ShippingSettingsSummary;
+  shippingLoading: boolean;
+  promoProgress: PromoProgressSummary;
+  refreshShippingSettings: () => Promise<void>;
 }
 
 const CartContext = createContext<CartContextType | null>(null);
@@ -176,6 +322,47 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const [loaded, setLoaded] = useState(false);
   const [validatedAt, setValidatedAt] = useState<number | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+
+  // Dynamic shipping & promotional settings sync
+  const [shippingSettings, setShippingSettings] = useState<ShippingSettingsSummary>(DEFAULT_SHIPPING_SETTINGS);
+  const [shippingLoading, setShippingLoading] = useState(true);
+
+  const refreshShippingSettings = useCallback(async () => {
+    try {
+      const res = await fetch('/api/shipping/quote');
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && json.data) {
+          setShippingSettings({
+            free_shipping_threshold_paise: Number(json.data.free_shipping_threshold_paise) || 99900,
+            default_shipping_charge_paise: Number(json.data.default_shipping_charge_paise) || 9900,
+            cod_fee_paise: Number(json.data.cod_fee_paise) || 5000,
+            cod_enabled: json.data.cod_enabled !== false,
+            promo_banner_enabled: json.data.promo_banner_enabled !== false,
+            promo_goal_type: json.data.promo_goal_type === 'item_count' ? 'item_count' : 'amount',
+            promo_goal_threshold_paise: json.data.promo_goal_threshold_paise !== undefined
+              ? Number(json.data.promo_goal_threshold_paise)
+              : Number(json.data.free_shipping_threshold_paise) || 99900,
+            promo_goal_item_count: Number(json.data.promo_goal_item_count) || 2,
+            promo_progress_template: json.data.promo_progress_template || 'Add {remaining} more to unlock FREE SHIPPING',
+            promo_unlocked_text: json.data.promo_unlocked_text || 'You unlocked FREE Standard Shipping!',
+            promo_nudge_enabled: json.data.promo_nudge_enabled !== false,
+            promo_nudge_title: json.data.promo_nudge_title || 'Pay with UPI & Save {cod_fee}',
+            promo_nudge_badge: json.data.promo_nudge_badge || 'LOWEST PRICE',
+            promo_nudge_text: json.data.promo_nudge_text || 'Instant UPI avoids the {cod_fee} COD handling charge and guarantees Priority Dispatch within 24 hours.',
+          });
+        }
+      }
+    } catch {
+      // Fallback defaults preserved gracefully
+    } finally {
+      setShippingLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshShippingSettings();
+  }, [refreshShippingSettings]);
 
   const openDrawer = useCallback(() => setIsDrawerOpen(true), []);
   const closeDrawer = useCallback(() => setIsDrawerOpen(false), []);
@@ -439,6 +626,11 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const getTotal = useCallback(() => totalPaise, [totalPaise]);
 
+  const promoProgress = useMemo(
+    () => computePromoProgress(shippingSettings, totalPaise, totalItems),
+    [shippingSettings, totalPaise, totalItems],
+  );
+
   const value = useMemo<CartContextType>(
     () => ({
       items,
@@ -457,6 +649,10 @@ export function CartProvider({ children }: { children: ReactNode }) {
       openDrawer,
       closeDrawer,
       toggleDrawer,
+      shippingSettings,
+      shippingLoading,
+      promoProgress,
+      refreshShippingSettings,
     }),
     [
       items,
@@ -475,6 +671,10 @@ export function CartProvider({ children }: { children: ReactNode }) {
       openDrawer,
       closeDrawer,
       toggleDrawer,
+      shippingSettings,
+      shippingLoading,
+      promoProgress,
+      refreshShippingSettings,
     ],
   );
 

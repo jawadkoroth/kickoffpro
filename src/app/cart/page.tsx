@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useCart, type CartValidationResult } from '@/lib/cart';
+import { useCart, computePromoProgress, type CartValidationResult } from '@/lib/cart';
 import { formatPaise } from '@/lib/format';
 import { getPublicUrl } from '@/lib/media';
 import { Truck, CheckCircle2 } from 'lucide-react';
@@ -25,8 +25,16 @@ const COUPON_STORAGE_KEY = 'kickoffpro_coupon_code';
 
 export default function CartPage() {
   const router = useRouter();
-  const { items, removeItem, updateQuantity, totalPaise, applyValidation } =
-    useCart();
+  const {
+    items,
+    removeItem,
+    updateQuantity,
+    totalPaise,
+    totalItems,
+    applyValidation,
+    shippingSettings,
+    promoProgress,
+  } = useCart();
 
   // Inline coupon state. Applied coupons persist in localStorage so
   // the code survives a page reload within the same session and is
@@ -429,10 +437,13 @@ export default function CartPage() {
     }
   }
 
-  const threshold = pricingQuote?.freeShippingThresholdPaise ?? 99900;
-  const hasFreeShipping = threshold > 0 && postDiscountSubtotal >= threshold;
-  const remainingForFreeShipping = Math.max(0, threshold - postDiscountSubtotal);
-  const progressPercent = threshold > 0 ? Math.min(100, Math.round((postDiscountSubtotal / threshold) * 100)) : 100;
+  // Unified promotional goal & shipping progress calculation
+  // When a coupon is active, calculate against postDiscountSubtotal; otherwise use shared promoProgress from useCart()
+  const activeProgress = useMemo(() => {
+    return appliedCode && discountPaise > 0
+      ? computePromoProgress(shippingSettings, postDiscountSubtotal, totalItems)
+      : promoProgress;
+  }, [appliedCode, discountPaise, shippingSettings, postDiscountSubtotal, totalItems, promoProgress]);
 
   return (
     <div className={styles.page}>
@@ -443,37 +454,33 @@ export default function CartPage() {
         </h1>
 
         {/* Free Shipping Progress Tracker (mirrors Cart Drawer & Checkout) */}
-        <div className={styles.shippingBarContainer}>
-          <div className={styles.shippingText}>
-            {hasFreeShipping ? (
-              <>
-                <CheckCircle2 size={16} className={styles.shippingUnlocked} />
-                <span className={styles.shippingUnlocked}>
-                  You unlocked FREE Standard Shipping!
-                </span>
-              </>
-            ) : (
-              <>
-                <Truck size={16} className={styles.shippingHighlight} />
-                <span>
-                  Add{' '}
-                  <span className={styles.shippingHighlight}>
-                    {formatPaise(remainingForFreeShipping)}
-                  </span>{' '}
-                  more to unlock <strong>FREE SHIPPING</strong>
-                </span>
-              </>
-            )}
+        {activeProgress.isBannerVisible && (
+          <div className={styles.shippingBarContainer}>
+            <div className={styles.shippingText}>
+              {activeProgress.hasUnlockedGoal ? (
+                <>
+                  <CheckCircle2 size={16} className={styles.shippingUnlocked} />
+                  <span className={styles.shippingUnlocked}>
+                    {activeProgress.unlockedMessage}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <Truck size={16} className={styles.shippingHighlight} />
+                  <span>{activeProgress.inProgressMessage}</span>
+                </>
+              )}
+            </div>
+            <div className={styles.progressBarTrack}>
+              <div
+                className={`${styles.progressBarFill} ${
+                  activeProgress.hasUnlockedGoal ? styles.progressBarFillUnlocked : ''
+                }`}
+                style={{ width: `${activeProgress.goalProgressPercent}%` }}
+              />
+            </div>
           </div>
-          <div className={styles.progressBarTrack}>
-            <div
-              className={`${styles.progressBarFill} ${
-                hasFreeShipping ? styles.progressBarFillUnlocked : ''
-              }`}
-              style={{ width: `${progressPercent}%` }}
-            />
-          </div>
-        </div>
+        )}
 
         {/* Explicit, item-named feedback so the user knows exactly
             what changed and why — never the vague “we adjusted your
