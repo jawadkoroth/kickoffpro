@@ -638,3 +638,293 @@
   }
 }
 
+/* ==========================================================================
+   Credentials & Integrations Modal Styles
+   ========================================================================== */
+.configButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--ads-navy);
+  color: #ffffff;
+  border: 1px solid var(--ads-navy);
+  border-radius: var(--ads-radius-pill);
+  padding: 6px 16px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 180ms ease;
+  box-shadow: 0 2px 6px rgba(7, 27, 58, 0.2);
+}
+
+.configButton:hover {
+  background: #0d2a57;
+  border-color: #0d2a57;
+  transform: translateY(-1px);
+}
+
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.7);
+  backdrop-filter: blur(4px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  animation: fadeIn 200ms ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.modalContainer {
+  background: var(--ads-card-bg);
+  border: 1px solid var(--ads-border);
+  border-radius: var(--ads-radius-lg);
+  width: 100%;
+  max-width: 680px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+  animation: scaleUp 220ms ease;
+}
+
+@keyframes scaleUp {
+  from { transform: scale(0.96); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+.modalHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 24px;
+  border-bottom: 1px solid var(--ads-border);
+  background: var(--ads-card-bg);
+}
+
+.modalTitle {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: var(--ads-navy);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.modalCloseBtn {
+  background: none;
+  border: none;
+  font-size: 1.25rem;
+  color: var(--ads-text-muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: var(--ads-radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 150ms ease;
+}
+
+.modalCloseBtn:hover {
+  background: var(--ads-card-secondary);
+  color: var(--ads-text-primary);
+}
+
+.modalBody {
+  padding: 24px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.modalFooter {
+  padding: 16px 24px;
+  border-top: 1px solid var(--ads-border);
+  background: var(--ads-card-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.networkConfigCard {
+  border: 1px solid var(--ads-border);
+  border-radius: var(--ads-radius-md);
+  padding: 16px 18px;
+  background: var(--ads-card-bg);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  transition: border-color 150ms ease;
+}
+
+.networkConfigCard:focus-within {
+  border-color: var(--ads-primary);
+}
+
+.networkConfigHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.networkConfigTitleGroup {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.networkConfigIcon {
+  font-size: 1.2rem;
+}
+
+.networkConfigName {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--ads-text-primary);
+}
+
+.badgeActive {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 2px 8px;
+  border-radius: var(--ads-radius-pill);
+  background: rgba(34, 197, 94, 0.12);
+  color: var(--ads-success);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.badgeMissing {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 2px 8px;
+  border-radius: var(--ads-radius-pill);
+  background: rgba(239, 68, 68, 0.08);
+  color: var(--ads-error);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.fieldGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.fieldLabel {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--ads-text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.fieldHint {
+  font-size: 0.7rem;
+  color: var(--ads-text-muted);
+  font-weight: 400;
+}
+
+.fieldInput {
+  padding: 8px 12px;
+  background: var(--ads-card-secondary);
+  border: 1px solid var(--ads-border);
+  border-radius: var(--ads-radius-sm);
+  font-size: 0.82rem;
+  color: var(--ads-text-primary);
+  font-family: inherit;
+  outline: none;
+  transition: all 160ms ease;
+}
+
+.fieldInput:focus {
+  border-color: var(--ads-primary);
+  background: #ffffff;
+  box-shadow: 0 0 0 2px rgba(47, 169, 245, 0.15);
+}
+
+.fieldInput::placeholder {
+  color: var(--ads-text-muted);
+  opacity: 0.7;
+}
+
+.testResultAlert {
+  padding: 10px 14px;
+  border-radius: var(--ads-radius-sm);
+  font-size: 0.78rem;
+  line-height: 1.4;
+  margin-top: 10px;
+}
+
+.testResultOk {
+  background: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.25);
+  color: var(--ads-success);
+}
+
+.testResultErr {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  color: var(--ads-error);
+}
+
+.btnSecondary {
+  padding: 8px 16px;
+  border-radius: var(--ads-radius-sm);
+  border: 1px solid var(--ads-border);
+  background: var(--ads-card-bg);
+  color: var(--ads-text-primary);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 160ms ease;
+}
+
+.btnSecondary:hover:not(:disabled) {
+  background: var(--ads-card-secondary);
+  border-color: var(--ads-border-light);
+}
+
+.btnPrimary {
+  padding: 8px 18px;
+  border-radius: var(--ads-radius-sm);
+  border: none;
+  background: var(--ads-navy);
+  color: #ffffff;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 160ms ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btnPrimary:hover:not(:disabled) {
+  background: #0d2a57;
+}
+
+.btnPrimary:disabled,
+.btnSecondary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+

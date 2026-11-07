@@ -92,6 +92,32 @@ export default async function RootLayout({
     data: { user },
   } = await supabase.auth.getUser();
 
+  // Load public pixel IDs with env fallback
+  let metaPixelId = process.env.NEXT_PUBLIC_META_PIXEL_ID || null;
+  let googleTagId = process.env.NEXT_PUBLIC_GOOGLE_TAG_ID || process.env.NEXT_PUBLIC_GA_ID || null;
+  let snapPixelId = process.env.NEXT_PUBLIC_SNAP_PIXEL_ID || null;
+
+  try {
+    const { data: adsConfig } = await supabase
+      .from('ads_integrations_config')
+      .select('meta_pixel_id, google_tag_id, snapchat_pixel_id, meta_enabled, google_enabled, snapchat_enabled')
+      .limit(1)
+      .maybeSingle();
+
+    if (adsConfig) {
+      if (adsConfig.meta_enabled === false) metaPixelId = null;
+      else if (adsConfig.meta_pixel_id) metaPixelId = adsConfig.meta_pixel_id;
+
+      if (adsConfig.google_enabled === false) googleTagId = null;
+      else if (adsConfig.google_tag_id) googleTagId = adsConfig.google_tag_id;
+
+      if (adsConfig.snapchat_enabled === false) snapPixelId = null;
+      else if (adsConfig.snapchat_pixel_id) snapPixelId = adsConfig.snapchat_pixel_id;
+    }
+  } catch {
+    // Non-fatal — env fallback used
+  }
+
   return (
     <html lang="en">
       <head>
@@ -142,7 +168,11 @@ export default async function RootLayout({
             </FooterGate>
             <ScrollToTop />
             <FeedbackButton />
-            <PixelScripts />
+            <PixelScripts
+              metaPixelId={metaPixelId}
+              googleTagId={googleTagId}
+              snapPixelId={snapPixelId}
+            />
             <Analytics />
             <SpeedInsights />
           </CartProvider>

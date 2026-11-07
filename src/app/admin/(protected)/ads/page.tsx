@@ -83,6 +83,128 @@ export default function AdminAdsPage() {
   const [showLogs, setShowLogs] = useState(false);
   const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
 
+  // Settings / Credentials Modal state
+  const [configModalOpen, setConfigModalOpen] = useState(false);
+  const [configLoading, setConfigLoading] = useState(false);
+  const [configSaving, setConfigSaving] = useState(false);
+  const [configStatusMsg, setConfigStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [testResults, setTestResults] = useState<Record<string, { ok: boolean; message: string }> | null>(null);
+
+  const [configForm, setConfigForm] = useState({
+    meta_pixel_id: '',
+    meta_access_token: '',
+    meta_access_token_masked: '',
+    meta_access_token_set: false,
+    meta_test_event_code: '',
+    meta_enabled: true,
+
+    google_tag_id: '',
+    google_api_secret: '',
+    google_api_secret_masked: '',
+    google_api_secret_set: false,
+    google_enabled: true,
+
+    snapchat_pixel_id: '',
+    snapchat_api_token: '',
+    snapchat_api_token_masked: '',
+    snapchat_api_token_set: false,
+    snapchat_enabled: true,
+  });
+
+  async function handleOpenConfigModal() {
+    setConfigModalOpen(true);
+    setConfigLoading(true);
+    setConfigStatusMsg(null);
+    setTestResults(null);
+    try {
+      const res = await fetch('/api/admin/ads/config');
+      const json = await res.json();
+      if (json.success && json.data) {
+        setConfigForm({
+          meta_pixel_id: json.data.meta_pixel_id || '',
+          meta_access_token: '',
+          meta_access_token_masked: json.data.meta_access_token_masked || '',
+          meta_access_token_set: json.data.meta_access_token_set || false,
+          meta_test_event_code: json.data.meta_test_event_code || '',
+          meta_enabled: json.data.meta_enabled !== false,
+
+          google_tag_id: json.data.google_tag_id || '',
+          google_api_secret: '',
+          google_api_secret_masked: json.data.google_api_secret_masked || '',
+          google_api_secret_set: json.data.google_api_secret_set || false,
+          google_enabled: json.data.google_enabled !== false,
+
+          snapchat_pixel_id: json.data.snapchat_pixel_id || '',
+          snapchat_api_token: '',
+          snapchat_api_token_masked: json.data.snapchat_api_token_masked || '',
+          snapchat_api_token_set: json.data.snapchat_api_token_set || false,
+          snapchat_enabled: json.data.snapchat_enabled !== false,
+        });
+      }
+    } catch (err: any) {
+      setConfigStatusMsg({ type: 'error', text: 'Failed to load configuration' });
+    } finally {
+      setConfigLoading(false);
+    }
+  }
+
+  async function handleSaveConfig(testConnection = false) {
+    setConfigSaving(true);
+    setConfigStatusMsg(null);
+    setTestResults(null);
+
+    try {
+      const res = await fetch('/api/admin/ads/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...configForm,
+          test_connection: testConnection,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || 'Failed to save credentials');
+      }
+
+      if (json.data?.testResults) {
+        setTestResults(json.data.testResults);
+      }
+
+      setConfigStatusMsg({
+        type: 'success',
+        text: testConnection
+          ? 'Settings saved & connection tested!'
+          : 'Credentials saved securely.',
+      });
+
+      // Refresh observability metrics so CAPI cards update immediately
+      await loadData(true);
+
+      // Refresh masked tokens in form state
+      const getRes = await fetch('/api/admin/ads/config');
+      const getJson = await getRes.json();
+      if (getJson.success && getJson.data) {
+        setConfigForm((prev) => ({
+          ...prev,
+          meta_access_token: '',
+          meta_access_token_masked: getJson.data.meta_access_token_masked,
+          meta_access_token_set: getJson.data.meta_access_token_set,
+          google_api_secret: '',
+          google_api_secret_masked: getJson.data.google_api_secret_masked,
+          google_api_secret_set: getJson.data.google_api_secret_set,
+          snapchat_api_token: '',
+          snapchat_api_token_masked: getJson.data.snapchat_api_token_masked,
+          snapchat_api_token_set: getJson.data.snapchat_api_token_set,
+        }));
+      }
+    } catch (err: any) {
+      setConfigStatusMsg({ type: 'error', text: err.message || 'Save failed' });
+    } finally {
+      setConfigSaving(false);
+    }
+  }
+
   async function loadData(isRefresh = false) {
     if (isRefresh) setRefreshing(true);
     else setLoading(true);
@@ -226,6 +348,14 @@ export default function AdminAdsPage() {
               Updated {lastRefreshed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
             </span>
           )}
+          <button
+            type="button"
+            className={styles.configButton}
+            onClick={handleOpenConfigModal}
+          >
+            <span>⚙️</span>
+            <span>Configure Integrations</span>
+          </button>
           <button
             className={styles.refreshButton}
             onClick={() => loadData(true)}
@@ -900,6 +1030,287 @@ export default function AdminAdsPage() {
           </div>
         </div>
       </section>
+
+      {/* ── Ads & CAPI Integrations Configuration Modal ── */}
+      {configModalOpen && (
+        <div
+          className={styles.modalOverlay}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setConfigModalOpen(false);
+          }}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="ads-config-modal-title"
+        >
+          <div className={styles.modalContainer}>
+            {/* Modal Header */}
+            <div className={styles.modalHeader}>
+              <h3 id="ads-config-modal-title" className={styles.modalTitle}>
+                <span>⚙️</span> Ad Platform &amp; CAPI Settings
+              </h3>
+              <button
+                type="button"
+                className={styles.modalCloseBtn}
+                onClick={() => setConfigModalOpen(false)}
+                aria-label="Close settings"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className={styles.modalBody}>
+              {configLoading ? (
+                <div style={{ padding: '36px', textAlign: 'center', color: 'var(--ads-text-muted)' }}>
+                  Loading encrypted configuration...
+                </div>
+              ) : (
+                <>
+                  <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--ads-text-muted)', lineHeight: 1.5 }}>
+                    Manage client-side Pixel tracking and server-side Conversions API (CAPI) tokens securely.
+                    Tokens are encrypted via AES-256-GCM and stored with Row Level Security.
+                  </p>
+
+                  {/* 1. Meta / Facebook Card */}
+                  <div className={styles.networkConfigCard}>
+                    <div className={styles.networkConfigHeader}>
+                      <div className={styles.networkConfigTitleGroup}>
+                        <span className={styles.networkConfigIcon}>📘</span>
+                        <span className={styles.networkConfigName}>Meta Ads &amp; Conversions API</span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        {configForm.meta_access_token_set && configForm.meta_pixel_id ? (
+                          <span className={styles.badgeActive}>● Token Active</span>
+                        ) : (
+                          <span className={styles.badgeMissing}>○ Incomplete</span>
+                        )}
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer' }}>
+                          <input
+                            type="checkbox"
+                            checked={configForm.meta_enabled}
+                            onChange={(e) => setConfigForm((f) => ({ ...f, meta_enabled: e.target.checked }))}
+                          />
+                          <span>Active</span>
+                        </label>
+                      </div>
+                    </div>
+
+                    <div className={styles.fieldGroup}>
+                      <label className={styles.fieldLabel}>
+                        Meta Pixel ID
+                        <span className={styles.fieldHint}>Client &amp; Server (e.g. 123456789012345)</span>
+                      </label>
+                      <input
+                        type="text"
+                        className={styles.fieldInput}
+                        placeholder="123456789012345"
+                        value={configForm.meta_pixel_id}
+                        onChange={(e) => setConfigForm((f) => ({ ...f, meta_pixel_id: e.target.value }))}
+                      />
+                    </div>
+
+                    <div className={styles.fieldGroup}>
+                      <label className={styles.fieldLabel}>
+                        Conversions API Access Token (System User Token)
+                        <span className={styles.fieldHint}>
+                          {configForm.meta_access_token_set ? 'Leave blank to retain saved token' : 'Required for server events'}
+                        </span>
+                      </label>
+                      <input
+                        type="password"
+                        className={styles.fieldInput}
+                        placeholder={configForm.meta_access_token_set ? configForm.meta_access_token_masked || '••••••••••••' : 'EAABwz...'}
+                        value={configForm.meta_access_token}
+                        onChange={(e) => setConfigForm((f) => ({ ...f, meta_access_token: e.target.value }))}
+                        autoComplete="new-password"
+                      />
+                    </div>
+
+                    <div className={styles.fieldGroup}>
+                      <label className={styles.fieldLabel}>
+                        Test Event Code
+                        <span className={styles.fieldHint}>Optional: for testing in Meta Events Manager</span>
+                      </label>
+                      <input
+                        type="text"
+                        className={styles.fieldInput}
+                        placeholder="TEST12345"
+                        value={configForm.meta_test_event_code}
+                        onChange={(e) => setConfigForm((f) => ({ ...f, meta_test_event_code: e.target.value }))}
+                      />
+                    </div>
+
+                    {testResults?.meta && (
+                      <div className={`${styles.testResultAlert} ${testResults.meta.ok ? styles.testResultOk : styles.testResultErr}`}>
+                        {testResults.meta.ok ? '✓ ' : '✕ '}Meta: {testResults.meta.message}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 2. Google Ads & GA4 Card */}
+                  <div className={styles.networkConfigCard}>
+                    <div className={styles.networkConfigHeader}>
+                      <div className={styles.networkConfigTitleGroup}>
+                        <span className={styles.networkConfigIcon}>🔴</span>
+                        <span className={styles.networkConfigName}>Google Ads &amp; Enhanced Conversions</span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        {configForm.google_api_secret_set && configForm.google_tag_id ? (
+                          <span className={styles.badgeActive}>● Token Active</span>
+                        ) : (
+                          <span className={styles.badgeMissing}>○ Incomplete</span>
+                        )}
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer' }}>
+                          <input
+                            type="checkbox"
+                            checked={configForm.google_enabled}
+                            onChange={(e) => setConfigForm((f) => ({ ...f, google_enabled: e.target.checked }))}
+                          />
+                          <span>Active</span>
+                        </label>
+                      </div>
+                    </div>
+
+                    <div className={styles.fieldGroup}>
+                      <label className={styles.fieldLabel}>
+                        Google Tag / Measurement ID
+                        <span className={styles.fieldHint}>e.g. G-XXXXXXX or AW-XXXXXXXX</span>
+                      </label>
+                      <input
+                        type="text"
+                        className={styles.fieldInput}
+                        placeholder="G-XXXXXXXXXX"
+                        value={configForm.google_tag_id}
+                        onChange={(e) => setConfigForm((f) => ({ ...f, google_tag_id: e.target.value }))}
+                      />
+                    </div>
+
+                    <div className={styles.fieldGroup}>
+                      <label className={styles.fieldLabel}>
+                        Measurement Protocol API Secret
+                        <span className={styles.fieldHint}>
+                          {configForm.google_api_secret_set ? 'Leave blank to retain saved secret' : 'Created in GA4 Data Streams'}
+                        </span>
+                      </label>
+                      <input
+                        type="password"
+                        className={styles.fieldInput}
+                        placeholder={configForm.google_api_secret_set ? configForm.google_api_secret_masked || '••••••••••••' : 'Enter API secret'}
+                        value={configForm.google_api_secret}
+                        onChange={(e) => setConfigForm((f) => ({ ...f, google_api_secret: e.target.value }))}
+                        autoComplete="new-password"
+                      />
+                    </div>
+
+                    {testResults?.google && (
+                      <div className={`${styles.testResultAlert} ${testResults.google.ok ? styles.testResultOk : styles.testResultErr}`}>
+                        {testResults.google.ok ? '✓ ' : '✕ '}Google: {testResults.google.message}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 3. Snapchat Ads Card */}
+                  <div className={styles.networkConfigCard}>
+                    <div className={styles.networkConfigHeader}>
+                      <div className={styles.networkConfigTitleGroup}>
+                        <span className={styles.networkConfigIcon}>🟡</span>
+                        <span className={styles.networkConfigName}>Snapchat Ads &amp; Conversions API</span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        {configForm.snapchat_api_token_set && configForm.snapchat_pixel_id ? (
+                          <span className={styles.badgeActive}>● Token Active</span>
+                        ) : (
+                          <span className={styles.badgeMissing}>○ Incomplete</span>
+                        )}
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer' }}>
+                          <input
+                            type="checkbox"
+                            checked={configForm.snapchat_enabled}
+                            onChange={(e) => setConfigForm((f) => ({ ...f, snapchat_enabled: e.target.checked }))}
+                          />
+                          <span>Active</span>
+                        </label>
+                      </div>
+                    </div>
+
+                    <div className={styles.fieldGroup}>
+                      <label className={styles.fieldLabel}>
+                        Snapchat Pixel ID
+                        <span className={styles.fieldHint}>UUID from Snap Ads Manager</span>
+                      </label>
+                      <input
+                        type="text"
+                        className={styles.fieldInput}
+                        placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                        value={configForm.snapchat_pixel_id}
+                        onChange={(e) => setConfigForm((f) => ({ ...f, snapchat_pixel_id: e.target.value }))}
+                      />
+                    </div>
+
+                    <div className={styles.fieldGroup}>
+                      <label className={styles.fieldLabel}>
+                        Snapchat CAPI Long-Lived Token
+                        <span className={styles.fieldHint}>
+                          {configForm.snapchat_api_token_set ? 'Leave blank to retain saved token' : 'Snap Conversions API Token'}
+                        </span>
+                      </label>
+                      <input
+                        type="password"
+                        className={styles.fieldInput}
+                        placeholder={configForm.snapchat_api_token_set ? configForm.snapchat_api_token_masked || '••••••••••••' : 'Enter Snap CAPI token'}
+                        value={configForm.snapchat_api_token}
+                        onChange={(e) => setConfigForm((f) => ({ ...f, snapchat_api_token: e.target.value }))}
+                        autoComplete="new-password"
+                      />
+                    </div>
+
+                    {testResults?.snapchat && (
+                      <div className={`${styles.testResultAlert} ${testResults.snapchat.ok ? styles.testResultOk : styles.testResultErr}`}>
+                        {testResults.snapchat.ok ? '✓ ' : '✕ '}Snapchat: {testResults.snapchat.message}
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className={styles.modalFooter}>
+              {configStatusMsg && (
+                <div style={{ marginRight: 'auto', fontSize: '0.78rem', fontWeight: 600, color: configStatusMsg.type === 'success' ? 'var(--ads-success)' : 'var(--ads-error)' }}>
+                  {configStatusMsg.type === 'success' ? '✓ ' : '✕ '}
+                  {configStatusMsg.text}
+                </div>
+              )}
+              <button
+                type="button"
+                className={styles.btnSecondary}
+                onClick={() => setConfigModalOpen(false)}
+                disabled={configSaving}
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                className={styles.btnSecondary}
+                onClick={() => handleSaveConfig(false)}
+                disabled={configSaving || configLoading}
+              >
+                {configSaving ? 'Saving...' : 'Save'}
+              </button>
+              <button
+                type="button"
+                className={styles.btnPrimary}
+                onClick={() => handleSaveConfig(true)}
+                disabled={configSaving || configLoading}
+              >
+                <span>⚡</span>
+                <span>{configSaving ? 'Testing...' : 'Save & Test Connection'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { apiSuccess, apiError } from '@/lib/api-response';
+import { getActiveAdsConfig } from '@/lib/tracking/credentials';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -216,6 +217,8 @@ export async function GET(req: NextRequest) {
     const snapTotal = snapSuccess + snapError;
     const snapRate = snapTotal > 0 ? Math.round((snapSuccess / snapTotal) * 100) : (process.env.SNAPCHAT_CAPI_TOKEN ? 100 : 0);
 
+    const adsConfig = await getActiveAdsConfig();
+
     return apiSuccess({
       overview: {
         grossSalesPaise,
@@ -238,7 +241,7 @@ export async function GET(req: NextRequest) {
         },
         providers: {
           meta: {
-            configured: Boolean(process.env.NEXT_PUBLIC_META_PIXEL_ID && process.env.META_CAPI_ACCESS_TOKEN),
+            configured: Boolean(adsConfig.meta_pixel_id && adsConfig.meta_access_token && adsConfig.meta_enabled),
             successCount: metaSuccess,
             errorCount: metaError,
             skippedCount: metaSkipped,
@@ -246,7 +249,7 @@ export async function GET(req: NextRequest) {
             lastEventAt: appEvents.find((e) => e.event.startsWith('tracking.capi_meta'))?.created_at || null,
           },
           google: {
-            configured: Boolean((process.env.NEXT_PUBLIC_GOOGLE_TAG_ID || process.env.NEXT_PUBLIC_GA_ID) && process.env.GA_API_SECRET),
+            configured: Boolean(adsConfig.google_tag_id && adsConfig.google_api_secret && adsConfig.google_enabled),
             successCount: googleSuccess,
             errorCount: googleError,
             skippedCount: googleSkipped,
@@ -254,7 +257,7 @@ export async function GET(req: NextRequest) {
             lastEventAt: appEvents.find((e) => e.event.startsWith('tracking.capi_google'))?.created_at || null,
           },
           snapchat: {
-            configured: Boolean(process.env.NEXT_PUBLIC_SNAP_PIXEL_ID && process.env.SNAPCHAT_CAPI_TOKEN),
+            configured: Boolean(adsConfig.snapchat_pixel_id && adsConfig.snapchat_api_token && adsConfig.snapchat_enabled),
             successCount: snapSuccess,
             errorCount: snapError,
             skippedCount: snapSkipped,

@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { logEvent } from '@/lib/log';
+import { getActiveAdsConfig } from '@/lib/tracking/credentials';
 
 /**
  * Server-Side Conversions API (CAPI) & Ad Attribution Engine
@@ -71,12 +72,18 @@ export function normalizeString(str: string): string {
  * Meta Conversions API (CAPI)
  */
 export async function sendMetaCapiPurchase(data: ServerPurchaseEventData): Promise<boolean> {
-  const pixelId = process.env.NEXT_PUBLIC_META_PIXEL_ID;
-  const accessToken = process.env.META_CAPI_ACCESS_TOKEN;
+  const config = await getActiveAdsConfig();
+  const pixelId = config.meta_pixel_id;
+  const accessToken = config.meta_access_token;
+
+  if (!config.meta_enabled) {
+    logEvent('tracking.capi_meta_skipped', { reason: 'Meta CAPI disabled in configuration' });
+    return false;
+  }
 
   if (!pixelId || !accessToken) {
     logEvent('tracking.capi_meta_skipped', {
-      reason: !pixelId ? 'NEXT_PUBLIC_META_PIXEL_ID missing' : 'META_CAPI_ACCESS_TOKEN missing',
+      reason: !pixelId ? 'meta_pixel_id missing' : 'meta_access_token missing',
     });
     return false;
   }
@@ -122,7 +129,7 @@ export async function sendMetaCapiPurchase(data: ServerPurchaseEventData): Promi
       item_price: item.unit_price_paise / 100,
     }));
 
-    const payload = {
+    const payload: Record<string, any> = {
       data: [
         {
           event_name: 'Purchase',
@@ -142,6 +149,10 @@ export async function sendMetaCapiPurchase(data: ServerPurchaseEventData): Promi
         },
       ],
     };
+
+    if (config.meta_test_event_code) {
+      payload.test_event_code = config.meta_test_event_code;
+    }
 
     const res = await fetch(`https://graph.facebook.com/v19.0/${pixelId}/events`, {
       method: 'POST',
@@ -181,12 +192,18 @@ export async function sendMetaCapiPurchase(data: ServerPurchaseEventData): Promi
  * Google Enhanced Conversions / GA4 Measurement Protocol
  */
 export async function sendGoogleEnhancedConversion(data: ServerPurchaseEventData): Promise<boolean> {
-  const measurementId = process.env.NEXT_PUBLIC_GOOGLE_TAG_ID || process.env.NEXT_PUBLIC_GA_ID;
-  const apiSecret = process.env.GA_API_SECRET;
+  const config = await getActiveAdsConfig();
+  const measurementId = config.google_tag_id;
+  const apiSecret = config.google_api_secret;
+
+  if (!config.google_enabled) {
+    logEvent('tracking.capi_google_skipped', { reason: 'Google CAPI disabled in configuration' });
+    return false;
+  }
 
   if (!measurementId || !apiSecret) {
     logEvent('tracking.capi_google_skipped', {
-      reason: !measurementId ? 'NEXT_PUBLIC_GOOGLE_TAG_ID missing' : 'GA_API_SECRET missing',
+      reason: !measurementId ? 'google_tag_id missing' : 'google_api_secret missing',
     });
     return false;
   }
@@ -260,12 +277,18 @@ export async function sendGoogleEnhancedConversion(data: ServerPurchaseEventData
  * Snapchat Conversions API (CAPI)
  */
 export async function sendSnapchatCapiPurchase(data: ServerPurchaseEventData): Promise<boolean> {
-  const pixelId = process.env.NEXT_PUBLIC_SNAP_PIXEL_ID;
-  const token = process.env.SNAPCHAT_CAPI_TOKEN;
+  const config = await getActiveAdsConfig();
+  const pixelId = config.snapchat_pixel_id;
+  const token = config.snapchat_api_token;
+
+  if (!config.snapchat_enabled) {
+    logEvent('tracking.capi_snap_skipped', { reason: 'Snapchat CAPI disabled in configuration' });
+    return false;
+  }
 
   if (!pixelId || !token) {
     logEvent('tracking.capi_snap_skipped', {
-      reason: !pixelId ? 'NEXT_PUBLIC_SNAP_PIXEL_ID missing' : 'SNAPCHAT_CAPI_TOKEN missing',
+      reason: !pixelId ? 'snapchat_pixel_id missing' : 'snapchat_api_token missing',
     });
     return false;
   }

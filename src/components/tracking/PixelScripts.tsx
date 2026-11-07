@@ -10,14 +10,24 @@ import { captureUtmParameters } from '@/lib/tracking/client';
  * Injects Meta Pixel, Google Tag (gtag.js), and Snapchat Pixel scripts
  * safely with Next.js Script strategy="afterInteractive".
  */
-export default function PixelScripts() {
+interface PixelScriptsProps {
+  metaPixelId?: string | null;
+  googleTagId?: string | null;
+  snapPixelId?: string | null;
+}
+
+export default function PixelScripts({
+  metaPixelId: propMetaPixelId,
+  googleTagId: propGoogleTagId,
+  snapPixelId: propSnapPixelId,
+}: PixelScriptsProps = {}) {
   useEffect(() => {
     captureUtmParameters();
   }, []);
 
-  const metaPixelId = process.env.NEXT_PUBLIC_META_PIXEL_ID;
-  const googleTagId = process.env.NEXT_PUBLIC_GOOGLE_TAG_ID || process.env.NEXT_PUBLIC_GA_ID;
-  const snapPixelId = process.env.NEXT_PUBLIC_SNAP_PIXEL_ID;
+  const metaPixelId = propMetaPixelId || process.env.NEXT_PUBLIC_META_PIXEL_ID;
+  const googleTagId = propGoogleTagId || process.env.NEXT_PUBLIC_GOOGLE_TAG_ID || process.env.NEXT_PUBLIC_GA_ID;
+  const snapPixelId = propSnapPixelId || process.env.NEXT_PUBLIC_SNAP_PIXEL_ID;
 
   return (
     <>
