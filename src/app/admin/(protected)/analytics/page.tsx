@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { formatPaise } from '@/lib/format';
 import styles from './analytics.module.css';
 
@@ -42,6 +42,22 @@ interface LiveAnalyticsResponse {
   sessions_by_location: LocationStat[];
   top_active_pages: ActivePageStat[];
   recent_visitors: RecentVisitor[];
+  diagnostic?: {
+    supabase_project_ref: string;
+    has_service_role_key: boolean;
+    total_sessions_in_db: number;
+    snapshot_rpc_success: boolean;
+    snapshot_rpc_error: string | null;
+    server_time_iso: string;
+    auth_user_id: string | null;
+    most_recent_session: {
+      id: string;
+      path: string;
+      city: string;
+      last_active_at: string;
+      seconds_ago: number;
+    } | null;
+  };
   timestamp: string;
 }
 
@@ -63,6 +79,8 @@ export default function LiveAnalyticsPage() {
   const [error, setError] = useState<string | null>(null);
   const [lastSynced, setLastSynced] = useState<Date | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const [rawDebugInfo, setRawDebugInfo] = useState<any>(null);
+  const [httpStatus, setHttpStatus] = useState<number | null>(null);
 
   const fetchLiveAnalytics = useCallback(async (isManual = false) => {
     try {
@@ -70,10 +88,17 @@ export default function LiveAnalyticsPage() {
       const res = await fetch('/api/admin/analytics/live', {
         headers: { Accept: 'application/json' },
         cache: 'no-store',
+        credentials: 'include',
       });
-      const json = await res.json();
+      setHttpStatus(res.status);
+      const json = await res.json().catch((e) => ({
+        success: false,
+        error: 'Failed to parse JSON response: ' + (e?.message || 'Unknown parse error'),
+      }));
+      setRawDebugInfo(json);
+
       if (!res.ok || !json.success) {
-        throw new Error(json.error || 'Failed to fetch live analytics');
+        throw new Error(json.error || `HTTP ${res.status}: Failed to fetch live analytics`);
       }
       setData(json.data);
       setLastSynced(new Date());
@@ -102,6 +127,7 @@ export default function LiveAnalyticsPage() {
   }, [autoRefresh, fetchLiveAnalytics]);
 
   const behavior = data?.customer_behavior;
+  const diag = data?.diagnostic;
 
   return (
     <div className={styles.page}>
@@ -147,9 +173,97 @@ export default function LiveAnalyticsPage() {
         </div>
       </header>
 
-      {error && (
-        <div style={{ padding: '12px 16px', borderRadius: 8, background: 'rgba(239, 68, 68, 0.1)', color: '#dc2626', fontSize: '0.875rem' }}>
-          ⚠️ {error}
+      {/* Real-Time Diagnostic Banner (Visible when error OR when visitors right now is 0) */}
+      {(error || !data || data.visitors_right_now === 0) && (
+        <div
+          style={{
+            background: '#090d16',
+            border: '1px solid #1e293b',
+            borderRadius: '10px',
+            padding: '16px',
+            color: '#94a3b8',
+            fontSize: '0.8125rem',
+            fontFamily: 'monospace',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '12px',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+            <span style={{ fontWeight: 700, color: '#38bdf8', fontSize: '0.875rem' }}>
+              🛠️ Live Analytics Diagnostic Inspector (HTTP {httpStatus ?? 'connecting...'})
+            </span>
+            <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
+              Auto-refreshes every 12s
+            </span>
+          </div>
+
+          {error && (
+            <div style={{ color: '#ef4444', fontWeight: 600, padding: '8px 12px', background: 'rgba(239,68,68,0.1)', borderRadius: 6 }}>
+              ⚠️ {error}
+            </div>
+          )}
+
+          {diag && (
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))',
+                gap: '8px',
+                background: 'rgba(255,255,255,0.03)',
+                padding: '12px',
+                borderRadius: '6px',
+              }}
+            >
+              <div>
+                <span style={{ color: '#64748b' }}>Project Ref: </span>
+                <strong style={{ color: '#f8fafc' }}>{diag.supabase_project_ref || 'unknown'}</strong>
+              </div>
+              <div>
+                <span style={{ color: '#64748b' }}>Service Key: </span>
+                <strong style={{ color: diag.has_service_role_key ? '#22c55e' : '#eab308' }}>
+                  {diag.has_service_role_key ? 'Active (Admin bypass)' : 'Anon fallback'}
+                </strong>
+              </div>
+              <div>
+                <span style={{ color: '#64748b' }}>DB Sessions Count: </span>
+                <strong style={{ color: '#f8fafc' }}>{diag.total_sessions_in_db}</strong>
+              </div>
+              <div>
+                <span style={{ color: '#64748b' }}>Snapshot RPC: </span>
+                <strong style={{ color: diag.snapshot_rpc_success ? '#22c55e' : '#ef4444' }}>
+                  {diag.snapshot_rpc_success ? 'Success' : diag.snapshot_rpc_error || 'Fallback'}
+                </strong>
+              </div>
+              {diag.most_recent_session && (
+                <div style={{ gridColumn: '1 / -1', paddingTop: '4px', borderTop: '1px solid #1e293b' }}>
+                  <span style={{ color: '#64748b' }}>Most Recent Session: </span>
+                  <strong style={{ color: '#38bdf8' }}>{diag.most_recent_session.city}</strong> on{' '}
+                  <code style={{ color: '#f1f5f9' }}>{diag.most_recent_session.path}</code> ({diag.most_recent_session.seconds_ago}s ago)
+                </div>
+              )}
+            </div>
+          )}
+
+          <details style={{ cursor: 'pointer' }}>
+            <summary style={{ color: '#38bdf8', fontSize: '0.75rem', outline: 'none' }}>
+              View Raw JSON Response payload
+            </summary>
+            <pre
+              style={{
+                marginTop: '8px',
+                padding: '12px',
+                background: '#020617',
+                borderRadius: '6px',
+                overflowX: 'auto',
+                maxHeight: '180px',
+                color: '#cbd5e1',
+                fontSize: '0.75rem',
+              }}
+            >
+              {JSON.stringify(rawDebugInfo || { status: httpStatus, error }, null, 2)}
+            </pre>
+          </details>
         </div>
       )}
 
@@ -398,4 +512,3 @@ export default function LiveAnalyticsPage() {
     </div>
   );
 }
-
