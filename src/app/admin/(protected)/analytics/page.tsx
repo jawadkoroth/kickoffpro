@@ -79,6 +79,7 @@ export default function LiveAnalyticsPage() {
   const [error, setError] = useState<string | null>(null);
   const [lastSynced, setLastSynced] = useState<Date | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [rawDebugInfo, setRawDebugInfo] = useState<any>(null);
   const [httpStatus, setHttpStatus] = useState<number | null>(null);
 
@@ -100,7 +101,14 @@ export default function LiveAnalyticsPage() {
       if (!res.ok || !json.success) {
         throw new Error(json.error || `HTTP ${res.status}: Failed to fetch live analytics`);
       }
-      setData(json.data);
+
+      // Bind data properly whether the API returns payload at root or inside a `data` envelope
+      const liveData: LiveAnalyticsResponse =
+        json.data && typeof json.data === 'object' && ('visitors_right_now' in json.data || 'sessions_today' in json.data)
+          ? json.data
+          : json;
+
+      setData(liveData);
       setLastSynced(new Date());
       setError(null);
     } catch (err: any) {
@@ -147,6 +155,22 @@ export default function LiveAnalyticsPage() {
         </div>
 
         <div className={styles.actions}>
+          <button
+            type="button"
+            onClick={() => setShowDiagnostics((prev) => !prev)}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: showDiagnostics ? 'var(--live-blue)' : 'var(--live-text-muted)',
+              fontSize: '0.75rem',
+              cursor: 'pointer',
+              textDecoration: 'underline',
+              padding: '4px 6px',
+            }}
+          >
+            {showDiagnostics ? 'Hide Diagnostics' : '🛠️ Diagnostics'}
+          </button>
+
           <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.8125rem', color: 'var(--live-text-secondary)', cursor: 'pointer' }}>
             <input
               type="checkbox"
@@ -173,8 +197,8 @@ export default function LiveAnalyticsPage() {
         </div>
       </header>
 
-      {/* Real-Time Diagnostic Banner (Visible when error OR when visitors right now is 0) */}
-      {(error || !data || data.visitors_right_now === 0) && (
+      {/* Diagnostic Banner — hidden by default, visible only on API error or when toggled */}
+      {(error || showDiagnostics) && (
         <div
           style={{
             background: '#090d16',
