@@ -39,31 +39,68 @@ export async function GET(req: NextRequest) {
     const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
     const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString();
     const last24Hours = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
-    const startOfYesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1).toISOString();
+
+    // Calculate Indian Standard Time (IST) midnight boundaries
+    let startOfToday: string;
+    let startOfYesterday: string;
+    try {
+      const istFormatter = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Kolkata',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      });
+      const istTodayStr = istFormatter.format(now);
+      startOfToday = new Date(`${istTodayStr}T00:00:00+05:30`).toISOString();
+
+      const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      const istYesterdayStr = istFormatter.format(yesterday);
+      startOfYesterday = new Date(`${istYesterdayStr}T00:00:00+05:30`).toISOString();
+    } catch {
+      startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+      startOfYesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1).toISOString();
+    }
 
     // 1. Visitors right now (active within last 5 minutes)
-    const { data: liveSessionsData } = await supabase
+    const { data: liveSessionsData, error: liveSessionsError } = await supabase
       .from('visitor_sessions')
       .select('id, current_path, country, state, city, referrer, last_active_at, created_at')
       .gte('last_active_at', fiveMinutesAgo)
       .order('last_active_at', { ascending: false });
 
+    if (liveSessionsError) {
+      console.error('[ADMIN_LIVE_ANALYTICS] liveSessions query error:', liveSessionsError);
+    }
+
     const liveSessions = liveSessionsData || [];
     const visitorsRightNow = liveSessions.length;
     const checkingOutCount = liveSessions.filter((s) => s.current_path && s.current_path.startsWith('/checkout')).length;
 
+    // 1b. Visitors in last 15 minutes
+    const { count: visitorsLast15mCount } = await supabase
+      .from('visitor_sessions')
+      .select('id', { count: 'exact', head: true })
+      .gte('last_active_at', fifteenMinutesAgo);
+
     // 2. Sessions today and yesterday
-    const { count: sessionsTodayCount } = await supabase
+    const { count: sessionsTodayCount, error: todayCountError } = await supabase
       .from('visitor_sessions')
       .select('id', { count: 'exact', head: true })
       .gte('created_at', startOfToday);
 
-    const { count: sessionsYesterdayCount } = await supabase
+    if (todayCountError) {
+      console.error('[ADMIN_LIVE_ANALYTICS] todayCount error:', todayCountError);
+    }
+
+    const { count: sessionsYesterdayCount, error: yestCountError } = await supabase
       .from('visitor_sessions')
       .select('id', { count: 'exact', head: true })
       .gte('created_at', startOfYesterday)
       .lt('created_at', startOfToday);
+
+    if (yestCountError) {
+      console.error('[ADMIN_LIVE_ANALYTICS] yestCount error:', yestCountError);
+    }
 
     const todaySessions = sessionsTodayCount || 0;
     const yesterdaySessions = sessionsYesterdayCount || 0;
@@ -75,33 +112,45 @@ export async function GET(req: NextRequest) {
     }
 
     // 3. Active carts tracker (updated in last 15 min with items)
-    const { data: activeCartsData } = await supabase
+    const { data: activeCartsData, error: activeCartsError } = await supabase
       .from('active_carts_tracker')
       .select('session_id, product_count, cart_total_paise, updated_at')
       .gt('product_count', 0)
       .gte('updated_at', fifteenMinutesAgo);
+
+    if (activeCartsError) {
+      console.error('[ADMIN_LIVE_ANALYTICS] activeCarts error:', activeCartsError);
+    }
 
     const activeCarts = activeCartsData || [];
     const activeCartsCount = activeCarts.length;
     const activeCartsTotalPaise = activeCarts.reduce((sum, c) => sum + (Number(c.cart_total_paise) || 0), 0);
 
     // 4. Paid orders today
-    const { data: ordersTodayData } = await supabase
+    const { data: ordersTodayData, error: ordersTodayError } = await supabase
       .from('orders')
       .select('id, order_number, total_paise, payment_status, created_at')
       .gte('created_at', startOfToday)
       .or('payment_status.eq.paid,payment_status.eq.confirmed,payment_status.eq.cod_confirmed');
+
+    if (ordersTodayError) {
+      console.error('[ADMIN_LIVE_ANALYTICS] ordersToday error:', ordersTodayError);
+    }
 
     const ordersToday = ordersTodayData || [];
     const ordersTodayCount = ordersToday.length;
     const ordersTodayRevenuePaise = ordersToday.reduce((sum, o) => sum + (Number(o.total_paise) || 0), 0);
 
     // 5. Geographic location breakdown (last 24 hours)
-    const { data: locationSessionsData } = await supabase
+    const { data: locationSessionsData, error: locationError } = await supabase
       .from('visitor_sessions')
       .select('country, state, city')
       .gte('last_active_at', last24Hours)
       .limit(3000);
+
+    if (locationError) {
+      console.error('[ADMIN_LIVE_ANALYTICS] locationSessions error:', locationError);
+    }
 
     const locationMap = new Map<string, { country: string; state: string; city: string; count: number }>();
     (locationSessionsData || []).forEach((row) => {
@@ -141,11 +190,15 @@ export async function GET(req: NextRequest) {
       .slice(0, 8);
 
     // 7. Recent visitor stream
-    const { data: recentVisitorsData } = await supabase
+    const { data: recentVisitorsData, error: recentError } = await supabase
       .from('visitor_sessions')
       .select('id, current_path, country, state, city, referrer, last_active_at, created_at')
       .order('last_active_at', { ascending: false })
       .limit(15);
+
+    if (recentError) {
+      console.error('[ADMIN_LIVE_ANALYTICS] recentVisitors error:', recentError);
+    }
 
     const recentVisitors = (recentVisitorsData || []).map((v) => ({
       id: v.id,
@@ -158,6 +211,7 @@ export async function GET(req: NextRequest) {
 
     return apiSuccess({
       visitors_right_now: visitorsRightNow,
+      visitors_last_15m: visitorsLast15mCount || 0,
       sessions_today: todaySessions,
       sessions_yesterday: yesterdaySessions,
       sessions_vs_yesterday_pct: sessionsVsYesterdayPercent,

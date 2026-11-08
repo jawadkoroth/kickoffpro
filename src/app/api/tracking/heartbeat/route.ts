@@ -9,11 +9,13 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => null);
     if (!body || typeof body !== 'object') {
+      console.warn('[HEARTBEAT_WARN] Received invalid or empty JSON payload');
       return NextResponse.json({ success: false, error: 'Invalid payload' }, { status: 400 });
     }
 
     const sessionId = typeof body.sessionId === 'string' ? body.sessionId.trim() : null;
     if (!sessionId || sessionId.length < 5) {
+      console.warn('[HEARTBEAT_WARN] Missing or malformed sessionId:', body.sessionId);
       return NextResponse.json({ success: false, error: 'Valid sessionId required' }, { status: 400 });
     }
 
@@ -52,7 +54,7 @@ export async function POST(req: NextRequest) {
     }
 
     const adminClient = createAdminClient();
-    await adminClient.rpc('record_visitor_heartbeat', {
+    let { data: rpcData, error: rpcError } = await adminClient.rpc('record_visitor_heartbeat', {
       p_session_id: sessionId,
       p_user_id: userId,
       p_ip_address: clientIp,
@@ -66,9 +68,47 @@ export async function POST(req: NextRequest) {
       p_cart_total_paise: cartTotalPaise,
     });
 
-    return NextResponse.json({ success: true });
-  } catch (err) {
-    console.error('[HEARTBEAT_ERROR]', err);
-    return NextResponse.json({ success: false, error: 'Tracking error' }, { status: 500 });
+    // Handle foreign key constraint violations if userId is stale
+    if (rpcError && rpcError.code === '23503' && userId) {
+      console.warn('[HEARTBEAT_USER_FK_WARN] User ID failed foreign key check, retrying with anonymous null user:', userId);
+      const retry = await adminClient.rpc('record_visitor_heartbeat', {
+        p_session_id: sessionId,
+        p_user_id: null,
+        p_ip_address: clientIp,
+        p_country: rawCountry,
+        p_state: rawState,
+        p_city: rawCity,
+        p_current_path: currentPath,
+        p_referrer: referrer,
+        p_user_agent: userAgent,
+        p_product_count: productCount,
+        p_cart_total_paise: cartTotalPaise,
+      });
+      rpcError = retry.error;
+    }
+
+    if (rpcError) {
+      console.error('[HEARTBEAT_RPC_ERROR]', {
+        code: rpcError.code,
+        message: rpcError.message,
+        details: rpcError.details,
+        hint: rpcError.hint,
+        sessionId,
+      });
+      return NextResponse.json({ success: false, error: rpcError.message }, { status: 500 });
+    }
+
+    console.log('[HEARTBEAT_RECORDED]', {
+      sessionId: sessionId.slice(0, 8) + '...',
+      path: currentPath,
+      city: rawCity,
+      state: rawState,
+      items: productCount,
+    });
+
+    return NextResponse.json({ success: true, timestamp: new Date().toISOString() });
+  } catch (err: any) {
+    console.error('[HEARTBEAT_ERROR]', err?.message || err);
+    return NextResponse.json({ success: false, error: err?.message || 'Tracking error' }, { status: 500 });
   }
 }

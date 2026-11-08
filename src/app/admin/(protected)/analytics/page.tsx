@@ -28,6 +28,7 @@ interface RecentVisitor {
 
 interface LiveAnalyticsResponse {
   visitors_right_now: number;
+  visitors_last_15m?: number;
   sessions_today: number;
   sessions_yesterday: number;
   sessions_vs_yesterday_pct: number;
@@ -163,7 +164,9 @@ export default function LiveAnalyticsPage() {
           <div className={styles.kpiValueRow}>
             <span className={styles.kpiValue}>{loading ? '—' : data?.visitors_right_now ?? 0}</span>
           </div>
-          <span className={styles.kpiSub}>Active within last 5 minutes</span>
+          <span className={styles.kpiSub}>
+            Active in last 5m {data?.visitors_last_15m !== undefined ? `(${data.visitors_last_15m} in last 15m)` : ''}
+          </span>
         </div>
 
         {/* Sessions Today */}
@@ -395,3 +398,4 @@ export default function LiveAnalyticsPage() {
     </div>
   );
 }
+

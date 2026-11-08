@@ -45,19 +45,39 @@ export default function LiveHeartbeat() {
     if (isSendingRef.current) return;
     isSendingRef.current = true;
 
-    fetch('/api/tracking/heartbeat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      keepalive: true,
-      body: JSON.stringify({
-        sessionId,
-        path: pathname,
-        referrer: referrerRef.current,
-        productCount: totalItems || 0,
-        cartTotalPaise: totalPaise || 0,
-      }),
-    })
-      .catch(() => {})
+    const payload = {
+      sessionId,
+      path: pathname,
+      referrer: referrerRef.current,
+      productCount: totalItems || 0,
+      cartTotalPaise: totalPaise || 0,
+    };
+
+    console.log('[Heartbeat sent]', payload);
+
+    const postHeartbeat = (url: string) =>
+      fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        keepalive: true,
+        body: JSON.stringify(payload),
+      });
+
+    // Try primary endpoint; fallback to unblocked session endpoint if blocked by browser ad blocker
+    postHeartbeat('/api/tracking/heartbeat')
+      .catch(() => postHeartbeat('/api/session/heartbeat'))
+      .then(async (res) => {
+        if (!res) return;
+        const json = await res.json().catch(() => null);
+        if (!res.ok || !json?.success) {
+          console.warn('[Heartbeat response warning]', res.status, json);
+        } else {
+          console.log('[Heartbeat acknowledged]', json);
+        }
+      })
+      .catch((err) => {
+        console.error('[Heartbeat network error]', err);
+      })
       .finally(() => {
         isSendingRef.current = false;
       });
