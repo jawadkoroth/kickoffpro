@@ -10,6 +10,7 @@ import AdminReturnsBadge from '@/components/admin/AdminReturnsBadge';
 
 const NAV_ITEMS = [
   { href: '/admin/dashboard', label: 'Dashboard', icon: '📊' },
+  { href: '/admin/analytics', label: 'Live Analytics', icon: '📈' },
   { href: '/admin/products', label: 'Products', icon: '👕' },
   { href: '/admin/orders', label: 'Orders', icon: '📦' },
   { href: '/admin/customers', label: 'Customers', icon: '👥' },

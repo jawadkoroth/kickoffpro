@@ -5,6 +5,7 @@ import Navbar from '@/components/Navbar';
 import CartDrawer from '@/components/cart/CartDrawer';
 import FeedbackButton from '@/components/FeedbackButton';
 import PixelScripts from '@/components/tracking/PixelScripts';
+import LiveHeartbeat from '@/components/tracking/LiveHeartbeat';
 import Footer from '@/components/footer/Footer';
 import FooterGate from '@/components/footer/FooterGate';
 import { AuthProvider } from '@/lib/auth/AuthProvider';
@@ -168,6 +169,7 @@ export default async function RootLayout({
             </FooterGate>
             <ScrollToTop />
             <FeedbackButton />
+            <LiveHeartbeat />
             <PixelScripts
               metaPixelId={metaPixelId}
               googleTagId={googleTagId}
