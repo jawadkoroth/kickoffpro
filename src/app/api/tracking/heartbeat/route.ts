@@ -7,7 +7,11 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json().catch(() => null);
+    const body = await req.json().catch((err) => {
+      console.warn('[HEARTBEAT_PAYLOAD_PARSE_ERROR]', err?.message);
+      return null;
+    });
+
     if (!body || typeof body !== 'object') {
       console.warn('[HEARTBEAT_WARN] Received invalid or empty JSON payload');
       return NextResponse.json({ success: false, error: 'Invalid payload' }, { status: 400 });
@@ -50,11 +54,11 @@ export async function POST(req: NextRequest) {
       const { data: { user } } = await serverSupabase.auth.getUser();
       if (user?.id) userId = user.id;
     } catch {
-      // Non-fatal
+      // Non-fatal if session is anonymous/guest
     }
 
     const adminClient = createAdminClient();
-    let { data: rpcData, error: rpcError } = await adminClient.rpc('record_visitor_heartbeat', {
+    const { data: rpcData, error: rpcError } = await adminClient.rpc('record_visitor_heartbeat', {
       p_session_id: sessionId,
       p_user_id: userId,
       p_ip_address: clientIp,
@@ -68,33 +72,8 @@ export async function POST(req: NextRequest) {
       p_cart_total_paise: cartTotalPaise,
     });
 
-    // Handle foreign key constraint violations if userId is stale
-    if (rpcError && rpcError.code === '23503' && userId) {
-      console.warn('[HEARTBEAT_USER_FK_WARN] User ID failed foreign key check, retrying with anonymous null user:', userId);
-      const retry = await adminClient.rpc('record_visitor_heartbeat', {
-        p_session_id: sessionId,
-        p_user_id: null,
-        p_ip_address: clientIp,
-        p_country: rawCountry,
-        p_state: rawState,
-        p_city: rawCity,
-        p_current_path: currentPath,
-        p_referrer: referrer,
-        p_user_agent: userAgent,
-        p_product_count: productCount,
-        p_cart_total_paise: cartTotalPaise,
-      });
-      rpcError = retry.error;
-    }
-
     if (rpcError) {
-      console.error('[HEARTBEAT_RPC_ERROR]', {
-        code: rpcError.code,
-        message: rpcError.message,
-        details: rpcError.details,
-        hint: rpcError.hint,
-        sessionId,
-      });
+      console.error('[HEARTBEAT_DB_ERROR]', rpcError);
       return NextResponse.json({ success: false, error: rpcError.message }, { status: 500 });
     }
 
@@ -108,7 +87,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ success: true, timestamp: new Date().toISOString() });
   } catch (err: any) {
-    console.error('[HEARTBEAT_ERROR]', err?.message || err);
-    return NextResponse.json({ success: false, error: err?.message || 'Tracking error' }, { status: 500 });
+    console.error('[HEARTBEAT_DB_ERROR]', err?.message || err);
+    return NextResponse.json({ success: false, error: err?.message || 'Database write error' }, { status: 500 });
   }
 }

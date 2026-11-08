@@ -34,7 +34,7 @@ export default function LiveHeartbeat() {
     }
   }, []);
 
-  const sendHeartbeat = () => {
+  const sendHeartbeat = async () => {
     if (typeof window === 'undefined') return;
     if (!pathname || pathname.startsWith('/admin') || pathname.startsWith('/api')) {
       return;
@@ -63,24 +63,29 @@ export default function LiveHeartbeat() {
         body: JSON.stringify(payload),
       });
 
-    // Try primary endpoint; fallback to unblocked session endpoint if blocked by browser ad blocker
-    postHeartbeat('/api/tracking/heartbeat')
-      .catch(() => postHeartbeat('/api/session/heartbeat'))
-      .then(async (res) => {
-        if (!res) return;
-        const json = await res.json().catch(() => null);
-        if (!res.ok || !json?.success) {
-          console.warn('[Heartbeat response warning]', res.status, json);
-        } else {
-          console.log('[Heartbeat acknowledged]', json);
-        }
-      })
-      .catch((err) => {
-        console.error('[Heartbeat network error]', err);
-      })
-      .finally(() => {
-        isSendingRef.current = false;
-      });
+    try {
+      let res = await postHeartbeat('/api/tracking/heartbeat').catch(() => null);
+      if (!res || !res.ok) {
+        // Fallback to unblocked presence endpoint if blocked by browser ad blocker or 500
+        res = await postHeartbeat('/api/session/heartbeat').catch(() => null);
+      }
+
+      if (!res) {
+        console.error('[Heartbeat network error] Failed to reach heartbeat endpoint');
+        return;
+      }
+
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.success) {
+        console.warn('[Heartbeat response warning]', res.status, json);
+      } else {
+        console.log('[Heartbeat acknowledged]', json);
+      }
+    } catch (err) {
+      console.error('[Heartbeat network error]', err);
+    } finally {
+      isSendingRef.current = false;
+    }
   };
 
   // Trigger immediately on mount and route change
