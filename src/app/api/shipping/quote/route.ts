@@ -25,7 +25,7 @@ export async function GET() {
       .limit(1)
       .maybeSingle();
 
-    return apiSuccess({
+    const res = apiSuccess({
       free_shipping_threshold_paise: settings?.free_shipping_threshold_paise ?? 99900,
       default_shipping_charge_paise: settings?.default_shipping_charge_paise ?? 9900,
       cod_enabled: settings?.cod_enabled !== false,
@@ -41,6 +41,8 @@ export async function GET() {
       promo_nudge_badge: settings?.promo_nudge_badge || 'LOWEST PRICE',
       promo_nudge_text: settings?.promo_nudge_text || 'Instant UPI avoids the {cod_fee} COD handling charge and guarantees Priority Dispatch within 24 hours.',
     });
+    res.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+    return res;
   } catch (err) {
     console.error('[SHIPPING_SETTINGS_GET_ERROR]', err);
     return apiError(500, 'Failed to fetch shipping settings');
@@ -80,7 +82,7 @@ export async function POST(req: NextRequest) {
       shippingSettings: settings ?? null,
     });
 
-    return apiSuccess({
+    const res = apiSuccess({
       shippingPaise: result.shippingPaise,
       codFeePaise: result.codFeePaise,
       totalPaise: result.totalPaise,
@@ -100,6 +102,8 @@ export async function POST(req: NextRequest) {
       promo_nudge_badge: settings?.promo_nudge_badge || 'LOWEST PRICE',
       promo_nudge_text: settings?.promo_nudge_text || 'Instant UPI avoids the {cod_fee} COD handling charge and guarantees Priority Dispatch within 24 hours.',
     });
+    res.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+    return res;
   } catch (err) {
     console.error('[SHIPPING_QUOTE_ERROR]', err);
     return apiError(500, 'Failed to compute shipping quote');

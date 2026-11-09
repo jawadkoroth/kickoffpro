@@ -34,7 +34,7 @@ interface SettingsState {
   promo_nudge_text: string;
 }
 
-type Tab = 'providers' | 'pricing' | 'promotions' | 'cod' | 'diagnostics';
+type Tab = 'providers' | 'promotions' | 'cod' | 'diagnostics';
 
 /* ─────────────────────────────────────────────────────────────────────
    Constants
@@ -189,8 +189,7 @@ function CapPill({ label, active }: { label: string; active: boolean }) {
 ───────────────────────────────────────────────────────────────────── */
 const TABS: { id: Tab; label: string }[] = [
   { id: 'providers', label: 'Providers' },
-  { id: 'pricing', label: 'Pricing' },
-  { id: 'promotions', label: 'Drawer & Offers' },
+  { id: 'promotions', label: 'Rules & Offers' },
   { id: 'cod', label: 'COD' },
   { id: 'diagnostics', label: 'Diagnostics' },
 ];
@@ -542,86 +541,44 @@ function ProvidersTab({
   );
 }
 
-function PricingTab({
-  freeThresholdRs, setFreeThresholdRs,
-  shippingChargeRs, setShippingChargeRs,
-  errors, onSave, saving,
-}: {
-  freeThresholdRs: string; setFreeThresholdRs: (v: string) => void;
-  shippingChargeRs: string; setShippingChargeRs: (v: string) => void;
-  errors: Record<string, string>; onSave: () => void; saving: boolean;
-}) {
-  const threshold = rupeesToPaise(freeThresholdRs) / 100;
-  const charge = rupeesToPaise(shippingChargeRs) / 100;
-
-  return (
-    <div>
-      <div style={{ marginBottom: 24 }}>
-        <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: 0, lineHeight: 1.6 }}>
-          Global pricing rules applied to all orders. These are courier-agnostic — they govern KickoffPro's shipping policy, not the provider.
-        </p>
-      </div>
-
-      {/* Preview */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12, marginBottom: 28 }}>
-        <div style={{ padding: '16px 18px', background: 'var(--bg-input)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)' }}>
-          <div style={{ fontSize: '0.5625rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6 }}>Free threshold</div>
-          <div style={{ fontSize: '1.125rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-            {threshold > 0 ? `₹${threshold}` : 'Disabled'}
-          </div>
-          <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 3 }}>
-            {threshold > 0 ? 'Orders above get free shipping' : 'All orders charged'}
-          </div>
-        </div>
-        <div style={{ padding: '16px 18px', background: 'var(--bg-input)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)' }}>
-          <div style={{ fontSize: '0.5625rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6 }}>Shipping charge</div>
-          <div style={{ fontSize: '1.125rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-            {charge > 0 ? `₹${charge}` : '₹0'}
-          </div>
-          <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 3 }}>Default per order</div>
-        </div>
-      </div>
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        <Field label="Free shipping threshold (₹)" hint="0 = disabled" error={errors.free_shipping_threshold_paise}>
-          <input
-            className={`input-field${errors.free_shipping_threshold_paise ? ' input-error' : ''}`}
-            type="number" min={0} step={1} placeholder="0"
-            value={freeThresholdRs} onChange={(e) => setFreeThresholdRs(e.target.value)}
-          />
-        </Field>
-        <Field label="Default shipping charge (₹)" error={errors.default_shipping_charge_paise}>
-          <input
-            className={`input-field${errors.default_shipping_charge_paise ? ' input-error' : ''}`}
-            type="number" min={0} step={1} placeholder="0"
-            value={shippingChargeRs} onChange={(e) => setShippingChargeRs(e.target.value)}
-          />
-        </Field>
-      </div>
-
-      <div style={{ marginTop: 24, paddingTop: 20, borderTop: '1px solid var(--border-color)' }}>
-        <button className={`btn btn-primary btn-sm${saving ? ' btn-loading' : ''}`} onClick={onSave} disabled={saving} style={{ width: 'auto', minWidth: 130 }}>
-          SAVE PRICING
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function PromotionsTab({
-  state, onStateChange, promoThresholdRs, setPromoThresholdRs, codFeeRs, onSave, saving,
+function RulesAndOffersTab({
+  state,
+  onStateChange,
+  freeThresholdRs,
+  setFreeThresholdRs,
+  shippingChargeRs,
+  setShippingChargeRs,
+  promoThresholdRs,
+  setPromoThresholdRs,
+  codFeeRs,
+  errors,
+  onSave,
+  saving,
 }: {
   state: SettingsState;
   onStateChange: (patch: Partial<SettingsState>) => void;
-  promoThresholdRs: string; setPromoThresholdRs: (v: string) => void;
-  codFeeRs: string; onSave: () => void; saving: boolean;
+  freeThresholdRs: string;
+  setFreeThresholdRs: (v: string) => void;
+  shippingChargeRs: string;
+  setShippingChargeRs: (v: string) => void;
+  promoThresholdRs: string;
+  setPromoThresholdRs: (v: string) => void;
+  codFeeRs: string;
+  errors: Record<string, string>;
+  onSave: () => void;
+  saving: boolean;
 }) {
+  const threshold = rupeesToPaise(freeThresholdRs) / 100;
+  const charge = rupeesToPaise(shippingChargeRs) / 100;
   const currentCodFeeText = codFeeRs && Number(codFeeRs) > 0 ? `₹${codFeeRs}` : '₹50';
+  const effectivePromoGoalRs = promoThresholdRs || freeThresholdRs || '999';
   const previewRemaining = state.promo_goal_type === 'item_count' ? '1 item' : '₹349';
 
   const previewProgressText = (state.promo_progress_template || 'Add {remaining} more to unlock FREE SHIPPING')
     .replace(/\{remaining\}/g, previewRemaining)
-    .replace(/\{remaining_items\}/g, '1 item');
+    .replace(/\{remaining_items\}/g, '1 item')
+    .replace(/\{item_count\}/g, String(state.promo_goal_item_count || 2))
+    .replace(/\{threshold\}/g, `₹${effectivePromoGoalRs}`);
 
   const previewNudgeTitle = (state.promo_nudge_title || 'Pay with UPI & Save {cod_fee}')
     .replace(/\{cod_fee\}/g, currentCodFeeText);
@@ -633,11 +590,73 @@ function PromotionsTab({
     <div>
       <div style={{ marginBottom: 24 }}>
         <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: 0, lineHeight: 1.6 }}>
-          Configure dynamic promotional messaging, bundle discount goals, and RTO-reduction nudges inside the slide-out Magic Cart Drawer.
+          Unified shipping rules, free shipping thresholds, slide-out drawer promos, bundle discount goals, and prepaid conversion nudges.
         </p>
       </div>
 
+      {/* ── Section 1: Global Shipping Policy & Thresholds ── */}
+      <SectionRule label="Global Shipping Policy" />
+
+      {/* Quick Summary Cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12, marginBottom: 20 }}>
+        <div style={{ padding: '16px 18px', background: 'var(--bg-input)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)' }}>
+          <div style={{ fontSize: '0.5625rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6 }}>
+            Free Shipping Threshold
+          </div>
+          <div style={{ fontSize: '1.125rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+            {threshold > 0 ? `₹${threshold}` : 'Disabled'}
+          </div>
+          <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 3 }}>
+            {threshold > 0 ? `Orders ≥ ₹${threshold} ship free` : 'All orders charged standard fee'}
+          </div>
+        </div>
+        <div style={{ padding: '16px 18px', background: 'var(--bg-input)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)' }}>
+          <div style={{ fontSize: '0.5625rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6 }}>
+            Default Shipping Fee
+          </div>
+          <div style={{ fontSize: '1.125rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+            {charge > 0 ? `₹${charge}` : '₹0 (Free)'}
+          </div>
+          <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 3 }}>
+            Applied when subtotal &lt; threshold
+          </div>
+        </div>
+      </div>
+
+      {/* Form Fields: Global Threshold & Default Charge */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 28 }}>
+        <Field label="Free Shipping Threshold (₹)" hint="0 = disabled; orders above this get free shipping" error={errors.free_shipping_threshold_paise}>
+          <input
+            className={`input-field${errors.free_shipping_threshold_paise ? ' input-error' : ''}`}
+            type="number"
+            min={0}
+            step={1}
+            placeholder="999"
+            value={freeThresholdRs}
+            onChange={(e) => {
+              const val = e.target.value;
+              setFreeThresholdRs(val);
+              if (state.promo_goal_type === 'amount' && (!promoThresholdRs || promoThresholdRs === freeThresholdRs)) {
+                setPromoThresholdRs(val);
+              }
+            }}
+          />
+        </Field>
+        <Field label="Default Shipping Charge (₹)" hint="Standard delivery charge when subtotal is below threshold" error={errors.default_shipping_charge_paise}>
+          <input
+            className={`input-field${errors.default_shipping_charge_paise ? ' input-error' : ''}`}
+            type="number"
+            min={0}
+            step={1}
+            placeholder="99"
+            value={shippingChargeRs}
+            onChange={(e) => setShippingChargeRs(e.target.value)}
+          />
+        </Field>
+      </div>
+
       {/* ── Live Preview Card ── */}
+      <SectionRule label="Live Drawer Preview" />
       <div style={{
         padding: '18px 20px',
         background: 'var(--bg-input)',
@@ -702,7 +721,7 @@ function PromotionsTab({
         )}
       </div>
 
-      {/* ── Section 1: Progress Goal & Banner ── */}
+      {/* ── Section 2: Progress Goal & Banner ── */}
       <SectionRule label="Progress Bar & Goal" />
 
       <div style={{ marginBottom: 16 }}>
@@ -722,7 +741,10 @@ function PromotionsTab({
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               <button
                 type="button"
-                onClick={() => onStateChange({ promo_goal_type: 'amount' })}
+                onClick={() => {
+                  onStateChange({ promo_goal_type: 'amount' });
+                  if (!promoThresholdRs) setPromoThresholdRs(freeThresholdRs);
+                }}
                 style={{
                   padding: '10px 14px',
                   borderRadius: 'var(--radius-sm)',
@@ -755,7 +777,7 @@ function PromotionsTab({
 
           {/* Goal Target input */}
           {state.promo_goal_type === 'amount' ? (
-            <Field label="Goal Threshold Amount (₹)" hint="Cart total required to unlock">
+            <Field label="Goal Threshold Amount (₹)" hint="Cart total required to unlock promo goal">
               <input
                 className="input-field"
                 type="number"
@@ -784,7 +806,7 @@ function PromotionsTab({
           {/* Progress Template */}
           <Field
             label="In-Progress Copy Template"
-            hint="Supports {remaining} or {remaining_items}"
+            hint="Supports {remaining}, {remaining_items}, {threshold}, {item_count}"
           >
             <input
               className="input-field"
@@ -808,7 +830,7 @@ function PromotionsTab({
         </div>
       )}
 
-      {/* ── Section 2: Prepaid Conversion Nudge ── */}
+      {/* ── Section 3: Prepaid Conversion Nudge ── */}
       <SectionRule label="Prepaid Nudge (Low RTO)" />
 
       <div style={{ marginBottom: 16 }}>
@@ -861,9 +883,9 @@ function PromotionsTab({
           className={`btn btn-primary btn-sm${saving ? ' btn-loading' : ''}`}
           onClick={onSave}
           disabled={saving}
-          style={{ width: 'auto', minWidth: 150 }}
+          style={{ width: 'auto', minWidth: 160 }}
         >
-          SAVE PROMOTIONS
+          SAVE RULES & OFFERS
         </button>
       </div>
     </div>
@@ -1355,7 +1377,7 @@ export default function AdminShipping() {
       cod_fee_paise: rupeesToPaise(codFeeRs),
       promo_banner_enabled: state.promo_banner_enabled,
       promo_goal_type: state.promo_goal_type,
-      promo_goal_threshold_paise: rupeesToPaise(promoThresholdRs),
+      promo_goal_threshold_paise: rupeesToPaise(promoThresholdRs || freeThresholdRs),
       promo_goal_item_count: Number(state.promo_goal_item_count) || 2,
       promo_progress_template: state.promo_progress_template,
       promo_unlocked_text: state.promo_unlocked_text,
@@ -1374,6 +1396,9 @@ export default function AdminShipping() {
       const data = await res.json();
       if (!data.success) { showToast(data.error || 'Failed to save', 'error'); return; }
       showToast('Settings saved', 'success');
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('kickoffpro:shipping-settings-updated'));
+      }
       if (newApiKey.trim().length > 0) {
         setNewApiKey('');
         setState((s) => ({ ...s, api_key_set: true }));
@@ -1423,20 +1448,18 @@ export default function AdminShipping() {
             saving={saving}
           />
         )}
-        {activeTab === 'pricing' && (
-          <PricingTab
-            freeThresholdRs={freeThresholdRs} setFreeThresholdRs={setFreeThresholdRs}
-            shippingChargeRs={shippingChargeRs} setShippingChargeRs={setShippingChargeRs}
-            errors={errors} onSave={handleSave} saving={saving}
-          />
-        )}
         {activeTab === 'promotions' && (
-          <PromotionsTab
+          <RulesAndOffersTab
             state={state}
             onStateChange={(patch) => setState((s) => ({ ...s, ...patch }))}
+            freeThresholdRs={freeThresholdRs}
+            setFreeThresholdRs={setFreeThresholdRs}
+            shippingChargeRs={shippingChargeRs}
+            setShippingChargeRs={setShippingChargeRs}
             promoThresholdRs={promoThresholdRs}
             setPromoThresholdRs={setPromoThresholdRs}
             codFeeRs={codFeeRs}
+            errors={errors}
             onSave={handleSave}
             saving={saving}
           />

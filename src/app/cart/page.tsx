@@ -248,6 +248,7 @@ export default function CartPage() {
     let cancelled = false;
     fetch('/api/shipping/quote', {
       method: 'POST',
+      cache: 'no-store',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         subtotalPaise: postDiscountSubtotal,

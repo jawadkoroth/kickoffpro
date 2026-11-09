@@ -96,12 +96,14 @@ export async function GET() {
   // Strip the raw key before responding; only tell the client
   // whether one is currently set.
   const { api_key, ...rest } = (data ?? {}) as Record<string, unknown>;
-  return apiSuccess({
+  const res = apiSuccess({
     settings: {
       ...rest,
       api_key_set: typeof api_key === 'string' && api_key.trim().length > 0,
     },
   });
+  res.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+  return res;
 }
 
 /* ------------------------------------------------------------------ */

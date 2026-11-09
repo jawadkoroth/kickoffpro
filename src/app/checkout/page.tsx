@@ -367,6 +367,7 @@ function CheckoutContent() {
     setQuoteLoading(true);
     fetch('/api/shipping/quote', {
       method: 'POST',
+      cache: 'no-store',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         subtotalPaise: subtotalForQuote,

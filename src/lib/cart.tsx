@@ -329,7 +329,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const refreshShippingSettings = useCallback(async () => {
     try {
-      const res = await fetch('/api/shipping/quote');
+      const res = await fetch('/api/shipping/quote', { cache: 'no-store' });
       if (res.ok) {
         const json = await res.json();
         if (json.success && json.data) {
@@ -362,11 +362,43 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     void refreshShippingSettings();
+
+    const handleUpdate = () => {
+      void refreshShippingSettings();
+    };
+    const handleVisibility = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        void refreshShippingSettings();
+      }
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('kickoffpro:shipping-settings-updated', handleUpdate);
+      window.addEventListener('visibilitychange', handleVisibility);
+      window.addEventListener('focus', handleUpdate);
+    }
+
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('kickoffpro:shipping-settings-updated', handleUpdate);
+        window.removeEventListener('visibilitychange', handleVisibility);
+        window.removeEventListener('focus', handleUpdate);
+      }
+    };
   }, [refreshShippingSettings]);
 
-  const openDrawer = useCallback(() => setIsDrawerOpen(true), []);
+  const openDrawer = useCallback(() => {
+    setIsDrawerOpen(true);
+    void refreshShippingSettings();
+  }, [refreshShippingSettings]);
   const closeDrawer = useCallback(() => setIsDrawerOpen(false), []);
-  const toggleDrawer = useCallback(() => setIsDrawerOpen(prev => !prev), []);
+  const toggleDrawer = useCallback(() => {
+    setIsDrawerOpen((prev) => {
+      const next = !prev;
+      if (next) void refreshShippingSettings();
+      return next;
+    });
+  }, [refreshShippingSettings]);
 
   // Tracks the last JSON we wrote to localStorage so the storage
   // listener can ignore echoes of our own writes.
