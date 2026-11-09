@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
-import { useCart, computePromoProgress } from '@/lib/cart';
+import { useCart, computePromoProgress, DEFAULT_SHIPPING_SETTINGS } from '@/lib/cart';
 import { formatPaise } from '@/lib/format';
 import { getPublicUrl } from '@/lib/media';
 import { Truck, CheckCircle2, Zap } from 'lucide-react';
@@ -49,6 +49,11 @@ function CheckoutContent() {
     shippingSettings,
     promoProgress,
   } = useCart();
+
+  const [isHydrated, setIsHydrated] = useState(false);
+  useEffect(() => {
+    setIsHydrated(true);
+  }, []);
 
   // Race controls. AbortController for the in-flight `cart/validate`
   // request, and a token bumped on every submit so a slow-arriving
@@ -205,31 +210,36 @@ function CheckoutContent() {
     async function fetchAuth() {
       try {
         const supabase = createClient();
-        const { data: { session } } = await supabase.auth.getSession();
+        const { data: authData, error: authError } = await supabase.auth
+          .getSession()
+          .catch(() => ({ data: { session: null }, error: null }));
 
-        if (!session) {
+        if (authError || !authData?.session?.user) {
           if (!cancelled) setLoading(false);
           return;
         }
         if (cancelled) return;
 
-        setUserId(session.user.id);
+        const sessionUser = authData.session.user;
+        setUserId(sessionUser.id);
+
+        if (sessionUser.email) {
+          setEmail(sessionUser.email);
+        }
+
         const { data: profile } = await supabase
           .from('profiles')
           .select('phone, name, email')
-          .eq('id', session.user.id)
-          .single();
+          .eq('id', sessionUser.id)
+          .maybeSingle();
 
         if (cancelled) return;
 
-        if (!profile?.phone) {
-          router.replace('/profile/complete?next=/checkout');
-          return;
+        if (profile?.name) setName(profile.name);
+        if (profile?.phone) {
+          setPhone(String(profile.phone).replace('+91', '').trim());
         }
-
-        if (profile.name) setName(profile.name);
-        if (profile.phone) setPhone(profile.phone.replace('+91', ''));
-        if (profile.email) setEmail(profile.email);
+        if (profile?.email) setEmail(profile.email);
 
         // Pull saved addresses; RLS limits to this user.
         const { data: addrs } = await supabase
@@ -237,17 +247,24 @@ function CheckoutContent() {
           .select('id,label,full_name,phone,line1,line2,city,state,pincode,is_default')
           .order('is_default', { ascending: false })
           .order('created_at', { ascending: false });
+
         if (cancelled) return;
-        if (addrs && addrs.length > 0) {
+        if (addrs && Array.isArray(addrs) && addrs.length > 0) {
           const list = addrs as SavedAddress[];
           setSavedAddresses(list);
-          const def = list.find((a) => a.is_default) ?? list[0];
-          setSelectedSavedId(def.id);
-          setLine1(def.line1);
-          setLine2(def.line2 ?? '');
-          setCity(def.city);
-          setState(def.state);
-          setPincode(def.pincode);
+          const def = list.find((a) => a?.is_default) ?? list[0];
+          if (def) {
+            setSelectedSavedId(def.id);
+            if (def.full_name && !profile?.name) setName(def.full_name);
+            if (def.phone && !profile?.phone) {
+              setPhone(String(def.phone).replace('+91', '').trim());
+            }
+            setLine1(def.line1 || '');
+            setLine2(def.line2 ?? '');
+            setCity(def.city || '');
+            setState(def.state || '');
+            setPincode(def.pincode || '');
+          }
         }
       } catch (err) {
         console.error('[CHECKOUT_AUTH_LOAD]', err);
@@ -385,7 +402,7 @@ function CheckoutContent() {
     }
   }, [quote, paymentMethod]);
 
-  if (loading) {
+  if (!isHydrated || loading) {
     return (
       <div className={styles.page}>
         <div className={styles.header}>
@@ -434,14 +451,15 @@ function CheckoutContent() {
   const codFeePaise = quote?.codFeePaise ?? 0;
   const total = quote ? quote.totalPaise : subtotal;
 
-  const threshold = quote?.freeShippingThresholdPaise ?? shippingSettings.free_shipping_threshold_paise;
+  const effectiveSettings = shippingSettings || DEFAULT_SHIPPING_SETTINGS;
+  const threshold = quote?.freeShippingThresholdPaise ?? effectiveSettings.free_shipping_threshold_paise;
   const activeProgress = useMemo(() => {
-    return computePromoProgress(shippingSettings, subtotalForQuote, checkoutItems.length);
-  }, [shippingSettings, subtotalForQuote, checkoutItems.length]);
+    return computePromoProgress(effectiveSettings, subtotalForQuote, checkoutItems?.length || 0);
+  }, [effectiveSettings, subtotalForQuote, checkoutItems?.length]);
   const hasFreeShipping = threshold > 0 && subtotalForQuote >= threshold;
   const remainingForFreeShipping = Math.max(0, threshold - subtotalForQuote);
   const progressPercent = threshold > 0 ? Math.min(100, Math.round((subtotalForQuote / threshold) * 100)) : 100;
-  const codFeePaiseSetting = quote?.codFeePaiseSetting ?? shippingSettings.cod_fee_paise;
+  const codFeePaiseSetting = quote?.codFeePaiseSetting ?? effectiveSettings.cod_fee_paise;
 
   const formatPrice = (paise: number) => formatPaise(paise);
 
@@ -638,7 +656,7 @@ function CheckoutContent() {
             country: 'India',
           })
           .select('id')
-          .single()
+          .maybeSingle()
           .then(({ data: row, error }) => {
             if (error || !row) return;
             if (savedAddresses.length === 0) {
@@ -720,8 +738,8 @@ function CheckoutContent() {
     // Build a brief description for the Razorpay modal. Single-line
     // orders show product/size; multi-line orders show line count.
     const description =
-      submittedLines.length === 1
-        ? `${checkoutItems[0].name} — Size ${checkoutItems[0].size}`
+      submittedLines.length === 1 && checkoutItems[0]
+        ? `${checkoutItems[0]?.name || 'Item'} — Size ${checkoutItems[0]?.size || 'Standard'}`
         : `${submittedLines.length} items`;
 
     const rzp = new RazorpayClass({
@@ -843,27 +861,27 @@ function CheckoutContent() {
           <div style={{ marginBottom: 'var(--space-2)' }}>
             {checkoutItems.map((line) => (
               <div
-                key={`${line.product_id}::${line.size}`}
+                key={`${line?.product_id}::${line?.size}`}
                 className={styles.checkoutItemRow}
               >
                 <div className={styles.itemThumbWrap}>
-                  {line.image ? (
+                  {line?.image ? (
                     <img
                       src={getPublicUrl(line.image)}
-                      alt={line.name}
+                      alt={line?.name || 'Item'}
                       className={styles.itemThumb}
                     />
                   ) : (
                     <div className={styles.itemThumbPlaceholder}>👕</div>
                   )}
-                  <span className={styles.qtyBadge}>{line.quantity}</span>
+                  <span className={styles.qtyBadge}>{line?.quantity || 1}</span>
                 </div>
                 <div className={styles.itemMeta}>
-                  <span className={styles.itemName}>{line.name}</span>
-                  <span className={styles.itemSubtext}>Size: {line.size}</span>
+                  <span className={styles.itemName}>{line?.name || 'Product'}</span>
+                  <span className={styles.itemSubtext}>Size: {line?.size || 'Standard'}</span>
                 </div>
                 <span className={styles.itemPrice}>
-                  {formatPaise(line.price_paise * line.quantity)}
+                  {formatPaise((line?.price_paise || 0) * (line?.quantity || 1))}
                 </span>
               </div>
             ))}
@@ -987,6 +1005,7 @@ function CheckoutContent() {
             <>
               <div className={styles.savedPicker} role="radiogroup" aria-label="Saved addresses">
                 {savedAddresses.map(a => {
+                  if (!a) return null;
                   const active = a.id === selectedSavedId;
                   return (
                     <button
@@ -997,11 +1016,13 @@ function CheckoutContent() {
                       className={`${styles.savedRow} ${active ? styles.savedRowActive : ''}`}
                       onClick={() => {
                         setSelectedSavedId(a.id);
-                        setLine1(a.line1);
+                        if (a.full_name) setName(a.full_name);
+                        if (a.phone) setPhone(String(a.phone).replace('+91', '').trim());
+                        setLine1(a.line1 || '');
                         setLine2(a.line2 ?? '');
-                        setCity(a.city);
-                        setState(a.state);
-                        setPincode(a.pincode);
+                        setCity(a.city || '');
+                        setState(a.state || '');
+                        setPincode(a.pincode || '');
                         setErrors({});
                       }}
                     >
@@ -1014,11 +1035,11 @@ function CheckoutContent() {
                       />
                       <span className={styles.savedRowMeta}>
                         <span className={styles.savedRowName}>
-                          {a.label || a.full_name}
+                          {a.label || a.full_name || 'Saved Address'}
                           {a.is_default && <span className={styles.defaultPill}>Default</span>}
                         </span>
                         <span className={styles.savedRowAddr}>
-                          {a.line1}{a.line2 ? `, ${a.line2}` : ''}, {a.city}, {a.state} — {a.pincode}
+                          {a.line1 || ''}{a.line2 ? `, ${a.line2}` : ''}, {a.city || ''}, {a.state || ''} — {a.pincode || ''}
                         </span>
                       </span>
                       <span />
@@ -1052,14 +1073,16 @@ function CheckoutContent() {
               type="button"
               className={styles.savedToggle}
               onClick={() => {
-                const def = savedAddresses.find(a => a.is_default) ?? savedAddresses[0];
+                const def = savedAddresses.find(a => a?.is_default) ?? savedAddresses[0];
                 if (!def) return;
                 setSelectedSavedId(def.id);
-                setLine1(def.line1);
+                if (def.full_name) setName(def.full_name);
+                if (def.phone) setPhone(String(def.phone).replace('+91', '').trim());
+                setLine1(def.line1 || '');
                 setLine2(def.line2 ?? '');
-                setCity(def.city);
-                setState(def.state);
-                setPincode(def.pincode);
+                setCity(def.city || '');
+                setState(def.state || '');
+                setPincode(def.pincode || '');
                 setErrors({});
               }}
             >
