@@ -289,6 +289,11 @@ function CheckoutContent() {
   );
   const subtotalForQuote = Math.max(0, preDiscountSubtotal - discountPaise);
 
+  const effectiveSettings = shippingSettings || DEFAULT_SHIPPING_SETTINGS;
+  const activeProgress = useMemo(() => {
+    return computePromoProgress(effectiveSettings, subtotalForQuote, checkoutItems?.length || 0);
+  }, [effectiveSettings, subtotalForQuote, checkoutItems?.length]);
+
   // Server-authoritative coupon re-evaluation whenever the
   // subtotal changes. Uses /api/coupons/validate with subtotalPaise
   // so min_cart, max_discount, expiry, and usage limits are all
@@ -451,11 +456,7 @@ function CheckoutContent() {
   const codFeePaise = quote?.codFeePaise ?? 0;
   const total = quote ? quote.totalPaise : subtotal;
 
-  const effectiveSettings = shippingSettings || DEFAULT_SHIPPING_SETTINGS;
   const threshold = quote?.freeShippingThresholdPaise ?? effectiveSettings.free_shipping_threshold_paise;
-  const activeProgress = useMemo(() => {
-    return computePromoProgress(effectiveSettings, subtotalForQuote, checkoutItems?.length || 0);
-  }, [effectiveSettings, subtotalForQuote, checkoutItems?.length]);
   const hasFreeShipping = threshold > 0 && subtotalForQuote >= threshold;
   const remainingForFreeShipping = Math.max(0, threshold - subtotalForQuote);
   const progressPercent = threshold > 0 ? Math.min(100, Math.round((subtotalForQuote / threshold) * 100)) : 100;
