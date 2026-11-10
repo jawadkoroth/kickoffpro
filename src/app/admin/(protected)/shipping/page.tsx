@@ -32,6 +32,12 @@ interface SettingsState {
   promo_nudge_title: string;
   promo_nudge_badge: string;
   promo_nudge_text: string;
+  // Advanced Cart Offers
+  promo_reward_type: 'free_shipping' | 'threshold_percentage' | 'buy_x_get_specific_free' | 'buy_x_get_cheapest_free';
+  reward_percentage: number;
+  reward_product_id: string | null;
+  buy_x_quantity: number;
+  get_y_quantity: number;
 }
 
 type Tab = 'providers' | 'promotions' | 'cod' | 'diagnostics';
@@ -65,6 +71,11 @@ const EMPTY: SettingsState = {
   promo_nudge_title: 'Pay with UPI & Save {cod_fee}',
   promo_nudge_badge: 'LOWEST PRICE',
   promo_nudge_text: 'Instant UPI avoids the {cod_fee} COD handling charge and guarantees Priority Dispatch within 24 hours.',
+  promo_reward_type: 'free_shipping',
+  reward_percentage: 10,
+  reward_product_id: null,
+  buy_x_quantity: 2,
+  get_y_quantity: 1,
 };
 
 const PROVIDER_META: Record<string, { label: string; defaultUrl: string; description: string }> = {
@@ -551,6 +562,7 @@ function RulesAndOffersTab({
   promoThresholdRs,
   setPromoThresholdRs,
   codFeeRs,
+  storeProducts = [],
   errors,
   onSave,
   saving,
@@ -564,6 +576,7 @@ function RulesAndOffersTab({
   promoThresholdRs: string;
   setPromoThresholdRs: (v: string) => void;
   codFeeRs: string;
+  storeProducts?: Array<{ id: string; name: string; price_paise: number }>;
   errors: Record<string, string>;
   onSave: () => void;
   saving: boolean;
@@ -574,11 +587,35 @@ function RulesAndOffersTab({
   const effectivePromoGoalRs = promoThresholdRs || freeThresholdRs || '999';
   const previewRemaining = state.promo_goal_type === 'item_count' ? '1 item' : '₹349';
 
-  const previewProgressText = (state.promo_progress_template || 'Add {remaining} more to unlock FREE SHIPPING')
+  // Dynamic preview banner based on selected promotion reward type
+  const selectedGiftProduct = storeProducts.find((p) => p.id === state.reward_product_id);
+
+  let previewBannerIcon = '🚚';
+  let previewProgressText = (state.promo_progress_template || 'Add {remaining} more to unlock FREE SHIPPING')
     .replace(/\{remaining\}/g, previewRemaining)
     .replace(/\{remaining_items\}/g, '1 item')
     .replace(/\{item_count\}/g, String(state.promo_goal_item_count || 2))
-    .replace(/\{threshold\}/g, `₹${effectivePromoGoalRs}`);
+    .replace(/\{threshold\}/g, `₹${effectivePromoGoalRs}`)
+    .replace(/\{reward_percentage\}/g, `${state.reward_percentage || 10}%`)
+    .replace(/\{buy_x\}/g, String(state.buy_x_quantity || 2))
+    .replace(/\{get_y\}/g, String(state.get_y_quantity || 1));
+
+  if (state.promo_reward_type === 'threshold_percentage') {
+    previewBannerIcon = '🏷️';
+    if (!state.promo_progress_template || state.promo_progress_template.includes('FREE SHIPPING')) {
+      previewProgressText = `Add ${previewRemaining} more to unlock ${state.reward_percentage || 10}% OFF your order!`;
+    }
+  } else if (state.promo_reward_type === 'buy_x_get_cheapest_free') {
+    previewBannerIcon = '⚡';
+    if (!state.promo_progress_template || state.promo_progress_template.includes('FREE SHIPPING')) {
+      previewProgressText = `Add 1 more item to unlock lowest-priced item FREE!`;
+    }
+  } else if (state.promo_reward_type === 'buy_x_get_specific_free') {
+    previewBannerIcon = '🎁';
+    if (!state.promo_progress_template || state.promo_progress_template.includes('FREE SHIPPING')) {
+      previewProgressText = `Add 1 more item to claim your FREE gift: ${selectedGiftProduct?.name || 'Exclusive Gift'}!`;
+    }
+  }
 
   const previewNudgeTitle = (state.promo_nudge_title || 'Pay with UPI & Save {cod_fee}')
     .replace(/\{cod_fee\}/g, currentCodFeeText);
@@ -590,7 +627,7 @@ function RulesAndOffersTab({
     <div>
       <div style={{ marginBottom: 24 }}>
         <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: 0, lineHeight: 1.6 }}>
-          Unified shipping rules, free shipping thresholds, slide-out drawer promos, bundle discount goals, and prepaid conversion nudges.
+          Unified shipping rules, free shipping thresholds, slide-out drawer promos, automated reward promotions (BOGO, % discounts, gift items), and prepaid conversion nudges.
         </p>
       </div>
 
@@ -678,7 +715,7 @@ function RulesAndOffersTab({
             marginBottom: 14,
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>
-              <span>🚚</span>
+              <span>{previewBannerIcon}</span>
               <span>{previewProgressText}</span>
             </div>
             <div style={{ height: 6, width: '100%', background: 'var(--border-color)', borderRadius: 99, overflow: 'hidden' }}>
@@ -721,8 +758,8 @@ function RulesAndOffersTab({
         )}
       </div>
 
-      {/* ── Section 2: Progress Goal & Banner ── */}
-      <SectionRule label="Progress Bar & Goal" />
+      {/* ── Section 2: Progress Goal & Automated Rewards Engine ── */}
+      <SectionRule label="Automated Rewards & Promotion Type" />
 
       <div style={{ marginBottom: 16 }}>
         <ToggleRow
@@ -735,83 +772,245 @@ function RulesAndOffersTab({
 
       {state.promo_banner_enabled && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 20 }}>
-          {/* Goal Type Selector */}
+          {/* Promotion / Reward Type 4-Way Selector */}
           <div className="input-group">
-            <label className="input-label">Goal Target Type</label>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <label className="input-label">Reward / Goal Type</label>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 10 }}>
               <button
                 type="button"
-                onClick={() => {
-                  onStateChange({ promo_goal_type: 'amount' });
-                  if (!promoThresholdRs) setPromoThresholdRs(freeThresholdRs);
-                }}
+                onClick={() => onStateChange({ promo_reward_type: 'free_shipping' })}
                 style={{
-                  padding: '10px 14px',
+                  padding: '12px 14px',
                   borderRadius: 'var(--radius-sm)',
-                  border: `1px solid ${state.promo_goal_type === 'amount' ? 'var(--brand-primary, #0052FF)' : 'var(--border-color)'}`,
-                  background: state.promo_goal_type === 'amount' ? 'rgba(0, 82, 255, 0.08)' : 'var(--bg-input)',
+                  border: `1px solid ${state.promo_reward_type === 'free_shipping' ? 'var(--brand-primary, #0052FF)' : 'var(--border-color)'}`,
+                  background: state.promo_reward_type === 'free_shipping' ? 'rgba(0, 82, 255, 0.08)' : 'var(--bg-input)',
                   cursor: 'pointer',
                   textAlign: 'left',
                 }}
               >
-                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-primary)' }}>Order Value (₹)</div>
-                <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 2 }}>e.g. Free shipping over ₹999</div>
+                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-primary)' }}>🚚 Free Shipping Unlock</div>
+                <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 2 }}>Unlock ₹0 shipping on minimum order value or item count</div>
               </button>
+
               <button
                 type="button"
-                onClick={() => onStateChange({ promo_goal_type: 'item_count' })}
+                onClick={() => onStateChange({ promo_reward_type: 'threshold_percentage' })}
                 style={{
-                  padding: '10px 14px',
+                  padding: '12px 14px',
                   borderRadius: 'var(--radius-sm)',
-                  border: `1px solid ${state.promo_goal_type === 'item_count' ? 'var(--brand-primary, #0052FF)' : 'var(--border-color)'}`,
-                  background: state.promo_goal_type === 'item_count' ? 'rgba(0, 82, 255, 0.08)' : 'var(--bg-input)',
+                  border: `1px solid ${state.promo_reward_type === 'threshold_percentage' ? 'var(--brand-primary, #0052FF)' : 'var(--border-color)'}`,
+                  background: state.promo_reward_type === 'threshold_percentage' ? 'rgba(0, 82, 255, 0.08)' : 'var(--bg-input)',
                   cursor: 'pointer',
                   textAlign: 'left',
                 }}
               >
-                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-primary)' }}>Bundle Count (Items)</div>
-                <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 2 }}>e.g. Add 2 tees for free delivery</div>
+                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-primary)' }}>🏷️ % Off on Threshold</div>
+                <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 2 }}>Spend ₹X, automatically get Y% off the entire cart</div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => onStateChange({ promo_reward_type: 'buy_x_get_cheapest_free' })}
+                style={{
+                  padding: '12px 14px',
+                  borderRadius: 'var(--radius-sm)',
+                  border: `1px solid ${state.promo_reward_type === 'buy_x_get_cheapest_free' ? 'var(--brand-primary, #0052FF)' : 'var(--border-color)'}`,
+                  background: state.promo_reward_type === 'buy_x_get_cheapest_free' ? 'rgba(0, 82, 255, 0.08)' : 'var(--bg-input)',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                }}
+              >
+                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-primary)' }}>⚡ Buy X Get Lowest Free (BOGO)</div>
+                <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 2 }}>Buy X items, get the lowest-priced item(s) free</div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => onStateChange({ promo_reward_type: 'buy_x_get_specific_free' })}
+                style={{
+                  padding: '12px 14px',
+                  borderRadius: 'var(--radius-sm)',
+                  border: `1px solid ${state.promo_reward_type === 'buy_x_get_specific_free' ? 'var(--brand-primary, #0052FF)' : 'var(--border-color)'}`,
+                  background: state.promo_reward_type === 'buy_x_get_specific_free' ? 'rgba(0, 82, 255, 0.08)' : 'var(--bg-input)',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                }}
+              >
+                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-primary)' }}>🎁 Buy X Get Free Specific Gift</div>
+                <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 2 }}>Buy X items, receive a designated catalog item free</div>
               </button>
             </div>
           </div>
 
-          {/* Goal Target input */}
-          {state.promo_goal_type === 'amount' ? (
-            <Field label="Goal Threshold Amount (₹)" hint="Cart total required to unlock promo goal">
-              <input
-                className="input-field"
-                type="number"
-                min={0}
-                step={1}
-                placeholder="999"
-                value={promoThresholdRs}
-                onChange={(e) => setPromoThresholdRs(e.target.value)}
-              />
-            </Field>
-          ) : (
-            <Field label="Goal Item Count" hint="Number of items required in cart">
-              <input
-                className="input-field"
-                type="number"
-                min={1}
-                max={50}
-                step={1}
-                placeholder="2"
-                value={state.promo_goal_item_count || 2}
-                onChange={(e) => onStateChange({ promo_goal_item_count: Math.max(1, parseInt(e.target.value, 10) || 1) })}
-              />
-            </Field>
+          {/* Conditional Controls based on promo_reward_type */}
+          {state.promo_reward_type === 'free_shipping' && (
+            <>
+              <div className="input-group">
+                <label className="input-label">Goal Target Type</label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onStateChange({ promo_goal_type: 'amount' });
+                      if (!promoThresholdRs) setPromoThresholdRs(freeThresholdRs);
+                    }}
+                    style={{
+                      padding: '10px 14px',
+                      borderRadius: 'var(--radius-sm)',
+                      border: `1px solid ${state.promo_goal_type === 'amount' ? 'var(--brand-primary, #0052FF)' : 'var(--border-color)'}`,
+                      background: state.promo_goal_type === 'amount' ? 'rgba(0, 82, 255, 0.08)' : 'var(--bg-input)',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                    }}
+                  >
+                    <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-primary)' }}>Order Value (₹)</div>
+                    <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 2 }}>e.g. Free shipping over ₹999</div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onStateChange({ promo_goal_type: 'item_count' })}
+                    style={{
+                      padding: '10px 14px',
+                      borderRadius: 'var(--radius-sm)',
+                      border: `1px solid ${state.promo_goal_type === 'item_count' ? 'var(--brand-primary, #0052FF)' : 'var(--border-color)'}`,
+                      background: state.promo_goal_type === 'item_count' ? 'rgba(0, 82, 255, 0.08)' : 'var(--bg-input)',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                    }}
+                  >
+                    <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-primary)' }}>Bundle Count (Items)</div>
+                    <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 2 }}>e.g. Add 2 tees for free delivery</div>
+                  </button>
+                </div>
+              </div>
+
+              {state.promo_goal_type === 'amount' ? (
+                <Field label="Goal Threshold Amount (₹)" hint="Cart total required to unlock free shipping">
+                  <input
+                    className="input-field"
+                    type="number"
+                    min={0}
+                    step={1}
+                    placeholder="999"
+                    value={promoThresholdRs}
+                    onChange={(e) => setPromoThresholdRs(e.target.value)}
+                  />
+                </Field>
+              ) : (
+                <Field label="Goal Item Count" hint="Number of items required in cart">
+                  <input
+                    className="input-field"
+                    type="number"
+                    min={1}
+                    max={50}
+                    step={1}
+                    placeholder="2"
+                    value={state.promo_goal_item_count || 2}
+                    onChange={(e) => onStateChange({ promo_goal_item_count: Math.max(1, parseInt(e.target.value, 10) || 1) })}
+                  />
+                </Field>
+              )}
+            </>
+          )}
+
+          {state.promo_reward_type === 'threshold_percentage' && (
+            <div className="input-row">
+              <Field label="Spend Threshold (₹)" hint="Subtotal required to unlock discount">
+                <input
+                  className="input-field"
+                  type="number"
+                  min={0}
+                  step={1}
+                  placeholder="999"
+                  value={promoThresholdRs}
+                  onChange={(e) => setPromoThresholdRs(e.target.value)}
+                />
+              </Field>
+              <Field label="Reward Discount (%)" hint="Percentage deducted from cart subtotal">
+                <input
+                  className="input-field"
+                  type="number"
+                  min={1}
+                  max={90}
+                  step={1}
+                  placeholder="15"
+                  value={state.reward_percentage || 10}
+                  onChange={(e) => onStateChange({ reward_percentage: Math.min(90, Math.max(1, parseInt(e.target.value, 10) || 0)) })}
+                />
+              </Field>
+            </div>
+          )}
+
+          {state.promo_reward_type === 'buy_x_get_cheapest_free' && (
+            <div className="input-row">
+              <Field label="Required Total Items in Cart" hint="e.g. 3 for Buy 2 Get 1 Free">
+                <input
+                  className="input-field"
+                  type="number"
+                  min={2}
+                  max={20}
+                  step={1}
+                  placeholder="3"
+                  value={state.buy_x_quantity || 3}
+                  onChange={(e) => onStateChange({ buy_x_quantity: Math.max(2, parseInt(e.target.value, 10) || 2) })}
+                />
+              </Field>
+              <Field label="Number of Lowest-Priced Free Items" hint="e.g. 1 cheapest item discounted to ₹0">
+                <input
+                  className="input-field"
+                  type="number"
+                  min={1}
+                  max={5}
+                  step={1}
+                  placeholder="1"
+                  value={state.get_y_quantity || 1}
+                  onChange={(e) => onStateChange({ get_y_quantity: Math.max(1, parseInt(e.target.value, 10) || 1) })}
+                />
+              </Field>
+            </div>
+          )}
+
+          {state.promo_reward_type === 'buy_x_get_specific_free' && (
+            <>
+              <Field label="Required Items in Cart to Unlock Gift" hint="Number of items needed to qualify">
+                <input
+                  className="input-field"
+                  type="number"
+                  min={1}
+                  max={20}
+                  step={1}
+                  placeholder="2"
+                  value={state.buy_x_quantity || 2}
+                  onChange={(e) => onStateChange({ buy_x_quantity: Math.max(1, parseInt(e.target.value, 10) || 1) })}
+                />
+              </Field>
+              <Field label="Select Free Gift Product" hint="Designated product gifted at ₹0 when items count is met">
+                <select
+                  className="input-field"
+                  value={state.reward_product_id || ''}
+                  onChange={(e) => onStateChange({ reward_product_id: e.target.value || null })}
+                  style={{ background: 'var(--bg-input)', color: 'var(--text-primary)' }}
+                >
+                  <option value="">-- Choose a Product to Gift --</option>
+                  {storeProducts.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} (Value: ₹{(p.price_paise / 100).toFixed(0)})
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            </>
           )}
 
           {/* Progress Template */}
           <Field
             label="In-Progress Copy Template"
-            hint="Supports {remaining}, {remaining_items}, {threshold}, {item_count}"
+            hint="Supports {remaining}, {remaining_items}, {threshold}, {reward_percentage}, {buy_x}"
           >
             <input
               className="input-field"
               type="text"
-              placeholder="Add {remaining} more to unlock FREE SHIPPING"
+              placeholder="Add {remaining} more to unlock reward"
               value={state.promo_progress_template}
               onChange={(e) => onStateChange({ promo_progress_template: e.target.value })}
             />
@@ -822,7 +1021,7 @@ function RulesAndOffersTab({
             <input
               className="input-field"
               type="text"
-              placeholder="You unlocked FREE Standard Shipping!"
+              placeholder="Congratulations! Your reward has been unlocked!"
               value={state.promo_unlocked_text}
               onChange={(e) => onStateChange({ promo_unlocked_text: e.target.value })}
             />
@@ -1291,6 +1490,22 @@ export default function AdminShipping() {
   const [codFeeRs, setCodFeeRs] = useState('');
   const [promoThresholdRs, setPromoThresholdRs] = useState('');
   const [newApiKey, setNewApiKey] = useState('');
+  const [storeProducts, setStoreProducts] = useState<Array<{ id: string; name: string; price_paise: number }>>([]);
+
+  useEffect(() => {
+    fetch('/api/products')
+      .then((r) => r.json())
+      .then((d) => {
+        if (d?.success && Array.isArray(d.products)) {
+          setStoreProducts(d.products.map((p: { id: string; name: string; price_paise: number }) => ({
+            id: p.id,
+            name: p.name,
+            price_paise: p.price_paise,
+          })));
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const { toast, showToast } = useToast();
 
@@ -1322,6 +1537,11 @@ export default function AdminShipping() {
         promo_nudge_title: raw.promo_nudge_title ?? EMPTY.promo_nudge_title,
         promo_nudge_badge: raw.promo_nudge_badge ?? EMPTY.promo_nudge_badge,
         promo_nudge_text: raw.promo_nudge_text ?? EMPTY.promo_nudge_text,
+        promo_reward_type: raw.promo_reward_type ?? EMPTY.promo_reward_type,
+        reward_percentage: Number(raw.reward_percentage) || EMPTY.reward_percentage,
+        reward_product_id: raw.reward_product_id ?? EMPTY.reward_product_id,
+        buy_x_quantity: Number(raw.buy_x_quantity) || EMPTY.buy_x_quantity,
+        get_y_quantity: Number(raw.get_y_quantity) || EMPTY.get_y_quantity,
       };
       setState(s);
       setFreeThresholdRs(paiseToRupees(s.free_shipping_threshold_paise));
@@ -1385,6 +1605,11 @@ export default function AdminShipping() {
       promo_nudge_title: state.promo_nudge_title,
       promo_nudge_badge: state.promo_nudge_badge,
       promo_nudge_text: state.promo_nudge_text,
+      promo_reward_type: state.promo_reward_type || 'free_shipping',
+      reward_percentage: Number(state.reward_percentage) || 0,
+      reward_product_id: state.reward_product_id ?? null,
+      buy_x_quantity: Number(state.buy_x_quantity) || 2,
+      get_y_quantity: Number(state.get_y_quantity) || 1,
     };
     if (newApiKey.trim().length > 0) payload.api_key = newApiKey.trim();
     try {
@@ -1459,6 +1684,7 @@ export default function AdminShipping() {
             promoThresholdRs={promoThresholdRs}
             setPromoThresholdRs={setPromoThresholdRs}
             codFeeRs={codFeeRs}
+            storeProducts={storeProducts}
             errors={errors}
             onSave={handleSave}
             saving={saving}

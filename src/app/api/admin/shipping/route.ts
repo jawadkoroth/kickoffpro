@@ -76,6 +76,11 @@ const READ_COLUMNS = [
   'promo_nudge_title',
   'promo_nudge_badge',
   'promo_nudge_text',
+  'promo_reward_type',
+  'reward_percentage',
+  'reward_product_id',
+  'buy_x_quantity',
+  'get_y_quantity',
 ].join(', ');
 
 export async function GET() {
@@ -237,6 +242,28 @@ export async function PATCH(req: NextRequest) {
   }
   if (typeof (body as any).promo_nudge_text === 'string') {
     update.promo_nudge_text = toStringOrNull((body as any).promo_nudge_text) || 'Instant UPI avoids the {cod_fee} COD handling charge and guarantees Priority Dispatch within 24 hours.';
+  }
+
+  // Advanced Multi-Rule Cart Rewards
+  if (typeof (body as any).promo_reward_type === 'string') {
+    const validRewards = ['free_shipping', 'threshold_percentage', 'buy_x_get_specific_free', 'buy_x_get_cheapest_free'];
+    const rType = (body as any).promo_reward_type;
+    update.promo_reward_type = validRewards.includes(rType) ? rType : 'free_shipping';
+  }
+  if ((body as any).reward_percentage !== undefined) {
+    const p = Number((body as any).reward_percentage);
+    update.reward_percentage = Number.isFinite(p) && p >= 0 && p <= 100 ? p : 0;
+  }
+  if ((body as any).reward_product_id !== undefined) {
+    update.reward_product_id = toStringOrNull((body as any).reward_product_id);
+  }
+  if ((body as any).buy_x_quantity !== undefined) {
+    const bx = toIntOrNull((body as any).buy_x_quantity);
+    if (bx !== null) update.buy_x_quantity = Math.max(1, bx);
+  }
+  if ((body as any).get_y_quantity !== undefined) {
+    const gy = toIntOrNull((body as any).get_y_quantity);
+    if (gy !== null) update.get_y_quantity = Math.max(1, gy);
   }
 
   if (Object.keys(update).length === 0) {

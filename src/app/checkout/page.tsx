@@ -287,12 +287,24 @@ function CheckoutContent() {
     () => checkoutItems.reduce((s, i) => s + i.price_paise * i.quantity, 0),
     [checkoutItems],
   );
-  const subtotalForQuote = Math.max(0, preDiscountSubtotal - discountPaise);
 
   const effectiveSettings = shippingSettings || DEFAULT_SHIPPING_SETTINGS;
+  const isManualCouponActive = Boolean(couponCode && couponOk && discountPaise > 0);
+
   const activeProgress = useMemo(() => {
-    return computePromoProgress(effectiveSettings, subtotalForQuote, checkoutItems?.length || 0);
-  }, [effectiveSettings, subtotalForQuote, checkoutItems?.length]);
+    return computePromoProgress(
+      effectiveSettings,
+      preDiscountSubtotal,
+      checkoutItems.reduce((acc, it) => acc + (it.quantity || 1), 0),
+      checkoutItems,
+    );
+  }, [effectiveSettings, preDiscountSubtotal, checkoutItems]);
+
+  const effectiveDiscountPaise = isManualCouponActive
+    ? Math.min(discountPaise, preDiscountSubtotal)
+    : Math.min(activeProgress.autoDiscountPaise, preDiscountSubtotal);
+
+  const subtotalForQuote = Math.max(0, preDiscountSubtotal - effectiveDiscountPaise);
 
   // Server-authoritative coupon re-evaluation whenever the
   // subtotal changes. Uses /api/coupons/validate with subtotalPaise
@@ -451,7 +463,7 @@ function CheckoutContent() {
     );
   }
 
-  const discountAmount = Math.min(discountPaise, preDiscountSubtotal);
+  const discountAmount = effectiveDiscountPaise;
   const subtotal = preDiscountSubtotal - discountAmount;
   const shippingPaise = quote?.shippingPaise ?? 0;
   const codFeePaise = quote?.codFeePaise ?? 0;
@@ -617,7 +629,7 @@ function CheckoutContent() {
             pincode,
           },
           payment_method: paymentMethod,
-          coupon_code: couponCode || undefined,
+          coupon_code: isManualCouponActive ? couponCode : undefined,
           client_request_id: clientRequestId,
           tracking_event_id: trackingEventIdRef.current || undefined,
           fbp: getFbp() || undefined,
@@ -892,24 +904,31 @@ function CheckoutContent() {
           {/* Interactive Coupon Code Entry & Synchronization */}
           <div className={styles.couponSection}>
             {couponCode && couponOk ? (
-              <div className={styles.couponAppliedBadge}>
-                <div className={styles.couponAppliedLeft}>
-                  <span className={styles.couponTagIcon}>🏷️</span>
-                  <div>
-                    <span className={styles.couponCodeText}>{couponCode}</span>
-                    <span className={styles.couponSavingsText}>
-                      Save {formatPaise(discountAmount)}
-                    </span>
+              <>
+                <div className={styles.couponAppliedBadge}>
+                  <div className={styles.couponAppliedLeft}>
+                    <span className={styles.couponTagIcon}>🏷️</span>
+                    <div>
+                      <span className={styles.couponCodeText}>{couponCode}</span>
+                      <span className={styles.couponSavingsText}>
+                        Save {formatPaise(discountAmount)}
+                      </span>
+                    </div>
                   </div>
+                  <button
+                    type="button"
+                    className={styles.couponRemoveBtn}
+                    onClick={handleRemoveCoupon}
+                  >
+                    Remove
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  className={styles.couponRemoveBtn}
-                  onClick={handleRemoveCoupon}
-                >
-                  Remove
-                </button>
-              </div>
+                {activeProgress.autoDiscountPaise > 0 && (
+                  <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 6 }}>
+                    ℹ️ Manual coupon is active (Auto-applied cart offers cannot be combined with coupon codes).
+                  </div>
+                )}
+              </>
             ) : (
               <div className={styles.couponInputGroup}>
                 <input
@@ -949,7 +968,18 @@ function CheckoutContent() {
           </div>
           {discountAmount > 0 && (
             <div className={styles.summaryRow}>
-              <span>Discount{couponCode ? ` (${couponCode})` : ''}</span>
+              <span>
+                {isManualCouponActive ? (
+                  `Discount (${couponCode})`
+                ) : (
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ fontSize: '0.625rem', padding: '2px 6px', background: 'rgba(22, 163, 74, 0.12)', color: 'var(--success, #16a34a)', borderRadius: 4, fontWeight: 700 }}>
+                      {activeProgress.rewardBadge || 'AUTO OFFER'}
+                    </span>
+                    Offer Discount
+                  </span>
+                )}
+              </span>
               <span className={styles.discountText}>− {formatPaise(discountAmount)}</span>
             </div>
           )}

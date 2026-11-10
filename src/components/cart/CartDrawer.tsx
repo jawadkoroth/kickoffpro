@@ -260,9 +260,16 @@ export default function CartDrawer() {
                               </button>
                             </div>
 
-                            <span className={styles.lineTotal}>
-                              {formatPaise(item.price_paise * item.quantity)}
-                            </span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              {promoProgress.discountedItemKeys.includes(`${item.product_id}::${item.size}`) && (
+                                <span style={{ fontSize: '0.5625rem', fontWeight: 800, padding: '2px 6px', background: 'rgba(22, 163, 74, 0.15)', color: 'var(--success, #16a34a)', borderRadius: 4 }}>
+                                  FREE ITEM
+                                </span>
+                              )}
+                              <span className={styles.lineTotal}>
+                                {formatPaise(item.price_paise * item.quantity)}
+                              </span>
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -300,6 +307,20 @@ export default function CartDrawer() {
                       {formatPaise(totalPaise)}
                     </span>
                   </div>
+
+                  {promoProgress.autoDiscountPaise > 0 && (
+                    <div className={styles.subtotalRow} style={{ color: 'var(--success, #16a34a)' }}>
+                      <span className={styles.subtotalLabel} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ fontSize: '0.5625rem', padding: '2px 6px', background: 'rgba(22, 163, 74, 0.12)', color: 'var(--success, #16a34a)', borderRadius: 4, fontWeight: 700 }}>
+                          {promoProgress.rewardBadge || 'AUTO OFFER'}
+                        </span>
+                        Reward Discount
+                      </span>
+                      <span className={styles.subtotalValue} style={{ color: 'var(--success, #16a34a)', fontWeight: 700 }}>
+                        − {formatPaise(promoProgress.autoDiscountPaise)}
+                      </span>
+                    </div>
+                  )}
 
                   <div className={styles.shippingEstimateRow}>
                     <span>Shipping</span>

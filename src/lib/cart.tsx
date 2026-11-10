@@ -11,6 +11,13 @@ import {
   ReactNode,
 } from 'react';
 import { formatPaise } from '@/lib/format';
+import {
+  calcAutoOfferDiscount,
+  type PromoRewardType,
+  type CartLineItemSummary,
+} from '@/lib/cart-offers';
+
+export type { PromoRewardType };
 
 export interface ShippingSettingsSummary {
   free_shipping_threshold_paise: number;
@@ -27,6 +34,12 @@ export interface ShippingSettingsSummary {
   promo_nudge_title: string;
   promo_nudge_badge: string;
   promo_nudge_text: string;
+  // Advanced Cart Offers
+  promo_reward_type: PromoRewardType;
+  reward_percentage: number;
+  reward_product_id: string | null;
+  buy_x_quantity: number;
+  get_y_quantity: number;
 }
 
 export interface PromoProgressSummary {
@@ -39,7 +52,13 @@ export interface PromoProgressSummary {
   /** Progress towards free shipping (0-100) */
   shippingProgressPercent: number;
 
-  /** Dynamic Promo Goal (configured via admin: either order amount ₹ or item count bundle) */
+  /** Dynamic Promo Goal & Reward Details */
+  promoRewardType: PromoRewardType;
+  rewardPercentage: number;
+  rewardProductId: string | null;
+  buyXQuantity: number;
+  getYQuantity: number;
+
   isItemCountGoal: boolean;
   targetGoalPaise: number;
   targetItemCount: number;
@@ -48,9 +67,15 @@ export interface PromoProgressSummary {
   remainingGoalItems: number;
   goalProgressPercent: number;
 
+  /** Calculated auto discount in paise from the active cart reward rule (0 if coupon active or not unlocked) */
+  autoDiscountPaise: number;
+  /** ID(s) or key of discounted items under buy_x_get_cheapest_free or specific free */
+  discountedItemKeys: string[];
+
   /** Formatted dynamic messages with placeholder replacements */
   inProgressMessage: string;
   unlockedMessage: string;
+  rewardBadge: string;
   nudgeTitle: string;
   nudgeText: string;
   nudgeBadge: string;
@@ -73,48 +98,33 @@ export const DEFAULT_SHIPPING_SETTINGS: ShippingSettingsSummary = {
   promo_nudge_title: 'Pay with UPI & Save {cod_fee}',
   promo_nudge_badge: 'LOWEST PRICE',
   promo_nudge_text: 'Instant UPI avoids the {cod_fee} COD handling charge and guarantees Priority Dispatch within 24 hours.',
+  promo_reward_type: 'free_shipping',
+  reward_percentage: 10,
+  reward_product_id: null,
+  buy_x_quantity: 2,
+  get_y_quantity: 1,
 };
 
 export function computePromoProgress(
   settings: ShippingSettingsSummary,
   subtotalPaise: number,
   totalItems: number,
+  items: CartLineItemSummary[] = [],
 ): PromoProgressSummary {
-  const isItemCountGoal = settings.promo_goal_type === 'item_count';
-  const targetGoalPaise = settings.promo_goal_threshold_paise ?? settings.free_shipping_threshold_paise;
-  const targetItemCount = Math.max(1, settings.promo_goal_item_count || 2);
-
-  const hasUnlockedGoal = isItemCountGoal
-    ? totalItems >= targetItemCount
-    : targetGoalPaise > 0 && subtotalPaise >= targetGoalPaise;
-
-  const remainingGoalPaise = Math.max(0, targetGoalPaise - subtotalPaise);
-  const remainingGoalItems = Math.max(0, targetItemCount - totalItems);
-
-  const goalProgressPercent = isItemCountGoal
-    ? Math.min(100, Math.round((totalItems / targetItemCount) * 100))
-    : targetGoalPaise > 0
-    ? Math.min(100, Math.round((subtotalPaise / targetGoalPaise) * 100))
-    : 100;
+  const autoOffer = calcAutoOfferDiscount(settings, subtotalPaise, items);
 
   const thresholdPaise = settings.free_shipping_threshold_paise;
-  const hasFreeShipping = thresholdPaise > 0 && subtotalPaise >= thresholdPaise;
+  const hasFreeShipping =
+    (thresholdPaise > 0 && subtotalPaise >= thresholdPaise) ||
+    (settings.promo_reward_type === 'free_shipping' && autoOffer.hasUnlockedGoal);
   const remainingForFreeShipping = Math.max(0, thresholdPaise - subtotalPaise);
   const shippingProgressPercent = thresholdPaise > 0
     ? Math.min(100, Math.round((subtotalPaise / thresholdPaise) * 100))
     : 100;
 
-  // Format dynamic copy for the progress banner
-  const inProgressMessage = (
-    settings.promo_progress_template || 'Add {remaining} more to unlock FREE SHIPPING'
-  )
-    .replace(/\{remaining\}/g, formatPaise(remainingGoalPaise))
-    .replace(/\{remaining_items\}/g, `${remainingGoalItems} ${remainingGoalItems === 1 ? 'item' : 'items'}`)
-    .replace(/\{item_count\}/g, String(targetItemCount))
-    .replace(/\{threshold\}/g, formatPaise(targetGoalPaise));
-
-  const unlockedMessage =
-    settings.promo_unlocked_text || 'You unlocked FREE Standard Shipping!';
+  const isItemCountGoal = settings.promo_goal_type === 'item_count';
+  const targetGoalPaise = settings.promo_goal_threshold_paise ?? settings.free_shipping_threshold_paise;
+  const targetItemCount = Math.max(1, settings.promo_goal_item_count || 2);
 
   // Format dynamic copy for conversion nudge
   const codFeeFormatted = formatPaise(settings.cod_fee_paise);
@@ -134,15 +144,23 @@ export function computePromoProgress(
     hasFreeShipping,
     remainingForFreeShipping,
     shippingProgressPercent,
+    promoRewardType: settings.promo_reward_type || 'free_shipping',
+    rewardPercentage: Number(settings.reward_percentage) || 0,
+    rewardProductId: settings.reward_product_id ?? null,
+    buyXQuantity: Number(settings.buy_x_quantity) || 2,
+    getYQuantity: Number(settings.get_y_quantity) || 1,
     isItemCountGoal,
     targetGoalPaise,
     targetItemCount,
-    hasUnlockedGoal,
-    remainingGoalPaise,
-    remainingGoalItems,
-    goalProgressPercent,
-    inProgressMessage,
-    unlockedMessage,
+    hasUnlockedGoal: autoOffer.hasUnlockedGoal,
+    remainingGoalPaise: autoOffer.remainingGoalPaise,
+    remainingGoalItems: autoOffer.remainingGoalItems,
+    goalProgressPercent: autoOffer.goalProgressPercent,
+    autoDiscountPaise: autoOffer.autoDiscountPaise,
+    discountedItemKeys: autoOffer.discountedItemKeys,
+    inProgressMessage: autoOffer.inProgressMessage,
+    unlockedMessage: autoOffer.unlockedMessage,
+    rewardBadge: autoOffer.rewardBadge,
     nudgeTitle,
     nudgeText,
     nudgeBadge,
@@ -350,6 +368,11 @@ export function CartProvider({ children }: { children: ReactNode }) {
             promo_nudge_title: json.data.promo_nudge_title || 'Pay with UPI & Save {cod_fee}',
             promo_nudge_badge: json.data.promo_nudge_badge || 'LOWEST PRICE',
             promo_nudge_text: json.data.promo_nudge_text || 'Instant UPI avoids the {cod_fee} COD handling charge and guarantees Priority Dispatch within 24 hours.',
+            promo_reward_type: (json.data.promo_reward_type as PromoRewardType) || 'free_shipping',
+            reward_percentage: Number(json.data.reward_percentage) || 0,
+            reward_product_id: json.data.reward_product_id ?? null,
+            buy_x_quantity: Number(json.data.buy_x_quantity) || 2,
+            get_y_quantity: Number(json.data.get_y_quantity) || 1,
           });
         }
       }
@@ -659,8 +682,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const getTotal = useCallback(() => totalPaise, [totalPaise]);
 
   const promoProgress = useMemo(
-    () => computePromoProgress(shippingSettings, totalPaise, totalItems),
-    [shippingSettings, totalPaise, totalItems],
+    () => computePromoProgress(shippingSettings, totalPaise, totalItems, items),
+    [shippingSettings, totalPaise, totalItems, items],
   );
 
   const value = useMemo<CartContextType>(

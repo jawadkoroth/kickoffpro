@@ -184,10 +184,13 @@ export default function CartPage() {
   const renderedItems = useMemo(() => items, [items]);
 
   // Post-discount subtotal drives the shipping quote and the displayed
-  // total. Coupon discount is server-authoritative (already capped by
-  // max_discount_paise) so a local `Math.min` guards only against a
-  // corrupt server response.
-  const postDiscountSubtotal = Math.max(0, totalPaise - Math.min(discountPaise, totalPaise));
+  // total. When a manual coupon is active, it takes priority and overrides
+  // auto-applied cart drawer rewards (mutual exclusivity).
+  const isManualCouponActive = Boolean(appliedCode && discountPaise > 0);
+  const effectiveDiscountPaise = isManualCouponActive
+    ? Math.min(discountPaise, totalPaise)
+    : Math.min(promoProgress.autoDiscountPaise, totalPaise);
+  const postDiscountSubtotal = Math.max(0, totalPaise - effectiveDiscountPaise);
 
   // Hydrate persisted coupon once the cart is known and non-empty.
   // Deferred until items.length > 0 so we never preflight a coupon
@@ -439,12 +442,12 @@ export default function CartPage() {
   }
 
   // Unified promotional goal & shipping progress calculation
-  // When a coupon is active, calculate against postDiscountSubtotal; otherwise use shared promoProgress from useCart()
+  // When a manual coupon is active, calculate against postDiscountSubtotal; otherwise use shared promoProgress from useCart()
   const activeProgress = useMemo(() => {
-    return appliedCode && discountPaise > 0
-      ? computePromoProgress(shippingSettings, postDiscountSubtotal, totalItems)
+    return isManualCouponActive
+      ? computePromoProgress(shippingSettings, postDiscountSubtotal, totalItems, items)
       : promoProgress;
-  }, [appliedCode, discountPaise, shippingSettings, postDiscountSubtotal, totalItems, promoProgress]);
+  }, [isManualCouponActive, shippingSettings, postDiscountSubtotal, totalItems, items, promoProgress]);
 
   return (
     <div className={styles.page}>
@@ -701,14 +704,33 @@ export default function CartPage() {
             <span>Subtotal</span>
             <span>{formatPaise(totalPaise)}</span>
           </div>
-          {discountPaise > 0 && appliedCode && (
+          {isManualCouponActive ? (
+            <>
+              <div className={styles.summaryRow}>
+                <span>Discount ({appliedCode})</span>
+                <span className={styles.discountText}>
+                  − {formatPaise(discountPaise)}
+                </span>
+              </div>
+              {promoProgress.hasUnlockedGoal && promoProgress.autoDiscountPaise > 0 && (
+                <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginBottom: 8, padding: '6px 10px', background: 'var(--bg-input)', borderRadius: 6, border: '1px solid var(--border-color)' }}>
+                  ℹ️ Coupon code <strong>{appliedCode}</strong> applied. Auto cart offers cannot be combined with coupon codes.
+                </div>
+              )}
+            </>
+          ) : effectiveDiscountPaise > 0 ? (
             <div className={styles.summaryRow}>
-              <span>Discount ({appliedCode})</span>
-              <span className={styles.discountText}>
-                − {formatPaise(discountPaise)}
+              <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontSize: '0.625rem', padding: '2px 6px', background: 'rgba(22, 163, 74, 0.12)', color: 'var(--success, #16a34a)', borderRadius: 4, fontWeight: 700 }}>
+                  {promoProgress.rewardBadge || 'AUTO REWARD'}
+                </span>
+                Offer Discount
+              </span>
+              <span className={styles.discountText} style={{ color: 'var(--success, #16a34a)' }}>
+                − {formatPaise(effectiveDiscountPaise)}
               </span>
             </div>
-          )}
+          ) : null}
           <div className={styles.summaryRow}>
             <span>Shipping</span>
             <span className={pricingQuote && pricingQuote.shippingPaise === 0 ? styles.freeText : undefined}>
@@ -733,8 +755,8 @@ export default function CartPage() {
               )}
             </strong>
           </div>
-          {discountPaise > 0 && (
-            <p className={styles.savings}>You save {formatPaise(discountPaise)}</p>
+          {effectiveDiscountPaise > 0 && (
+            <p className={styles.savings}>You save {formatPaise(effectiveDiscountPaise)}</p>
           )}
         </div>
 

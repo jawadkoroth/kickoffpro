@@ -20,7 +20,7 @@ export async function GET() {
     const { data: settings } = await supabase
       .from('shipping_settings')
       .select(
-        'free_shipping_threshold_paise, default_shipping_charge_paise, cod_enabled, cod_fee_paise, promo_banner_enabled, promo_goal_type, promo_goal_threshold_paise, promo_goal_item_count, promo_progress_template, promo_unlocked_text, promo_nudge_enabled, promo_nudge_title, promo_nudge_badge, promo_nudge_text',
+        'free_shipping_threshold_paise, default_shipping_charge_paise, cod_enabled, cod_fee_paise, promo_banner_enabled, promo_goal_type, promo_goal_threshold_paise, promo_goal_item_count, promo_progress_template, promo_unlocked_text, promo_nudge_enabled, promo_nudge_title, promo_nudge_badge, promo_nudge_text, promo_reward_type, reward_percentage, reward_product_id, buy_x_quantity, get_y_quantity',
       )
       .limit(1)
       .maybeSingle();
@@ -40,6 +40,11 @@ export async function GET() {
       promo_nudge_title: settings?.promo_nudge_title || 'Pay with UPI & Save {cod_fee}',
       promo_nudge_badge: settings?.promo_nudge_badge || 'LOWEST PRICE',
       promo_nudge_text: settings?.promo_nudge_text || 'Instant UPI avoids the {cod_fee} COD handling charge and guarantees Priority Dispatch within 24 hours.',
+      promo_reward_type: settings?.promo_reward_type || 'free_shipping',
+      reward_percentage: Number(settings?.reward_percentage) || 0,
+      reward_product_id: settings?.reward_product_id ?? null,
+      buy_x_quantity: settings?.buy_x_quantity ?? 2,
+      get_y_quantity: settings?.get_y_quantity ?? 1,
     });
     res.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
     return res;
@@ -71,7 +76,7 @@ export async function POST(req: NextRequest) {
     const { data: settings } = await supabase
       .from('shipping_settings')
       .select(
-        'free_shipping_threshold_paise, default_shipping_charge_paise, cod_enabled, cod_fee_paise, promo_banner_enabled, promo_goal_type, promo_goal_threshold_paise, promo_goal_item_count, promo_progress_template, promo_unlocked_text, promo_nudge_enabled, promo_nudge_title, promo_nudge_badge, promo_nudge_text',
+        'free_shipping_threshold_paise, default_shipping_charge_paise, cod_enabled, cod_fee_paise, promo_banner_enabled, promo_goal_type, promo_goal_threshold_paise, promo_goal_item_count, promo_progress_template, promo_unlocked_text, promo_nudge_enabled, promo_nudge_title, promo_nudge_badge, promo_nudge_text, promo_reward_type, reward_percentage, reward_product_id, buy_x_quantity, get_y_quantity',
       )
       .limit(1)
       .maybeSingle();
@@ -101,6 +106,11 @@ export async function POST(req: NextRequest) {
       promo_nudge_title: settings?.promo_nudge_title || 'Pay with UPI & Save {cod_fee}',
       promo_nudge_badge: settings?.promo_nudge_badge || 'LOWEST PRICE',
       promo_nudge_text: settings?.promo_nudge_text || 'Instant UPI avoids the {cod_fee} COD handling charge and guarantees Priority Dispatch within 24 hours.',
+      promo_reward_type: settings?.promo_reward_type || 'free_shipping',
+      reward_percentage: Number(settings?.reward_percentage) || 0,
+      reward_product_id: settings?.reward_product_id ?? null,
+      buy_x_quantity: settings?.buy_x_quantity ?? 2,
+      get_y_quantity: settings?.get_y_quantity ?? 1,
     });
     res.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
     return res;

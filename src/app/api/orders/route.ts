@@ -9,6 +9,7 @@ import { logEvent } from '@/lib/log';
 import { withRequest } from '@/lib/observability/context';
 import { calcShipping } from '@/lib/shipping/calcShipping';
 import { evaluateCoupon } from '@/lib/coupons/evaluateCoupon';
+import { calcAutoOfferDiscount } from '@/lib/cart-offers';
 import { enqueue } from '@/lib/jobs/queue';
 import { notifyAdminsBestEffort } from '@/lib/push/webPush';
 import { enforceRateLimit } from '@/lib/rateLimit';
@@ -241,9 +242,7 @@ async function handlePOST(req: NextRequest) {
       }
     }
 
-    const postDiscountSubtotal = subtotal - discount;
-
-    // 7. Server-authoritative shipping + COD fee. Settings are loaded
+    // 7. Server-authoritative shipping + COD fee + auto-offers. Settings are loaded
     //    fresh per request so admin changes take effect immediately.
     //    `calcShipping` is deterministic: given the same inputs, the
     //    checkout UI quote and this final computation produce the
@@ -251,10 +250,31 @@ async function handlePOST(req: NextRequest) {
     const { data: shippingSettings } = await supabase
       .from('shipping_settings')
       .select(
-        'free_shipping_threshold_paise, default_shipping_charge_paise, cod_enabled, cod_fee_paise',
+        'free_shipping_threshold_paise, default_shipping_charge_paise, cod_enabled, cod_fee_paise, promo_banner_enabled, promo_reward_type, promo_goal_type, promo_goal_threshold_paise, promo_goal_item_count, reward_percentage, reward_product_id, buy_x_quantity, get_y_quantity',
       )
       .limit(1)
       .maybeSingle();
+
+    // Mutual exclusivity: if no manual coupon code was applied, evaluate
+    // active automated cart drawer promotional rewards (e.g. % off, cheapest free, etc.)
+    if (!appliedCoupon) {
+      const autoOffer = calcAutoOfferDiscount(
+        shippingSettings,
+        subtotal,
+        lineItems.map((li) => ({
+          product_id: li.product_id,
+          size: li.size,
+          quantity: li.quantity,
+          price_paise: li.unit_price_paise,
+        })),
+      );
+      if (autoOffer.hasUnlockedGoal && autoOffer.autoDiscountPaise > 0) {
+        discount = Math.min(autoOffer.autoDiscountPaise, subtotal);
+        appliedCoupon = `AUTO:${autoOffer.rewardBadge || 'OFFER'}`;
+      }
+    }
+
+    const postDiscountSubtotal = Math.max(0, subtotal - discount);
 
     const quote = calcShipping({
       subtotalPaise: postDiscountSubtotal,
