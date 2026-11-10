@@ -238,10 +238,10 @@ export async function PATCH(req: NextRequest) {
     if (v !== null) update.promo_goal_item_count = v;
   }
   if (typeof (body as any).promo_progress_template === 'string') {
-    update.promo_progress_template = toStringOrNull((body as any).promo_progress_template) || 'Add {remaining} more to unlock FREE SHIPPING';
+    update.promo_progress_template = toStringOrNull((body as any).promo_progress_template);
   }
   if (typeof (body as any).promo_unlocked_text === 'string') {
-    update.promo_unlocked_text = toStringOrNull((body as any).promo_unlocked_text) || 'You unlocked FREE Standard Shipping!';
+    update.promo_unlocked_text = toStringOrNull((body as any).promo_unlocked_text);
   }
   if (typeof (body as any).promo_nudge_enabled === 'boolean') {
     update.promo_nudge_enabled = (body as any).promo_nudge_enabled;

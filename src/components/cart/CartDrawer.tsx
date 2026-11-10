@@ -17,6 +17,8 @@ import {
   Truck,
   Zap,
   CheckCircle2,
+  Gift,
+  Tag,
 } from 'lucide-react';
 import styles from './CartDrawer.module.css';
 
@@ -120,7 +122,15 @@ export default function CartDrawer() {
                     </>
                   ) : (
                     <>
-                      <Truck size={16} className={styles.shippingHighlight} />
+                      {promoProgress.promoRewardType === 'buy_x_get_specific_free' ? (
+                        <Gift size={16} className={styles.shippingHighlight} />
+                      ) : promoProgress.promoRewardType === 'threshold_percentage' ? (
+                        <Tag size={16} className={styles.shippingHighlight} />
+                      ) : promoProgress.promoRewardType === 'buy_x_get_cheapest_free' ? (
+                        <Zap size={16} className={styles.shippingHighlight} />
+                      ) : (
+                        <Truck size={16} className={styles.shippingHighlight} />
+                      )}
                       <span>{promoProgress.inProgressMessage}</span>
                     </>
                   )}
@@ -327,8 +337,10 @@ export default function CartDrawer() {
                     <span>
                       {promoProgress.hasFreeShipping ? (
                         <span className={styles.freeBadge}>FREE</span>
-                      ) : (
+                      ) : promoProgress.thresholdPaise > 0 ? (
                         `${formatPaise(shippingSettings.default_shipping_charge_paise)} (or FREE over ${formatPaise(promoProgress.thresholdPaise)})`
+                      ) : (
+                        formatPaise(shippingSettings.default_shipping_charge_paise)
                       )}
                     </span>
                   </div>

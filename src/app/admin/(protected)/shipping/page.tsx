@@ -589,33 +589,67 @@ function RulesAndOffersTab({
 
   // Dynamic preview banner based on selected promotion reward type
   const selectedGiftProduct = storeProducts.find((p) => p.id === state.reward_product_id);
+  const giftLabel = selectedGiftProduct?.name || 'FREE Gift';
+
+  const REWARD_DEFAULTS: Record<
+    SettingsState['promo_reward_type'],
+    { progress: string; unlocked: string }
+  > = {
+    free_shipping: {
+      progress: 'Add {remaining} more to unlock FREE SHIPPING',
+      unlocked: 'You unlocked FREE Standard Shipping!',
+    },
+    threshold_percentage: {
+      progress: 'Add {remaining} more to get {reward_percentage} OFF your order!',
+      unlocked: '🎉 {reward_percentage} OFF automatically applied!',
+    },
+    buy_x_get_cheapest_free: {
+      progress: 'Add {remaining_items} more to get your lowest-priced item FREE!',
+      unlocked: '⚡ Lowest-priced item FREE automatically applied!',
+    },
+    buy_x_get_specific_free: {
+      progress: 'Add {remaining_items} more to unlock FREE {reward_product}!',
+      unlocked: '🎁 Free {reward_product} unlocked with your order!',
+    },
+  };
+
+  const selectRewardType = (nextType: SettingsState['promo_reward_type']) => {
+    const knownProgress = new Set(Object.values(REWARD_DEFAULTS).map((d) => d.progress));
+    const knownUnlocked = new Set(Object.values(REWARD_DEFAULTS).map((d) => d.unlocked));
+    const curProgress = (state.promo_progress_template || '').trim();
+    const curUnlocked = (state.promo_unlocked_text || '').trim();
+
+    const patch: Partial<SettingsState> = { promo_reward_type: nextType };
+    if (!curProgress || knownProgress.has(curProgress)) {
+      patch.promo_progress_template = REWARD_DEFAULTS[nextType].progress;
+    }
+    if (!curUnlocked || knownUnlocked.has(curUnlocked)) {
+      patch.promo_unlocked_text = REWARD_DEFAULTS[nextType].unlocked;
+    }
+    onStateChange(patch);
+  };
 
   let previewBannerIcon = '🚚';
-  let previewProgressText = (state.promo_progress_template || 'Add {remaining} more to unlock FREE SHIPPING')
+  if (state.promo_reward_type === 'threshold_percentage') previewBannerIcon = '🏷️';
+  else if (state.promo_reward_type === 'buy_x_get_cheapest_free') previewBannerIcon = '⚡';
+  else if (state.promo_reward_type === 'buy_x_get_specific_free') previewBannerIcon = '🎁';
+
+  const activeFallback = REWARD_DEFAULTS[state.promo_reward_type || 'free_shipping']?.progress || REWARD_DEFAULTS.free_shipping.progress;
+  const rawPreviewTpl = (state.promo_progress_template || '').trim();
+  const effectivePreviewTpl =
+    !rawPreviewTpl || (state.promo_reward_type !== 'free_shipping' && rawPreviewTpl === REWARD_DEFAULTS.free_shipping.progress)
+      ? activeFallback
+      : rawPreviewTpl;
+
+  const previewProgressText = effectivePreviewTpl
     .replace(/\{remaining\}/g, previewRemaining)
     .replace(/\{remaining_items\}/g, '1 item')
     .replace(/\{item_count\}/g, String(state.promo_goal_item_count || 2))
     .replace(/\{threshold\}/g, `₹${effectivePromoGoalRs}`)
     .replace(/\{reward_percentage\}/g, `${state.reward_percentage || 10}%`)
+    .replace(/\{reward_product\}/g, giftLabel)
     .replace(/\{buy_x\}/g, String(state.buy_x_quantity || 2))
     .replace(/\{get_y\}/g, String(state.get_y_quantity || 1));
-
-  if (state.promo_reward_type === 'threshold_percentage') {
-    previewBannerIcon = '🏷️';
-    if (!state.promo_progress_template || state.promo_progress_template.includes('FREE SHIPPING')) {
-      previewProgressText = `Add ${previewRemaining} more to unlock ${state.reward_percentage || 10}% OFF your order!`;
-    }
-  } else if (state.promo_reward_type === 'buy_x_get_cheapest_free') {
-    previewBannerIcon = '⚡';
-    if (!state.promo_progress_template || state.promo_progress_template.includes('FREE SHIPPING')) {
-      previewProgressText = `Add 1 more item to unlock lowest-priced item FREE!`;
-    }
-  } else if (state.promo_reward_type === 'buy_x_get_specific_free') {
-    previewBannerIcon = '🎁';
-    if (!state.promo_progress_template || state.promo_progress_template.includes('FREE SHIPPING')) {
-      previewProgressText = `Add 1 more item to claim your FREE gift: ${selectedGiftProduct?.name || 'Exclusive Gift'}!`;
-    }
-  }
 
   const previewNudgeTitle = (state.promo_nudge_title || 'Pay with UPI & Save {cod_fee}')
     .replace(/\{cod_fee\}/g, currentCodFeeText);
@@ -778,7 +812,7 @@ function RulesAndOffersTab({
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 10 }}>
               <button
                 type="button"
-                onClick={() => onStateChange({ promo_reward_type: 'free_shipping' })}
+                onClick={() => selectRewardType('free_shipping')}
                 style={{
                   padding: '12px 14px',
                   borderRadius: 'var(--radius-sm)',
@@ -794,7 +828,7 @@ function RulesAndOffersTab({
 
               <button
                 type="button"
-                onClick={() => onStateChange({ promo_reward_type: 'threshold_percentage' })}
+                onClick={() => selectRewardType('threshold_percentage')}
                 style={{
                   padding: '12px 14px',
                   borderRadius: 'var(--radius-sm)',
@@ -810,7 +844,7 @@ function RulesAndOffersTab({
 
               <button
                 type="button"
-                onClick={() => onStateChange({ promo_reward_type: 'buy_x_get_cheapest_free' })}
+                onClick={() => selectRewardType('buy_x_get_cheapest_free')}
                 style={{
                   padding: '12px 14px',
                   borderRadius: 'var(--radius-sm)',
@@ -826,7 +860,7 @@ function RulesAndOffersTab({
 
               <button
                 type="button"
-                onClick={() => onStateChange({ promo_reward_type: 'buy_x_get_specific_free' })}
+                onClick={() => selectRewardType('buy_x_get_specific_free')}
                 style={{
                   padding: '12px 14px',
                   borderRadius: 'var(--radius-sm)',
@@ -943,19 +977,19 @@ function RulesAndOffersTab({
 
           {state.promo_reward_type === 'buy_x_get_cheapest_free' && (
             <div className="input-row">
-              <Field label="Required Total Items in Cart" hint="e.g. 3 for Buy 2 Get 1 Free">
+              <Field label="Buy X Paid Items" hint={`e.g. 2 for Buy 2 Get ${state.get_y_quantity || 1} Free (Cart total needed: ${(state.buy_x_quantity || 2) + (state.get_y_quantity || 1)})`}>
                 <input
                   className="input-field"
                   type="number"
-                  min={2}
+                  min={1}
                   max={20}
                   step={1}
-                  placeholder="3"
-                  value={state.buy_x_quantity || 3}
-                  onChange={(e) => onStateChange({ buy_x_quantity: Math.max(2, parseInt(e.target.value, 10) || 2) })}
+                  placeholder="2"
+                  value={state.buy_x_quantity || 2}
+                  onChange={(e) => onStateChange({ buy_x_quantity: Math.max(1, parseInt(e.target.value, 10) || 1) })}
                 />
               </Field>
-              <Field label="Number of Lowest-Priced Free Items" hint="e.g. 1 cheapest item discounted to ₹0">
+              <Field label="Get Y Lowest-Priced Free Items" hint="e.g. 1 cheapest item discounted to ₹0">
                 <input
                   className="input-field"
                   type="number"
@@ -1005,7 +1039,7 @@ function RulesAndOffersTab({
           {/* Progress Template */}
           <Field
             label="In-Progress Copy Template"
-            hint="Supports {remaining}, {remaining_items}, {threshold}, {reward_percentage}, {buy_x}"
+            hint="Supports {remaining}, {remaining_items}, {threshold}, {reward_percentage}, {reward_product}, {buy_x}"
           >
             <input
               className="input-field"
@@ -1511,10 +1545,29 @@ export default function AdminShipping() {
 
   const fetchSettings = useCallback(async () => {
     try {
-      const res = await fetch('/api/admin/shipping');
+      const res = await fetch(`/api/admin/shipping?t=${Date.now()}`, { cache: 'no-store' });
       const data = await res.json();
       if (!data.success) { showToast('Failed to load shipping settings', 'error'); return; }
       const raw = data.settings || {};
+      const rewardType: SettingsState['promo_reward_type'] = raw.promo_reward_type ?? EMPTY.promo_reward_type;
+      const rewardDefaults: Record<SettingsState['promo_reward_type'], { progress: string; unlocked: string }> = {
+        free_shipping: {
+          progress: 'Add {remaining} more to unlock FREE SHIPPING',
+          unlocked: 'You unlocked FREE Standard Shipping!',
+        },
+        threshold_percentage: {
+          progress: 'Add {remaining} more to get {reward_percentage} OFF your order!',
+          unlocked: '🎉 {reward_percentage} OFF automatically applied!',
+        },
+        buy_x_get_cheapest_free: {
+          progress: 'Add {remaining_items} more to get your lowest-priced item FREE!',
+          unlocked: '⚡ Lowest-priced item FREE automatically applied!',
+        },
+        buy_x_get_specific_free: {
+          progress: 'Add {remaining_items} more to unlock FREE {reward_product}!',
+          unlocked: '🎁 Free {reward_product} unlocked with your order!',
+        },
+      };
       const s: SettingsState = {
         ...EMPTY,
         ...raw,
@@ -1531,13 +1584,13 @@ export default function AdminShipping() {
         promo_goal_type: raw.promo_goal_type ?? EMPTY.promo_goal_type,
         promo_goal_threshold_paise: raw.promo_goal_threshold_paise ?? EMPTY.promo_goal_threshold_paise,
         promo_goal_item_count: raw.promo_goal_item_count ?? EMPTY.promo_goal_item_count,
-        promo_progress_template: raw.promo_progress_template ?? EMPTY.promo_progress_template,
-        promo_unlocked_text: raw.promo_unlocked_text ?? EMPTY.promo_unlocked_text,
+        promo_progress_template: raw.promo_progress_template || rewardDefaults[rewardType]?.progress || EMPTY.promo_progress_template,
+        promo_unlocked_text: raw.promo_unlocked_text || rewardDefaults[rewardType]?.unlocked || EMPTY.promo_unlocked_text,
         promo_nudge_enabled: raw.promo_nudge_enabled ?? EMPTY.promo_nudge_enabled,
         promo_nudge_title: raw.promo_nudge_title ?? EMPTY.promo_nudge_title,
         promo_nudge_badge: raw.promo_nudge_badge ?? EMPTY.promo_nudge_badge,
         promo_nudge_text: raw.promo_nudge_text ?? EMPTY.promo_nudge_text,
-        promo_reward_type: raw.promo_reward_type ?? EMPTY.promo_reward_type,
+        promo_reward_type: rewardType,
         reward_percentage: Number(raw.reward_percentage) || EMPTY.reward_percentage,
         reward_product_id: raw.reward_product_id ?? EMPTY.reward_product_id,
         buy_x_quantity: Number(raw.buy_x_quantity) || EMPTY.buy_x_quantity,
@@ -1623,11 +1676,17 @@ export default function AdminShipping() {
       showToast('Settings saved', 'success');
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new Event('kickoffpro:shipping-settings-updated'));
+        try {
+          localStorage.setItem('kickoffpro:settings_version', String(Date.now()));
+        } catch {
+          // ignore storage errors in private browsing
+        }
       }
       if (newApiKey.trim().length > 0) {
         setNewApiKey('');
         setState((s) => ({ ...s, api_key_set: true }));
       }
+      await fetchSettings();
     } catch {
       showToast('Failed to save settings', 'error');
     } finally {

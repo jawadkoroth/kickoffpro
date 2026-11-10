@@ -38,6 +38,7 @@ export interface ShippingSettingsSummary {
   promo_reward_type: PromoRewardType;
   reward_percentage: number;
   reward_product_id: string | null;
+  reward_product_name?: string | null;
   buy_x_quantity: number;
   get_y_quantity: number;
 }
@@ -56,6 +57,7 @@ export interface PromoProgressSummary {
   promoRewardType: PromoRewardType;
   rewardPercentage: number;
   rewardProductId: string | null;
+  rewardProductName: string | null;
   buyXQuantity: number;
   getYQuantity: number;
 
@@ -101,6 +103,7 @@ export const DEFAULT_SHIPPING_SETTINGS: ShippingSettingsSummary = {
   promo_reward_type: 'free_shipping',
   reward_percentage: 10,
   reward_product_id: null,
+  reward_product_name: null,
   buy_x_quantity: 2,
   get_y_quantity: 1,
 };
@@ -122,9 +125,17 @@ export function computePromoProgress(
     ? Math.min(100, Math.round((subtotalPaise / thresholdPaise) * 100))
     : 100;
 
-  const isItemCountGoal = settings.promo_goal_type === 'item_count';
+  const isItemCountGoal =
+    settings.promo_reward_type === 'buy_x_get_specific_free' ||
+    settings.promo_reward_type === 'buy_x_get_cheapest_free' ||
+    settings.promo_goal_type === 'item_count';
   const targetGoalPaise = settings.promo_goal_threshold_paise ?? settings.free_shipping_threshold_paise;
-  const targetItemCount = Math.max(1, settings.promo_goal_item_count || 2);
+  const targetItemCount =
+    settings.promo_reward_type === 'buy_x_get_specific_free'
+      ? Math.max(1, Number(settings.buy_x_quantity) || 2)
+      : settings.promo_reward_type === 'buy_x_get_cheapest_free'
+      ? Math.max(1, Number(settings.buy_x_quantity) || 2) + Math.max(1, Number(settings.get_y_quantity) || 1)
+      : Math.max(1, settings.promo_goal_item_count || 2);
 
   // Format dynamic copy for conversion nudge
   const codFeeFormatted = formatPaise(settings.cod_fee_paise);
@@ -147,6 +158,7 @@ export function computePromoProgress(
     promoRewardType: settings.promo_reward_type || 'free_shipping',
     rewardPercentage: Number(settings.reward_percentage) || 0,
     rewardProductId: settings.reward_product_id ?? null,
+    rewardProductName: settings.reward_product_name ?? null,
     buyXQuantity: Number(settings.buy_x_quantity) || 2,
     getYQuantity: Number(settings.get_y_quantity) || 1,
     isItemCountGoal,
@@ -347,32 +359,51 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const refreshShippingSettings = useCallback(async () => {
     try {
-      const res = await fetch('/api/shipping/quote', { cache: 'no-store' });
+      const res = await fetch(`/api/shipping/quote?t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          Pragma: 'no-cache',
+        },
+      });
       if (res.ok) {
         const json = await res.json();
-        if (json.success && json.data) {
+        const payload = json?.data ?? json;
+        if (json?.success && payload && typeof payload === 'object') {
+          const toNum = (v: unknown, fb: number) => {
+            if (typeof v === 'number' && Number.isFinite(v)) return v;
+            if (typeof v === 'string' && v.trim() !== '' && Number.isFinite(Number(v))) {
+              return Number(v);
+            }
+            return fb;
+          };
+          const freeThresh = toNum(payload.free_shipping_threshold_paise, 99900);
           setShippingSettings({
-            free_shipping_threshold_paise: Number(json.data.free_shipping_threshold_paise) || 99900,
-            default_shipping_charge_paise: Number(json.data.default_shipping_charge_paise) || 9900,
-            cod_fee_paise: Number(json.data.cod_fee_paise) || 5000,
-            cod_enabled: json.data.cod_enabled !== false,
-            promo_banner_enabled: json.data.promo_banner_enabled !== false,
-            promo_goal_type: json.data.promo_goal_type === 'item_count' ? 'item_count' : 'amount',
-            promo_goal_threshold_paise: json.data.promo_goal_threshold_paise !== undefined
-              ? Number(json.data.promo_goal_threshold_paise)
-              : Number(json.data.free_shipping_threshold_paise) || 99900,
-            promo_goal_item_count: Number(json.data.promo_goal_item_count) || 2,
-            promo_progress_template: json.data.promo_progress_template || 'Add {remaining} more to unlock FREE SHIPPING',
-            promo_unlocked_text: json.data.promo_unlocked_text || 'You unlocked FREE Standard Shipping!',
-            promo_nudge_enabled: json.data.promo_nudge_enabled !== false,
-            promo_nudge_title: json.data.promo_nudge_title || 'Pay with UPI & Save {cod_fee}',
-            promo_nudge_badge: json.data.promo_nudge_badge || 'LOWEST PRICE',
-            promo_nudge_text: json.data.promo_nudge_text || 'Instant UPI avoids the {cod_fee} COD handling charge and guarantees Priority Dispatch within 24 hours.',
-            promo_reward_type: (json.data.promo_reward_type as PromoRewardType) || 'free_shipping',
-            reward_percentage: Number(json.data.reward_percentage) || 0,
-            reward_product_id: json.data.reward_product_id ?? null,
-            buy_x_quantity: Number(json.data.buy_x_quantity) || 2,
-            get_y_quantity: Number(json.data.get_y_quantity) || 1,
+            free_shipping_threshold_paise: freeThresh,
+            default_shipping_charge_paise: toNum(payload.default_shipping_charge_paise, 9900),
+            cod_fee_paise: toNum(payload.cod_fee_paise, 5000),
+            cod_enabled: payload.cod_enabled !== false,
+            promo_banner_enabled: payload.promo_banner_enabled !== false,
+            promo_goal_type: payload.promo_goal_type === 'item_count' ? 'item_count' : 'amount',
+            promo_goal_threshold_paise: toNum(payload.promo_goal_threshold_paise, freeThresh),
+            promo_goal_item_count: Math.max(1, toNum(payload.promo_goal_item_count, 2)),
+            promo_progress_template:
+              typeof payload.promo_progress_template === 'string' ? payload.promo_progress_template : '',
+            promo_unlocked_text:
+              typeof payload.promo_unlocked_text === 'string' ? payload.promo_unlocked_text : '',
+            promo_nudge_enabled: payload.promo_nudge_enabled !== false,
+            promo_nudge_title: payload.promo_nudge_title || 'Pay with UPI & Save {cod_fee}',
+            promo_nudge_badge: payload.promo_nudge_badge || 'LOWEST PRICE',
+            promo_nudge_text:
+              payload.promo_nudge_text ||
+              'Instant UPI avoids the {cod_fee} COD handling charge and guarantees Priority Dispatch within 24 hours.',
+            promo_reward_type: (payload.promo_reward_type as PromoRewardType) || 'free_shipping',
+            reward_percentage: toNum(payload.reward_percentage, 0),
+            reward_product_id: payload.reward_product_id ?? null,
+            reward_product_name:
+              typeof payload.reward_product_name === 'string' ? payload.reward_product_name : null,
+            buy_x_quantity: Math.max(1, toNum(payload.buy_x_quantity, 2)),
+            get_y_quantity: Math.max(1, toNum(payload.get_y_quantity, 1)),
           });
         }
       }
@@ -394,11 +425,17 @@ export function CartProvider({ children }: { children: ReactNode }) {
         void refreshShippingSettings();
       }
     };
+    const handleCrossTab = (e: StorageEvent) => {
+      if (e.key === 'kickoffpro:settings_version') {
+        void refreshShippingSettings();
+      }
+    };
 
     if (typeof window !== 'undefined') {
       window.addEventListener('kickoffpro:shipping-settings-updated', handleUpdate);
       window.addEventListener('visibilitychange', handleVisibility);
       window.addEventListener('focus', handleUpdate);
+      window.addEventListener('storage', handleCrossTab);
     }
 
     return () => {
@@ -406,6 +443,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         window.removeEventListener('kickoffpro:shipping-settings-updated', handleUpdate);
         window.removeEventListener('visibilitychange', handleVisibility);
         window.removeEventListener('focus', handleUpdate);
+        window.removeEventListener('storage', handleCrossTab);
       }
     };
   }, [refreshShippingSettings]);

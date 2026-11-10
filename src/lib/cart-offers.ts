@@ -24,6 +24,7 @@ export interface CartOfferSettings {
   // Advanced Cart Offers
   reward_percentage?: number;
   reward_product_id?: string | null;
+  reward_product_name?: string | null;
   buy_x_quantity?: number;
   get_y_quantity?: number;
 }
@@ -119,8 +120,12 @@ export function calcAutoOfferDiscount(
     case 'buy_x_get_cheapest_free': {
       rewardBadge = `BUY ${buyX} GET ${getY} FREE`;
       const requiredItems = buyX + getY;
-      defaultInProgress = `Add {remaining_items} more to get your lowest-priced item FREE!`;
-      defaultUnlocked = `⚡ 1 Item FREE automatically applied!`;
+      defaultInProgress = getY === 1
+        ? `Add {remaining_items} more to get your lowest-priced item FREE!`
+        : `Add {remaining_items} more to get ${getY} lowest-priced items FREE!`;
+      defaultUnlocked = getY === 1
+        ? `⚡ Lowest-priced item FREE automatically applied!`
+        : `⚡ ${getY} lowest-priced items FREE automatically applied!`;
 
       hasUnlockedGoal = totalItems >= requiredItems;
       remainingGoalItems = Math.max(0, requiredItems - totalItems);
@@ -137,7 +142,6 @@ export function calcAutoOfferDiscount(
         }
         unitItems.sort((a, b) => a.price_paise - b.price_paise);
 
-        // Calculate how many free items qualify (at least getY, plus proportional tiers if scaled)
         const freeUnitsCount = Math.min(getY, unitItems.length);
         const freeUnits = unitItems.slice(0, freeUnitsCount);
         autoDiscountPaise = freeUnits.reduce((sum, u) => sum + u.price_paise, 0);
@@ -149,23 +153,28 @@ export function calcAutoOfferDiscount(
     }
 
     case 'buy_x_get_specific_free': {
-      rewardBadge = 'FREE GIFT';
-      defaultInProgress = `Add {remaining_items} more to unlock your FREE gift!`;
-      defaultUnlocked = `🎁 Free gift unlocked with your order!`;
+      const giftName = safeSettings.reward_product_name?.trim() || '';
+      rewardBadge = giftName ? `FREE ${giftName.toUpperCase()}` : 'FREE GIFT';
+      defaultInProgress = giftName
+        ? `Add {remaining_items} more to unlock FREE ${giftName}!`
+        : `Add {remaining_items} more to unlock your FREE gift!`;
+      defaultUnlocked = giftName
+        ? `🎁 Free ${giftName} unlocked with your order!`
+        : `🎁 Free gift unlocked with your order!`;
 
       hasUnlockedGoal = totalItems >= buyX;
       remainingGoalItems = Math.max(0, buyX - totalItems);
       goalProgressPercent = Math.min(100, Math.round((totalItems / buyX) * 100));
 
       if (hasUnlockedGoal && safeSettings.reward_product_id) {
-        // Find if the reward product is in the cart line items
         const matchingRewardItem = items.find(
           (it) => it.product_id === safeSettings.reward_product_id,
         );
         if (matchingRewardItem) {
-          // Discount 1 unit of this item to free
           autoDiscountPaise = matchingRewardItem.price_paise;
           discountedItemKeys.push(`${matchingRewardItem.product_id}::${matchingRewardItem.size || 'std'}`);
+        } else if (giftName) {
+          defaultUnlocked = `🎁 Goal met! Add "${giftName}" to your bag for FREE`;
         }
       }
       break;
@@ -191,27 +200,46 @@ export function calcAutoOfferDiscount(
         : 100;
 
       autoDiscountPaise = 0; // Handled directly via free shipping 0 charge
-      defaultInProgress = 'Add {remaining} more to unlock FREE SHIPPING';
+      defaultInProgress = isItemCount
+        ? 'Add {remaining_items} more to unlock FREE SHIPPING'
+        : 'Add {remaining} more to unlock FREE SHIPPING';
       defaultUnlocked = 'You unlocked FREE Standard Shipping!';
       break;
     }
   }
 
-  // Format message templates
-  const template = safeSettings.promo_progress_template || defaultInProgress;
-  const unlockedTpl = safeSettings.promo_unlocked_text || defaultUnlocked;
+  // Detect stale default copy from free_shipping when another reward type is active
+  const LEGACY_IN_PROGRESS = 'Add {remaining} more to unlock FREE SHIPPING';
+  const LEGACY_UNLOCKED = 'You unlocked FREE Standard Shipping!';
+  const rawTemplate = (safeSettings.promo_progress_template || '').trim();
+  const rawUnlocked = (safeSettings.promo_unlocked_text || '').trim();
+
+  const template =
+    !rawTemplate || (rewardType !== 'free_shipping' && rawTemplate === LEGACY_IN_PROGRESS)
+      ? defaultInProgress
+      : rawTemplate;
+  const unlockedTpl =
+    !rawUnlocked || (rewardType !== 'free_shipping' && rawUnlocked === LEGACY_UNLOCKED)
+      ? defaultUnlocked
+      : rawUnlocked;
+
+  const remainingItemsText =
+    remainingGoalItems === 1 ? '1 item' : `${remainingGoalItems} items`;
+  const rewardProductLabel = safeSettings.reward_product_name?.trim() || 'FREE Gift';
 
   const inProgressMessage = template
     .replace(/\{remaining\}/g, formatPaise(remainingGoalPaise))
-    .replace(/\{remaining_items\}/g, `${remainingGoalItems} ${remainingGoalItems === 1 ? 'more item' : 'more items'}`)
+    .replace(/\{remaining_items\}/g, remainingItemsText)
     .replace(/\{item_count\}/g, String(safeSettings.promo_goal_item_count || 2))
     .replace(/\{threshold\}/g, formatPaise(targetThresholdPaise))
     .replace(/\{reward_percentage\}/g, `${rewardPercentage}%`)
+    .replace(/\{reward_product\}/g, rewardProductLabel)
     .replace(/\{buy_x\}/g, String(buyX))
     .replace(/\{get_y\}/g, String(getY));
 
   const unlockedMessage = unlockedTpl
     .replace(/\{reward_percentage\}/g, `${rewardPercentage}%`)
+    .replace(/\{reward_product\}/g, rewardProductLabel)
     .replace(/\{buy_x\}/g, String(buyX))
     .replace(/\{get_y\}/g, String(getY));
 
