@@ -87,15 +87,27 @@ export async function GET() {
   const auth = await verifyAdmin();
   if (!auth.ok) return auth.response;
 
-  const { data, error } = await auth.supabase
+  let { data, error } = await auth.supabase
     .from('shipping_settings')
     .select(`${READ_COLUMNS}, api_key`)
     .limit(1)
     .maybeSingle();
 
+  // Fallback to SELECT * if a newly deployed column isn't migrated yet so the admin UI stays usable
+  if (error && (error.code === '42703' || error.code === 'PGRST204')) {
+    console.warn('[SHIPPING_SETTINGS_GET_SCHEMA_FALLBACK]', error.message);
+    const fallback = await auth.supabase
+      .from('shipping_settings')
+      .select('*')
+      .limit(1)
+      .maybeSingle();
+    data = fallback.data;
+    error = fallback.error;
+  }
+
   if (error) {
     console.error('[SHIPPING_SETTINGS_GET]', error);
-    return apiError(500, 'Failed to load shipping settings');
+    return apiError(500, `Failed to load shipping settings: ${error.message}`);
   }
 
   // Strip the raw key before responding; only tell the client
@@ -286,7 +298,7 @@ export async function PATCH(req: NextRequest) {
       .insert(update);
     if (insertErr) {
       console.error('[SHIPPING_SETTINGS_INSERT]', insertErr);
-      return apiError(500, 'Failed to create shipping settings');
+      return apiError(500, `Failed to create shipping settings: ${insertErr.message}`);
     }
   } else {
     const { error: updateErr } = await auth.supabase
@@ -295,7 +307,7 @@ export async function PATCH(req: NextRequest) {
       .eq('id', existing.id);
     if (updateErr) {
       console.error('[SHIPPING_SETTINGS_UPDATE]', updateErr);
-      return apiError(500, 'Failed to update shipping settings');
+      return apiError(500, `Failed to update shipping settings: ${updateErr.message}`);
     }
   }
 
