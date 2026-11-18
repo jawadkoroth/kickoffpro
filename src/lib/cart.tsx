@@ -272,9 +272,9 @@ interface ApplyValidationSummary {
 interface CartContextType {
   items: CartItem[];
   addItem: (item: Omit<CartItem, 'quantity'>, qty?: number, options?: { openDrawer?: boolean }) => void;
-  removeItem: (product_id: string, size: string) => void;
-  updateQuantity: (product_id: string, size: string, qty: number) => void;
-  swapSize: (product_id: string, currentSize: string, newSize: string) => void;
+  removeItem: (product_id: string, size: string, is_free_gift?: boolean) => void;
+  updateQuantity: (product_id: string, size: string, qty: number, is_free_gift?: boolean) => void;
+  swapSize: (product_id: string, currentSize: string, newSize: string, is_free_gift?: boolean) => void;
   clearCart: () => void;
   applyValidation: (result: CartValidationResult) => ApplyValidationSummary;
   totalItems: number;
@@ -567,9 +567,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
     const isUnlocked = isSpecificGift && Boolean(giftId) && qualifyingCount >= buyX;
 
     if (isUnlocked && giftId) {
-      // Check if gift product is already in items
-      const hasGiftAlready = items.some((it) => it.product_id === giftId);
-      if (!hasGiftAlready) {
+      // Check if gift product is already in items as an auto-injected free gift
+      const hasInjectedGift = items.some((it) => it.is_free_gift);
+      if (!hasInjectedGift) {
         // Automatically inject the free gift item at ₹0
         const giftItem: CartItem = {
           product_id: giftId,
@@ -583,7 +583,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
           is_free_gift: true,
         };
         setItems((prev) => {
-          if (prev.some((it) => it.product_id === giftId)) return prev;
+          if (prev.some((it) => it.is_free_gift)) return prev;
           return [...prev, giftItem];
         });
         setValidatedAt(null);
@@ -616,8 +616,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
       const safeQty = Math.max(1, Math.floor(qty));
 
       setItems(prev => {
+        // Never merge manual additions into an auto-injected free gift line
         const idx = prev.findIndex(
-          i => i.product_id === item.product_id && i.size === item.size,
+          i => i.product_id === item.product_id && i.size === item.size && !i.is_free_gift,
         );
         if (idx >= 0) {
           const existing = prev[idx];
@@ -626,6 +627,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
             ...item,
             quantity: Math.min(existing.quantity + safeQty, item.maxStock),
             maxStock: item.maxStock,
+            is_free_gift: false,
           };
           const next = [...prev];
           next[idx] = merged;
@@ -633,7 +635,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         }
         return [
           ...prev,
-          { ...item, quantity: Math.min(safeQty, item.maxStock) },
+          { ...item, quantity: Math.min(safeQty, item.maxStock), is_free_gift: false },
         ];
       });
       setValidatedAt(null);
@@ -646,22 +648,38 @@ export function CartProvider({ children }: { children: ReactNode }) {
     [],
   );
 
-  const removeItem = useCallback((product_id: string, size: string) => {
-    setItems(prev =>
-      prev.filter(i => !(i.product_id === product_id && i.size === size)),
-    );
+  const removeItem = useCallback((product_id: string, size: string, is_free_gift?: boolean) => {
+    setItems(prev => {
+      if (typeof is_free_gift === 'boolean') {
+        return prev.filter(
+          i => !(i.product_id === product_id && i.size === size && Boolean(i.is_free_gift) === is_free_gift),
+        );
+      }
+      const hasPaid = prev.some(
+        i => i.product_id === product_id && i.size === size && !i.is_free_gift,
+      );
+      return prev.filter(
+        i => !(i.product_id === product_id && i.size === size && (hasPaid ? !i.is_free_gift : true)),
+      );
+    });
     setValidatedAt(null);
   }, []);
 
   const updateQuantity = useCallback(
-    (product_id: string, size: string, qty: number) => {
+    (product_id: string, size: string, qty: number, is_free_gift?: boolean) => {
       if (qty <= 0) {
-        removeItem(product_id, size);
+        removeItem(product_id, size, is_free_gift);
         return;
       }
       setItems(prev =>
         prev.map(i => {
-          if (i.product_id === product_id && i.size === size) {
+          const matches =
+            i.product_id === product_id &&
+            i.size === size &&
+            (typeof is_free_gift === 'boolean'
+              ? Boolean(i.is_free_gift) === is_free_gift
+              : !i.is_free_gift);
+          if (matches) {
             if (i.is_free_gift) return { ...i, quantity: 1 };
             return {
               ...i,
@@ -680,24 +698,25 @@ export function CartProvider({ children }: { children: ReactNode }) {
   );
 
   const swapSize = useCallback(
-    (product_id: string, currentSize: string, newSize: string) => {
+    (product_id: string, currentSize: string, newSize: string, is_free_gift?: boolean) => {
       if (currentSize === newSize) return;
 
       setItems(prev => {
+        const isGift = Boolean(is_free_gift);
         const currentItemIndex = prev.findIndex(
-          i => i.product_id === product_id && i.size === currentSize,
+          i => i.product_id === product_id && i.size === currentSize && Boolean(i.is_free_gift) === isGift,
         );
         if (currentItemIndex === -1) return prev;
 
         const currentItem = prev[currentItemIndex];
         const existingTargetIndex = prev.findIndex(
-          i => i.product_id === product_id && i.size === newSize,
+          i => i.product_id === product_id && i.size === newSize && Boolean(i.is_free_gift) === isGift,
         );
 
         if (existingTargetIndex !== -1) {
           // Merge current line into existing target size
           const targetItem = prev[existingTargetIndex];
-          const mergedQty = targetItem.quantity + currentItem.quantity;
+          const mergedQty = isGift ? 1 : targetItem.quantity + currentItem.quantity;
           const clampedQty = targetItem.maxStock > 0
             ? Math.min(mergedQty, targetItem.maxStock)
             : mergedQty;
@@ -705,7 +724,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
           return prev
             .filter((_, idx) => idx !== currentItemIndex)
             .map(item => {
-              if (item.product_id === product_id && item.size === newSize) {
+              if (item.product_id === product_id && item.size === newSize && Boolean(item.is_free_gift) === isGift) {
                 return { ...item, quantity: clampedQty };
               }
               return item;
@@ -757,6 +776,15 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
           if (entry.removed || entry.maxStock <= 0) {
             summary.removedItems.push(line);
+            continue;
+          }
+
+          if (line.is_free_gift) {
+            next.push({
+              ...line,
+              quantity: 1,
+              maxStock: entry.maxStock,
+            });
             continue;
           }
 

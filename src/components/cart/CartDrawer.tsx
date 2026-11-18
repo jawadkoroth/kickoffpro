@@ -180,7 +180,7 @@ export default function CartDrawer() {
 
                     return (
                       <div
-                        key={`${item.product_id}::${item.size}`}
+                        key={`${item.product_id}::${item.size}${item.is_free_gift ? '::gift' : ''}`}
                         className={styles.cartItem}
                       >
                         <div className={styles.itemImageWrap}>
@@ -203,7 +203,7 @@ export default function CartDrawer() {
                             <button
                               type="button"
                               className={styles.removeBtn}
-                              onClick={() => removeItem(item.product_id, item.size)}
+                              onClick={() => removeItem(item.product_id, item.size, item.is_free_gift)}
                               aria-label={`Remove ${item.name} size ${item.size}`}
                             >
                               <Trash2 size={16} />
@@ -223,7 +223,7 @@ export default function CartDrawer() {
                                     className={`${styles.sizePill} ${
                                       isSelected ? styles.sizePillActive : ''
                                     }`}
-                                    onClick={() => swapSize(item.product_id, item.size, s)}
+                                    onClick={() => swapSize(item.product_id, item.size, s, item.is_free_gift)}
                                     title={`Swap to size ${s}`}
                                   >
                                     {s}
@@ -244,6 +244,7 @@ export default function CartDrawer() {
                                     item.product_id,
                                     item.size,
                                     item.quantity - 1,
+                                    item.is_free_gift,
                                   )
                                 }
                                 aria-label="Decrease quantity"
@@ -261,6 +262,7 @@ export default function CartDrawer() {
                                     item.product_id,
                                     item.size,
                                     item.quantity + 1,
+                                    item.is_free_gift,
                                   )
                                 }
                                 disabled={isMaxStockReached || Boolean(item.is_free_gift)}

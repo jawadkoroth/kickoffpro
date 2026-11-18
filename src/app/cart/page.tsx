@@ -565,7 +565,7 @@ export default function CartPage() {
               item.maxStock > 0 && item.maxStock <= 5 && item.quantity === item.maxStock;
             return (
               <div
-                key={`${item.product_id}-${item.size}`}
+                key={`${item.product_id}-${item.size}${item.is_free_gift ? '-gift' : ''}`}
                 className={styles.item}
               >
                 <Link
@@ -608,6 +608,7 @@ export default function CartPage() {
                             item.product_id,
                             item.size,
                             item.quantity - 1,
+                            item.is_free_gift,
                           )
                         }
                         aria-label="Decrease quantity"
@@ -624,6 +625,7 @@ export default function CartPage() {
                             item.product_id,
                             item.size,
                             item.quantity + 1,
+                            item.is_free_gift,
                           )
                         }
                         aria-label="Increase quantity"
@@ -633,7 +635,7 @@ export default function CartPage() {
                     </div>
                     <button
                       className={styles.removeBtn}
-                      onClick={() => removeItem(item.product_id, item.size)}
+                      onClick={() => removeItem(item.product_id, item.size, item.is_free_gift)}
                     >
                       Remove
                     </button>

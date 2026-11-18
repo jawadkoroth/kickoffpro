@@ -495,10 +495,10 @@ function CheckoutContent() {
    * after a confirmed success path (COD pre-redirect, or Razorpay
    * handler post-verify). Pure local-state mutation — never throws.
    */
-  function clearSubmittedLines(submitted: Array<{ product_id: string; size: string }>) {
+  function clearSubmittedLines(submitted: Array<{ product_id: string; size: string; is_free_gift?: boolean }>) {
     try {
       for (const line of submitted) {
-        removeCartItem(line.product_id, line.size);
+        removeCartItem(line.product_id, line.size, line.is_free_gift);
       }
     } catch (err) {
       console.error('[CART_CLEAR_AFTER_ORDER]', err);
@@ -519,6 +519,7 @@ function CheckoutContent() {
       product_id: i.product_id,
       size: i.size,
       quantity: i.quantity,
+      is_free_gift: Boolean(i.is_free_gift),
     }));
 
     // Final stock revalidation immediately before order POST.
@@ -721,7 +722,7 @@ function CheckoutContent() {
       order_id: string;
       customer: { name: string; phone: string; email?: string };
     },
-    submittedLines: Array<{ product_id: string; size: string }>,
+    submittedLines: Array<{ product_id: string; size: string; is_free_gift?: boolean }>,
   ) {
     if (!orderData.razorpay_order_id || !orderData.key_id) {
       console.error('[RAZORPAY_INIT] Missing order_id or key_id:', orderData);
@@ -875,7 +876,7 @@ function CheckoutContent() {
           <div style={{ marginBottom: 'var(--space-2)' }}>
             {checkoutItems.map((line) => (
               <div
-                key={`${line?.product_id}::${line?.size}`}
+                key={`${line?.product_id}::${line?.size}${line?.is_free_gift ? '::gift' : ''}`}
                 className={styles.checkoutItemRow}
               >
                 <div className={styles.itemThumbWrap}>

@@ -177,15 +177,10 @@ export function calcAutoOfferDiscount(
       remainingGoalItems = Math.max(0, buyX - qualifyingItemCount);
       goalProgressPercent = Math.min(100, Math.round((qualifyingItemCount / buyX) * 100));
 
-      if (hasUnlockedGoal && safeSettings.reward_product_id) {
-        const matchingRewardItem = items.find(
-          (it) => it.product_id === safeSettings.reward_product_id,
-        );
-        if (matchingRewardItem) {
-          autoDiscountPaise = matchingRewardItem.price_paise;
-          discountedItemKeys.push(`${matchingRewardItem.product_id}::${matchingRewardItem.size || 'std'}`);
-        }
-      }
+      // For specific free gift promotions, the free gift is injected directly
+      // into cart items at ₹0 (is_free_gift: true). We do NOT dock any autoDiscountPaise
+      // from the subtotal, nor do we tag regular paid lines as discounted.
+      autoDiscountPaise = 0;
       break;
     }
 

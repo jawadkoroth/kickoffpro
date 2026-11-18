@@ -151,18 +151,11 @@ async function handlePOST(req: NextRequest) {
       userId = null;
     }
 
-    // 2. Reject duplicate (product_id, size) lines from the client.
-    //
-    //    Two lines with the same key would each try to decrement the
-    //    same inventory row inside the RPC — the second would race
-    //    against the first's UPDATE within the same transaction. The
-    //    cart UI already deduplicates by merging quantity, so a
-    //    duplicate here is an integrity error worth a clean 400
-    //    rather than a confusing STOCK_UNAVAILABLE.
+    // 2. Reject duplicate (product_id, size) lines of the same type (paid vs free gift).
     {
       const seen = new Set<string>();
       for (const it of items) {
-        const key = `${it.product_id}::${it.size}`;
+        const key = `${it.product_id}::${it.size}::${Boolean(it.is_free_gift)}`;
         if (seen.has(key)) {
           logEvent('order.duplicate_line', { product_id: it.product_id, size: it.size });
           return apiError(400, 'Duplicate line items in cart');
@@ -171,28 +164,50 @@ async function handlePOST(req: NextRequest) {
       }
     }
 
-    // 3. Fetch every product in one query. Order independent of
-    //    `items` array order — we'll re-key by id below.
+    // 3. Fetch products and active shipping settings in parallel.
     const productIds = Array.from(new Set(items.map((i) => i.product_id)));
-    const { data: productsRaw, error: productsError } = await supabase
-      .from('products')
-      .select('id, name, price_paise, sale_price_paise, is_active, images')
-      .in('id', productIds);
+    const [productsRes, shippingRes] = await Promise.all([
+      supabase
+        .from('products')
+        .select('id, name, price_paise, sale_price_paise, is_active, images')
+        .in('id', productIds),
+      supabase
+        .from('shipping_settings')
+        .select(
+          'free_shipping_threshold_paise, default_shipping_charge_paise, cod_enabled, cod_fee_paise, promo_banner_enabled, promo_reward_type, promo_goal_type, promo_goal_threshold_paise, promo_goal_item_count, reward_percentage, reward_product_id, buy_x_quantity, get_y_quantity',
+        )
+        .limit(1)
+        .maybeSingle(),
+    ]);
 
-    if (productsError) {
-      logEvent('order.products_lookup_failed', { error: productsError.message });
+    if (productsRes.error) {
+      logEvent('order.products_lookup_failed', { error: productsRes.error.message });
       return apiError(500, 'Could not load products');
     }
 
+    const shippingSettings = shippingRes.data;
     const productsById = new Map<string, ProductRow>();
-    for (const row of (productsRaw ?? []) as ProductRow[]) {
+    for (const row of (productsRes.data ?? []) as ProductRow[]) {
       productsById.set(row.id, row);
     }
+
+    // Check if free gift promotion is active and qualified
+    const isSpecificGiftPromo =
+      shippingSettings?.promo_banner_enabled !== false &&
+      shippingSettings?.promo_reward_type === 'buy_x_get_specific_free' &&
+      Boolean(shippingSettings?.reward_product_id);
+    const buyX = Math.max(1, Number(shippingSettings?.buy_x_quantity) || 2);
+
+    const qualifyingCount = items
+      .filter((it) => !it.is_free_gift)
+      .reduce((sum, it) => sum + Math.max(0, it.quantity || 0), 0);
+    const isPromoGiftQualified = isSpecificGiftPromo && qualifyingCount >= buyX;
 
     // 4. Build the per-line item list. Reject the whole order if any
     //    referenced product is missing or inactive. Server is the
     //    sole authority on price — never trust a client-supplied
     //    unit price.
+    let hasAppliedGift = false;
     const lineItems: BuiltLineItem[] = [];
     for (const it of items) {
       const product = productsById.get(it.product_id);
@@ -200,14 +215,29 @@ async function handlePOST(req: NextRequest) {
         logEvent('order.product_unavailable', { product_id: it.product_id });
         return apiError(404, 'Product not found or unavailable');
       }
-      const unit = unitPriceFor(product);
+
+      const isAuthorizedFreeGift = Boolean(
+        it.is_free_gift &&
+        isPromoGiftQualified &&
+        it.product_id === shippingSettings?.reward_product_id &&
+        !hasAppliedGift,
+      );
+
+      if (isAuthorizedFreeGift) {
+        hasAppliedGift = true;
+      }
+
+      const regularUnit = unitPriceFor(product);
+      const unit = isAuthorizedFreeGift ? 0 : regularUnit;
+      const qty = isAuthorizedFreeGift ? 1 : it.quantity;
+
       lineItems.push({
         product_id: product.id,
         size: it.size,
-        quantity: it.quantity,
+        quantity: qty,
         unit_price_paise: unit,
-        subtotal_paise: unit * it.quantity,
-        product_name: product.name,
+        subtotal_paise: unit * qty,
+        product_name: product.name + (isAuthorizedFreeGift ? ' (Free Gift)' : ''),
         image_url: firstImageUrl(product.images),
       });
     }
@@ -242,19 +272,10 @@ async function handlePOST(req: NextRequest) {
       }
     }
 
-    // 7. Server-authoritative shipping + COD fee + auto-offers. Settings are loaded
-    //    fresh per request so admin changes take effect immediately.
+    // 7. Server-authoritative shipping + COD fee + auto-offers.
     //    `calcShipping` is deterministic: given the same inputs, the
     //    checkout UI quote and this final computation produce the
     //    identical total.
-    const { data: shippingSettings } = await supabase
-      .from('shipping_settings')
-      .select(
-        'free_shipping_threshold_paise, default_shipping_charge_paise, cod_enabled, cod_fee_paise, promo_banner_enabled, promo_reward_type, promo_goal_type, promo_goal_threshold_paise, promo_goal_item_count, reward_percentage, reward_product_id, buy_x_quantity, get_y_quantity',
-      )
-      .limit(1)
-      .maybeSingle();
-
     // Mutual exclusivity: if no manual coupon code was applied, evaluate
     // active automated cart drawer promotional rewards (e.g. % off, cheapest free, etc.)
     if (!appliedCoupon) {
@@ -271,6 +292,8 @@ async function handlePOST(req: NextRequest) {
       if (autoOffer.hasUnlockedGoal && autoOffer.autoDiscountPaise > 0) {
         discount = Math.min(autoOffer.autoDiscountPaise, subtotal);
         appliedCoupon = `AUTO:${autoOffer.rewardBadge || 'OFFER'}`;
+      } else if (hasAppliedGift) {
+        appliedCoupon = 'PROMO:FREE_GIFT';
       }
     }
 

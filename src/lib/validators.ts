@@ -26,6 +26,7 @@ export const orderItemSchema = z.object({
   product_id: z.string().uuid(),
   size: z.string().min(1, 'Select a size'),
   quantity: z.number().int().min(1).max(5),
+  is_free_gift: z.boolean().optional(),
 });
 
 export const createOrderSchema = z.object({
