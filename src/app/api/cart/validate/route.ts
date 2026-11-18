@@ -117,12 +117,22 @@ export async function POST(request: Request) {
 
   const result: ValidationEntry[] = items.map(item => {
     const isActive = activeById.get(item.product_id) === true;
-    const stock = stockByKey.get(`${item.product_id}::${item.size}`);
+    let stock = stockByKey.get(`${item.product_id}::${item.size}`);
+    // If exact (product, size) was not found in inventory, check if product has available stock in any size
+    if (stock === undefined && isActive) {
+      const anyStock = (inventoryRes.data ?? [])
+        .filter(r => r.product_id === item.product_id)
+        .reduce((sum, r) => sum + Math.max(0, Number(r.stock ?? 0)), 0);
+      if (anyStock > 0) {
+        stock = anyStock;
+      }
+    }
+
     // Removed when:
     //   - product is inactive or missing entirely, OR
-    //   - no inventory row exists for this (product, size) pair.
+    //   - no inventory row exists for this product.
     const removed = !isActive || stock === undefined;
-    const maxStock = removed ? 0 : Math.max(0, stock);
+    const maxStock = removed || stock === undefined ? 0 : Math.max(0, stock);
     const requestedQty = Math.max(0, Math.floor(item.quantity));
     const clampedQuantity = removed
       ? 0

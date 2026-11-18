@@ -582,10 +582,19 @@ export default function CartPage() {
                     {item.name}
                   </Link>
                   <p className={styles.itemSize}>Size: {item.size}</p>
+                  {item.is_free_gift && (
+                    <span style={{ fontSize: '0.625rem', fontWeight: 800, padding: '2px 6px', background: 'rgba(22, 163, 74, 0.15)', color: 'var(--success, #16a34a)', borderRadius: 4, width: 'fit-content', display: 'inline-block', marginBottom: 4 }}>
+                      FREE PROMO GIFT
+                    </span>
+                  )}
                   <p className={styles.itemPrice}>
-                    {formatPaise(item.price_paise)}
+                    {item.is_free_gift || item.price_paise === 0 ? (
+                      <span style={{ color: 'var(--success, #16a34a)', fontWeight: 700 }}>FREE</span>
+                    ) : (
+                      formatPaise(item.price_paise)
+                    )}
                   </p>
-                  {showLow && (
+                  {showLow && !item.is_free_gift && (
                     <p className={styles.lowStockTag}>
                       Only {item.maxStock} left
                     </p>
@@ -608,7 +617,8 @@ export default function CartPage() {
                       <span className={styles.qtyVal}>{item.quantity}</span>
                       <button
                         className={styles.qtyBtn}
-                        disabled={atMax}
+                        disabled={atMax || Boolean(item.is_free_gift)}
+                        title={item.is_free_gift ? 'Promotional gift is limited to 1 per order' : undefined}
                         onClick={() =>
                           updateQuantity(
                             item.product_id,

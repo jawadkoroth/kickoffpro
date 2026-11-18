@@ -39,6 +39,11 @@ export interface ShippingSettingsSummary {
   reward_percentage: number;
   reward_product_id: string | null;
   reward_product_name?: string | null;
+  reward_product_slug?: string | null;
+  reward_product_image?: string | null;
+  reward_product_price_paise?: number;
+  reward_product_size?: string | null;
+  reward_product_max_stock?: number;
   buy_x_quantity: number;
   get_y_quantity: number;
 }
@@ -104,6 +109,11 @@ export const DEFAULT_SHIPPING_SETTINGS: ShippingSettingsSummary = {
   reward_percentage: 10,
   reward_product_id: null,
   reward_product_name: null,
+  reward_product_slug: null,
+  reward_product_image: null,
+  reward_product_price_paise: 0,
+  reward_product_size: 'M',
+  reward_product_max_stock: 99,
   buy_x_quantity: 2,
   get_y_quantity: 1,
 };
@@ -231,6 +241,8 @@ export interface CartItem {
    * server revalidation rehydrates the real value.
    */
   maxStock: number;
+  /** True if this item was automatically injected as a free promotional gift */
+  is_free_gift?: boolean;
 }
 
 export interface CartValidationEntry {
@@ -325,6 +337,7 @@ function loadCart(): CartItem[] {
       // Backfill for legacy entries written before maxStock existed.
       maxStock: typeof item.maxStock === 'number' ? item.maxStock : 0,
       quantity: Math.max(1, Math.floor(item.quantity)),
+      is_free_gift: Boolean((item as { is_free_gift?: boolean }).is_free_gift),
     }));
   } catch {
     return [];
@@ -402,6 +415,14 @@ export function CartProvider({ children }: { children: ReactNode }) {
             reward_product_id: payload.reward_product_id ?? null,
             reward_product_name:
               typeof payload.reward_product_name === 'string' ? payload.reward_product_name : null,
+            reward_product_slug:
+              typeof payload.reward_product_slug === 'string' ? payload.reward_product_slug : null,
+            reward_product_image:
+              typeof payload.reward_product_image === 'string' ? payload.reward_product_image : null,
+            reward_product_price_paise: toNum(payload.reward_product_price_paise, 0),
+            reward_product_size:
+              typeof payload.reward_product_size === 'string' ? payload.reward_product_size : 'M',
+            reward_product_max_stock: toNum(payload.reward_product_max_stock, 99),
             buy_x_quantity: Math.max(1, toNum(payload.buy_x_quantity, 2)),
             get_y_quantity: Math.max(1, toNum(payload.get_y_quantity, 1)),
           });
@@ -501,6 +522,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         const sanitized = parsed.filter(isCartItem).map(item => ({
           ...item,
           maxStock: typeof item.maxStock === 'number' ? item.maxStock : 0,
+          is_free_gift: Boolean((item as { is_free_gift?: boolean }).is_free_gift),
         }));
         const reserialized = JSON.stringify(sanitized);
         if (reserialized === lastSerializedRef.current) return;
@@ -527,6 +549,66 @@ export function CartProvider({ children }: { children: ReactNode }) {
       if (timer !== null) clearTimeout(timer);
     };
   }, []);
+
+  // Auto-injection & auto-removal effect for Buy X Get Free Specific Gift
+  useEffect(() => {
+    if (!loaded) return;
+    if (shippingLoading) return;
+
+    const isSpecificGift = shippingSettings.promo_reward_type === 'buy_x_get_specific_free';
+    const giftId = shippingSettings.reward_product_id;
+    const buyX = Math.max(1, Number(shippingSettings.buy_x_quantity) || 2);
+
+    // Calculate qualifying items (excluding free gifts)
+    const qualifyingItems = items.filter(
+      (it) => !it.is_free_gift && !(it.price_paise === 0 && it.product_id === giftId),
+    );
+    const qualifyingCount = qualifyingItems.reduce((acc, it) => acc + (it.quantity || 0), 0);
+    const isUnlocked = isSpecificGift && Boolean(giftId) && qualifyingCount >= buyX;
+
+    if (isUnlocked && giftId) {
+      // Check if gift product is already in items
+      const hasGiftAlready = items.some((it) => it.product_id === giftId);
+      if (!hasGiftAlready) {
+        // Automatically inject the free gift item at ₹0
+        const giftItem: CartItem = {
+          product_id: giftId,
+          name: shippingSettings.reward_product_name || 'Free Promotional Gift',
+          slug: shippingSettings.reward_product_slug || '',
+          size: shippingSettings.reward_product_size || 'M',
+          price_paise: 0,
+          quantity: 1,
+          image: shippingSettings.reward_product_image || '',
+          maxStock: shippingSettings.reward_product_max_stock || 99,
+          is_free_gift: true,
+        };
+        setItems((prev) => {
+          if (prev.some((it) => it.product_id === giftId)) return prev;
+          return [...prev, giftItem];
+        });
+        setValidatedAt(null);
+      }
+    } else {
+      // If NOT unlocked, remove any auto-injected free gifts
+      const hasInjectedGift = items.some((it) => it.is_free_gift);
+      if (hasInjectedGift) {
+        setItems((prev) => prev.filter((it) => !it.is_free_gift));
+        setValidatedAt(null);
+      }
+    }
+  }, [
+    loaded,
+    shippingLoading,
+    items,
+    shippingSettings.promo_reward_type,
+    shippingSettings.reward_product_id,
+    shippingSettings.reward_product_name,
+    shippingSettings.reward_product_slug,
+    shippingSettings.reward_product_image,
+    shippingSettings.reward_product_size,
+    shippingSettings.reward_product_max_stock,
+    shippingSettings.buy_x_quantity,
+  ]);
 
   const addItem = useCallback(
     (item: Omit<CartItem, 'quantity'>, qty = 1, options?: { openDrawer?: boolean }) => {
@@ -578,17 +660,19 @@ export function CartProvider({ children }: { children: ReactNode }) {
         return;
       }
       setItems(prev =>
-        prev.map(i =>
-          i.product_id === product_id && i.size === size
-            ? {
+        prev.map(i => {
+          if (i.product_id === product_id && i.size === size) {
+            if (i.is_free_gift) return { ...i, quantity: 1 };
+            return {
               ...i,
               quantity:
                 i.maxStock > 0
                   ? Math.min(Math.max(1, Math.floor(qty)), i.maxStock)
                   : i.quantity,
-            }
-            : i,
-        ),
+            };
+          }
+          return i;
+        }),
       );
       setValidatedAt(null);
     },

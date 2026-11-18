@@ -263,7 +263,8 @@ export default function CartDrawer() {
                                     item.quantity + 1,
                                   )
                                 }
-                                disabled={isMaxStockReached}
+                                disabled={isMaxStockReached || Boolean(item.is_free_gift)}
+                                title={item.is_free_gift ? 'Promotional gift is limited to 1 per order' : undefined}
                                 aria-label="Increase quantity"
                               >
                                 <Plus size={14} />
@@ -271,13 +272,13 @@ export default function CartDrawer() {
                             </div>
 
                             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                              {promoProgress.discountedItemKeys.includes(`${item.product_id}::${item.size}`) && (
+                              {(item.is_free_gift || promoProgress.discountedItemKeys.includes(`${item.product_id}::${item.size}`)) && (
                                 <span style={{ fontSize: '0.5625rem', fontWeight: 800, padding: '2px 6px', background: 'rgba(22, 163, 74, 0.15)', color: 'var(--success, #16a34a)', borderRadius: 4 }}>
-                                  FREE ITEM
+                                  {item.is_free_gift ? 'FREE GIFT' : 'FREE ITEM'}
                                 </span>
                               )}
-                              <span className={styles.lineTotal}>
-                                {formatPaise(item.price_paise * item.quantity)}
+                              <span className={styles.lineTotal} style={item.is_free_gift || item.price_paise === 0 ? { color: 'var(--success, #16a34a)', fontWeight: 700 } : undefined}>
+                                {item.is_free_gift || item.price_paise === 0 ? 'FREE' : formatPaise(item.price_paise * item.quantity)}
                               </span>
                             </div>
                           </div>

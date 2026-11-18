@@ -25,6 +25,11 @@ export interface CartOfferSettings {
   reward_percentage?: number;
   reward_product_id?: string | null;
   reward_product_name?: string | null;
+  reward_product_slug?: string | null;
+  reward_product_image?: string | null;
+  reward_product_price_paise?: number;
+  reward_product_size?: string | null;
+  reward_product_max_stock?: number;
   buy_x_quantity?: number;
   get_y_quantity?: number;
 }
@@ -36,6 +41,7 @@ export interface CartLineItemSummary {
   price_paise: number;
   name?: string;
   image?: string;
+  is_free_gift?: boolean;
 }
 
 export interface AutoOfferResult {
@@ -64,6 +70,11 @@ export function calcAutoOfferDiscount(
   const isEnabled = safeSettings.promo_banner_enabled !== false;
   const rewardType: PromoRewardType = (safeSettings.promo_reward_type as PromoRewardType) || 'free_shipping';
 
+  // Exclude auto-injected free gifts from qualifying item thresholds so the gift does not qualify itself
+  const qualifyingItems = items.filter(
+    (it) => !it.is_free_gift && !(it.price_paise === 0 && it.product_id === safeSettings.reward_product_id),
+  );
+  const qualifyingItemCount = qualifyingItems.reduce((acc, it) => acc + Math.max(0, it.quantity || 0), 0);
   const totalItems = items.reduce((acc, it) => acc + Math.max(0, it.quantity || 0), 0);
   const rewardPercentage = Math.max(0, Math.min(100, Number(safeSettings.reward_percentage) || 10));
   const buyX = Math.max(1, Number(safeSettings.buy_x_quantity) || 2);
@@ -162,9 +173,9 @@ export function calcAutoOfferDiscount(
         ? `🎁 Free ${giftName} unlocked with your order!`
         : `🎁 Free gift unlocked with your order!`;
 
-      hasUnlockedGoal = totalItems >= buyX;
-      remainingGoalItems = Math.max(0, buyX - totalItems);
-      goalProgressPercent = Math.min(100, Math.round((totalItems / buyX) * 100));
+      hasUnlockedGoal = qualifyingItemCount >= buyX;
+      remainingGoalItems = Math.max(0, buyX - qualifyingItemCount);
+      goalProgressPercent = Math.min(100, Math.round((qualifyingItemCount / buyX) * 100));
 
       if (hasUnlockedGoal && safeSettings.reward_product_id) {
         const matchingRewardItem = items.find(
@@ -173,8 +184,6 @@ export function calcAutoOfferDiscount(
         if (matchingRewardItem) {
           autoDiscountPaise = matchingRewardItem.price_paise;
           discountedItemKeys.push(`${matchingRewardItem.product_id}::${matchingRewardItem.size || 'std'}`);
-        } else if (giftName) {
-          defaultUnlocked = `🎁 Goal met! Add "${giftName}" to your bag for FREE`;
         }
       }
       break;

@@ -17,13 +17,37 @@ async function loadPublicSettings(supabase: ReturnType<typeof createAdminClient>
     .maybeSingle();
 
   let rewardProductName: string | null = null;
+  let rewardProductSlug: string | null = null;
+  let rewardProductImage: string | null = null;
+  let rewardProductPricePaise: number = 0;
+  let rewardProductSize: string = 'M';
+  let rewardProductMaxStock: number = 99;
+
   if (settings?.reward_product_id) {
     const { data: giftProd } = await supabase
       .from('products')
-      .select('name')
+      .select('id, name, slug, price_paise, images')
       .eq('id', settings.reward_product_id)
       .maybeSingle();
-    rewardProductName = giftProd?.name ?? null;
+
+    if (giftProd) {
+      rewardProductName = giftProd.name ?? null;
+      rewardProductSlug = giftProd.slug ?? null;
+      rewardProductImage = Array.isArray(giftProd.images) && giftProd.images.length > 0 ? giftProd.images[0] : null;
+      rewardProductPricePaise = giftProd.price_paise ?? 0;
+
+      const { data: invRows } = await supabase
+        .from('inventory')
+        .select('size, stock')
+        .eq('product_id', settings.reward_product_id)
+        .gt('stock', 0)
+        .order('stock', { ascending: false });
+
+      if (invRows && invRows.length > 0) {
+        rewardProductSize = invRows[0].size || 'M';
+        rewardProductMaxStock = invRows[0].stock || 99;
+      }
+    }
   }
 
   return {
@@ -47,6 +71,11 @@ async function loadPublicSettings(supabase: ReturnType<typeof createAdminClient>
       reward_percentage: Number(settings?.reward_percentage) || 0,
       reward_product_id: settings?.reward_product_id ?? null,
       reward_product_name: rewardProductName,
+      reward_product_slug: rewardProductSlug,
+      reward_product_image: rewardProductImage,
+      reward_product_price_paise: rewardProductPricePaise,
+      reward_product_size: rewardProductSize,
+      reward_product_max_stock: rewardProductMaxStock,
       buy_x_quantity: settings?.buy_x_quantity ?? 2,
       get_y_quantity: settings?.get_y_quantity ?? 1,
     },

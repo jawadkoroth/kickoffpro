@@ -893,9 +893,16 @@ function CheckoutContent() {
                 <div className={styles.itemMeta}>
                   <span className={styles.itemName}>{line?.name || 'Product'}</span>
                   <span className={styles.itemSubtext}>Size: {line?.size || 'Standard'}</span>
+                  {line?.is_free_gift && (
+                    <span style={{ fontSize: '0.625rem', fontWeight: 800, padding: '1px 6px', background: 'rgba(22, 163, 74, 0.15)', color: 'var(--success, #16a34a)', borderRadius: 4, width: 'fit-content', marginTop: 2 }}>
+                      FREE PROMO GIFT
+                    </span>
+                  )}
                 </div>
-                <span className={styles.itemPrice}>
-                  {formatPaise((line?.price_paise || 0) * (line?.quantity || 1))}
+                <span className={styles.itemPrice} style={line?.is_free_gift || line?.price_paise === 0 ? { color: 'var(--success, #16a34a)', fontWeight: 700 } : undefined}>
+                  {line?.is_free_gift || line?.price_paise === 0
+                    ? 'FREE'
+                    : formatPaise((line?.price_paise || 0) * (line?.quantity || 1))}
                 </span>
               </div>
             ))}
