@@ -23,7 +23,12 @@ export const dynamic = 'force-dynamic';
  */
 
 async function verifyAdmin(): Promise<
-  | { ok: true; userId: string; supabase: ReturnType<typeof createAdminClient> }
+  | {
+      ok: true;
+      userId: string;
+      supabase: ReturnType<typeof createAdminClient>;
+      serverSupabase: Awaited<ReturnType<typeof createServerSupabaseClient>>;
+    }
   | { ok: false; response: Response }
 > {
   const serverSupabase = await createServerSupabaseClient();
@@ -35,18 +40,33 @@ async function verifyAdmin(): Promise<
     return { ok: false, response: apiError(401, 'Unauthorized') };
   }
 
-  const supabase = createAdminClient();
-  const { data: adminUser } = await supabase
+  // 1. Check admin_users via user session (respects RLS auth.uid() = id)
+  const { data: adminFromSession } = await serverSupabase
     .from('admin_users')
     .select('id')
     .eq('id', user.id)
-    .single();
+    .maybeSingle();
 
-  if (!adminUser) {
+  let isAdmin = Boolean(adminFromSession?.id);
+
+  // 2. Fallback to service role client check if available
+  const adminClient = createAdminClient();
+  if (!isAdmin) {
+    const { data: adminFromService } = await adminClient
+      .from('admin_users')
+      .select('id')
+      .eq('id', user.id)
+      .maybeSingle();
+    if (adminFromService?.id) {
+      isAdmin = true;
+    }
+  }
+
+  if (!isAdmin) {
     return { ok: false, response: apiError(403, 'Not admin') };
   }
 
-  return { ok: true, userId: user.id, supabase };
+  return { ok: true, userId: user.id, supabase: adminClient, serverSupabase };
 }
 
 // Fields safe to read client-side. `api_key` is intentionally omitted.
@@ -87,13 +107,35 @@ export async function GET() {
   const auth = await verifyAdmin();
   if (!auth.ok) return auth.response;
 
-  let { data, error } = await auth.supabase
+  let data: Record<string, unknown> | null = null;
+  let error: { code?: string; message?: string } | null = null;
+
+  // 1. Try service role client
+  const res1 = await auth.supabase
     .from('shipping_settings')
-    .select(`${READ_COLUMNS}, api_key`)
+    .select(`${READ_COLUMNS}, api_key` as '*')
     .limit(1)
     .maybeSingle();
 
-  // Fallback to SELECT * if a newly deployed column isn't migrated yet so the admin UI stays usable
+  data = (res1.data as Record<string, unknown> | null) ?? null;
+  error = res1.error;
+
+  // 2. If blocked by RLS or error, try serverSupabase (session client with admin credentials)
+  if (error || !data) {
+    const res2 = await auth.serverSupabase
+      .from('shipping_settings')
+      .select(`${READ_COLUMNS}, api_key` as '*')
+      .limit(1)
+      .maybeSingle();
+    if (res2.data) {
+      data = (res2.data as Record<string, unknown> | null) ?? null;
+      error = null;
+    } else if (res2.error && !data) {
+      error = res2.error;
+    }
+  }
+
+  // 3. Fallback to SELECT * if a newly deployed column isn't migrated yet so the admin UI stays usable
   if (error && (error.code === '42703' || error.code === 'PGRST204')) {
     console.warn('[SHIPPING_SETTINGS_GET_SCHEMA_FALLBACK]', error.message);
     const fallback = await auth.supabase
@@ -101,11 +143,23 @@ export async function GET() {
       .select('*')
       .limit(1)
       .maybeSingle();
-    data = fallback.data;
+    data = (fallback.data as Record<string, unknown> | null) ?? null;
     error = fallback.error;
+
+    if (error || !data) {
+      const fallbackSession = await auth.serverSupabase
+        .from('shipping_settings')
+        .select('*')
+        .limit(1)
+        .maybeSingle();
+      if (fallbackSession.data) {
+        data = (fallbackSession.data as Record<string, unknown> | null) ?? null;
+        error = null;
+      }
+    }
   }
 
-  if (error) {
+  if (error && !data) {
     console.error('[SHIPPING_SETTINGS_GET]', error);
     return apiError(500, `Failed to load shipping settings: ${error.message}`);
   }
@@ -115,6 +169,25 @@ export async function GET() {
   const { api_key, ...rest } = (data ?? {}) as Record<string, unknown>;
   const res = apiSuccess({
     settings: {
+      free_shipping_threshold_paise: 99900,
+      default_shipping_charge_paise: 9900,
+      cod_enabled: true,
+      cod_fee_paise: 5000,
+      promo_banner_enabled: true,
+      promo_goal_type: 'amount',
+      promo_goal_threshold_paise: 99900,
+      promo_goal_item_count: 2,
+      promo_progress_template: 'Add {remaining} more to unlock FREE SHIPPING',
+      promo_unlocked_text: 'You unlocked FREE Standard Shipping!',
+      promo_nudge_enabled: true,
+      promo_nudge_title: 'Pay with UPI & Save {cod_fee}',
+      promo_nudge_badge: 'LOWEST PRICE',
+      promo_nudge_text: 'Instant UPI avoids the {cod_fee} COD handling charge and guarantees Priority Dispatch within 24 hours.',
+      promo_reward_type: 'free_shipping',
+      reward_percentage: 10,
+      reward_product_id: null,
+      buy_x_quantity: 2,
+      get_y_quantity: 1,
       ...rest,
       api_key_set: typeof api_key === 'string' && api_key.trim().length > 0,
     },
@@ -285,113 +358,151 @@ export async function PATCH(req: NextRequest) {
   update.updated_at = new Date().toISOString();
 
   // The settings table is a singleton. Fetch the one row's id.
-  const { data: existing } = await auth.supabase
+  let existingId: string | null = null;
+  const { data: existingService } = await auth.supabase
     .from('shipping_settings')
     .select('id')
     .limit(1)
     .maybeSingle();
 
-  if (!existing?.id) {
-    // No row yet — create one with whatever the admin provided.
-    const { error: insertErr } = await auth.supabase
-      .from('shipping_settings')
-      .insert(update);
-    if (insertErr) {
-      console.error('[SHIPPING_SETTINGS_INSERT]', insertErr);
-      return apiError(500, `Failed to create shipping settings: ${insertErr.message}`);
-    }
+  if (existingService?.id) {
+    existingId = existingService.id;
   } else {
-    const { error: updateErr } = await auth.supabase
+    const { data: existingSession } = await auth.serverSupabase
       .from('shipping_settings')
-      .update(update)
-      .eq('id', existing.id);
-    if (updateErr) {
-      console.error('[SHIPPING_SETTINGS_UPDATE]', updateErr);
-      return apiError(500, `Failed to update shipping settings: ${updateErr.message}`);
+      .select('id')
+      .limit(1)
+      .maybeSingle();
+    if (existingSession?.id) {
+      existingId = existingSession.id;
     }
   }
 
-  // Sync state to the new tables to prevent configuration drift
-  const { data: finalSettings } = await auth.supabase
-    .from('shipping_settings')
-    .select('*')
-    .limit(1)
-    .single();
+  let writeError: { message?: string; code?: string } | null = null;
 
-  if (finalSettings) {
-    const providerName = finalSettings.provider_name ?? 'delhivery';
-    const providerUpdate: Record<string, any> = {
-      name: providerName,
-      is_active: finalSettings.provider_enabled ?? false,
-      api_url: finalSettings.api_url ?? null,
-      pickup_name: finalSettings.pickup_name ?? null,
-      pickup_phone: finalSettings.pickup_phone ?? null,
-      pickup_line1: finalSettings.pickup_address_line1 ?? null,
-      pickup_line2: finalSettings.pickup_address_line2 ?? null,
-      pickup_city: finalSettings.pickup_city ?? null,
-      pickup_state: finalSettings.pickup_state ?? null,
-      pickup_pincode: finalSettings.pickup_pincode ?? null,
-      features_cod: finalSettings.cod_enabled ?? true,
-    };
-    if (finalSettings.api_key) {
-      providerUpdate.api_key = finalSettings.api_key;
+  if (!existingId) {
+    // No row yet — create one with whatever the admin provided.
+    let res = await auth.supabase
+      .from('shipping_settings')
+      .insert(update);
+    if (res.error) {
+      res = await auth.serverSupabase
+        .from('shipping_settings')
+        .insert(update);
     }
-
-    const { data: upsertedProvider } = await auth.supabase
-      .from('shipping_providers')
-      .upsert(providerUpdate, { onConflict: 'name' })
-      .select('id')
-      .single();
-
-    if (upsertedProvider?.id && finalSettings.provider_enabled) {
-      await auth.supabase.rpc('activate_shipping_provider', {
-        p_provider_id: upsertedProvider.id,
-      });
+    if (res.error) {
+      writeError = res.error;
     }
+  } else {
+    let res = await auth.supabase
+      .from('shipping_settings')
+      .update(update)
+      .eq('id', existingId);
+    if (res.error) {
+      res = await auth.serverSupabase
+        .from('shipping_settings')
+        .update(update)
+        .eq('id', existingId);
+    }
+    if (res.error) {
+      writeError = res.error;
+    }
+  }
 
-    // Sync to shipping_pricing_rules
-    const pricingUpdate = {
-      free_shipping_threshold_paise: finalSettings.free_shipping_threshold_paise ?? 0,
-      default_charge_paise: finalSettings.default_shipping_charge_paise ?? 0,
-    };
-    const { data: existingPricing } = await auth.supabase
-      .from('shipping_pricing_rules')
-      .select('id')
+  if (writeError) {
+    console.error('[SHIPPING_SETTINGS_SAVE_ERROR]', writeError);
+    return apiError(500, `Failed to update shipping settings: ${writeError.message || 'Database write error'}`);
+  }
+
+  // Best-effort sync to secondary/legacy tables (shipping_providers, shipping_pricing_rules, cod_rules)
+  try {
+    const { data: finalSettings } = await (auth.supabase || auth.serverSupabase)
+      .from('shipping_settings')
+      .select('*')
       .limit(1)
       .maybeSingle();
 
-    if (existingPricing?.id) {
-      await auth.supabase
-        .from('shipping_pricing_rules')
-        .update(pricingUpdate)
-        .eq('id', existingPricing.id);
-    } else {
-      await auth.supabase
-        .from('shipping_pricing_rules')
-        .insert(pricingUpdate);
-    }
+    if (finalSettings) {
+      const providerName = finalSettings.provider_name ?? 'delhivery';
+      const providerUpdate: Record<string, any> = {
+        name: providerName,
+        is_active: finalSettings.provider_enabled ?? false,
+        api_url: finalSettings.api_url ?? null,
+        pickup_name: finalSettings.pickup_name ?? null,
+        pickup_phone: finalSettings.pickup_phone ?? null,
+        pickup_line1: finalSettings.pickup_address_line1 ?? null,
+        pickup_line2: finalSettings.pickup_address_line2 ?? null,
+        pickup_city: finalSettings.pickup_city ?? null,
+        pickup_state: finalSettings.pickup_state ?? null,
+        pickup_pincode: finalSettings.pickup_pincode ?? null,
+        features_cod: finalSettings.cod_enabled ?? true,
+      };
+      if (finalSettings.api_key) {
+        providerUpdate.api_key = finalSettings.api_key;
+      }
 
-    // Sync to cod_rules
-    const codUpdate = {
-      enabled: finalSettings.cod_enabled ?? true,
-      fee_paise: finalSettings.cod_fee_paise ?? 0,
-    };
-    const { data: existingCod } = await auth.supabase
-      .from('cod_rules')
-      .select('id')
-      .limit(1)
-      .maybeSingle();
+      const { data: upsertedProvider } = await (auth.supabase || auth.serverSupabase)
+        .from('shipping_providers')
+        .upsert(providerUpdate, { onConflict: 'name' })
+        .select('id')
+        .maybeSingle();
 
-    if (existingCod?.id) {
-      await auth.supabase
+      if (upsertedProvider?.id && finalSettings.provider_enabled) {
+        try {
+          await (auth.supabase || auth.serverSupabase).rpc('activate_shipping_provider', {
+            p_provider_id: upsertedProvider.id,
+          });
+        } catch (rpcErr) {
+          console.warn('[ACTIVATE_SHIPPING_PROVIDER_RPC_WARN]', rpcErr);
+        }
+      }
+
+      // Sync to shipping_pricing_rules
+      const pricingUpdate = {
+        free_shipping_threshold_paise: finalSettings.free_shipping_threshold_paise ?? 0,
+        default_charge_paise: finalSettings.default_shipping_charge_paise ?? 0,
+      };
+      const { data: existingPricing } = await (auth.supabase || auth.serverSupabase)
+        .from('shipping_pricing_rules')
+        .select('id')
+        .limit(1)
+        .maybeSingle();
+
+      if (existingPricing?.id) {
+        await (auth.supabase || auth.serverSupabase)
+          .from('shipping_pricing_rules')
+          .update(pricingUpdate)
+          .eq('id', existingPricing.id);
+      } else {
+        await (auth.supabase || auth.serverSupabase)
+          .from('shipping_pricing_rules')
+          .insert(pricingUpdate);
+      }
+
+      // Sync to cod_rules
+      const codUpdate = {
+        enabled: finalSettings.cod_enabled ?? true,
+        fee_paise: finalSettings.cod_fee_paise ?? 0,
+      };
+      const { data: existingCod } = await (auth.supabase || auth.serverSupabase)
         .from('cod_rules')
-        .update(codUpdate)
-        .eq('id', existingCod.id);
-    } else {
-      await auth.supabase
-        .from('cod_rules')
-        .insert(codUpdate);
+        .select('id')
+        .limit(1)
+        .maybeSingle();
+
+      if (existingCod?.id) {
+        await (auth.supabase || auth.serverSupabase)
+          .from('cod_rules')
+          .update(codUpdate)
+          .eq('id', existingCod.id);
+      } else {
+        await (auth.supabase || auth.serverSupabase)
+          .from('cod_rules')
+          .insert(codUpdate);
+      }
     }
+  } catch (syncErr) {
+    console.warn('[SHIPPING_SECONDARY_SYNC_WARN]', syncErr);
   }
 
   return apiSuccess({ updated: true });

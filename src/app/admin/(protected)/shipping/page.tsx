@@ -1547,7 +1547,7 @@ export default function AdminShipping() {
     try {
       const res = await fetch(`/api/admin/shipping?t=${Date.now()}`, { cache: 'no-store' });
       const data = await res.json();
-      if (!data.success) { showToast('Failed to load shipping settings', 'error'); return; }
+      if (!data.success) { showToast(data.error || 'Failed to load shipping settings', 'error'); return; }
       const raw = data.settings || {};
       const rewardType: SettingsState['promo_reward_type'] = raw.promo_reward_type ?? EMPTY.promo_reward_type;
       const rewardDefaults: Record<SettingsState['promo_reward_type'], { progress: string; unlocked: string }> = {
