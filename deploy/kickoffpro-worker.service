@@ -11,10 +11,10 @@ User=ubuntu
 Group=ubuntu
 
 # Working Directory: Absolute path to the KickoffPro project root on the VM
-WorkingDirectory=/var/www/kickoffpro
+WorkingDirectory=/home/ubuntu/kickoffpro
 
 # Environment File: Points to the production .env file containing API secrets & database keys
-EnvironmentFile=/var/www/kickoffpro/.env
+EnvironmentFile=/home/ubuntu/kickoffpro/.env
 
 # Node environment flag
 Environment=NODE_ENV=production
