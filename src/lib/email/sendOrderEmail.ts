@@ -446,24 +446,73 @@ async function dispatch(opts: DispatchOpts): Promise<void> {
   const { kind, to, subject, html, orderNumber, mailbox = 'hello' } = opts;
 
   if (!to) {
-    console.log(
-      `[EMAIL_SKIP] ${kind}: no recipient email for order ${orderNumber}`,
-    );
-    return;
+    const errorMsg = `[EMAIL_FAILED] ${kind}: No recipient email address for order ${orderNumber}`;
+    console.error(errorMsg);
+    logEvent('email.failed', {
+      kind,
+      order_number: orderNumber,
+      error: errorMsg,
+    });
+    throw new Error(errorMsg);
   }
 
+  // 1. Support Resend if RESEND_API_KEY is configured
+  const resendApiKey = process.env.RESEND_API_KEY;
+  if (resendApiKey) {
+    try {
+      const { Resend } = await import('resend');
+      const resend = new Resend(resendApiKey);
+      const from = process.env.EMAIL_FROM || 'KickoffPro <orders@kickoffpro.in>';
+
+      const { data, error } = await resend.emails.send({
+        from,
+        to,
+        subject,
+        html,
+      });
+
+      if (error) {
+        throw new Error(`Resend API error: ${error.message} (${error.name || 'SEND_ERROR'})`);
+      }
+
+      console.log(
+        `[EMAIL_SENT] ${kind} order ${orderNumber} via Resend (Message ID: ${data?.id})`,
+      );
+      return;
+    } catch (resendErr) {
+      const msg = resendErr instanceof Error ? resendErr.message : String(resendErr);
+      console.error(`[EMAIL_FAILED] ${kind} order ${orderNumber} via Resend:`, msg);
+      logEvent('email.failed', {
+        kind,
+        order_number: orderNumber,
+        error: msg,
+        provider: 'resend',
+      });
+      throw new Error(`[EMAIL_FAILED] ${kind} via Resend: ${msg}`);
+    }
+  }
+
+  // 2. Support Zoho / SMTP via Nodemailer
   const mailer = getTransporter(mailbox);
   if (!mailer) {
-    console.log(
-      `[EMAIL_SKIP] ${kind}: Zoho SMTP credentials not fully configured for mailbox "${mailbox}" (order ${orderNumber})`,
-    );
-    return;
+    const errorMsg = `[EMAIL_CONFIGURATION_ERROR] Cannot send ${kind} for order ${orderNumber}: No email credentials configured. Please set RESEND_API_KEY or Zoho SMTP credentials (SMTP_HELLO_USER and SMTP_HELLO_PASS) in environment variables.`;
+    console.error(errorMsg);
+    logEvent('email.failed', {
+      kind,
+      order_number: orderNumber,
+      error: errorMsg,
+      provider: 'none',
+    });
+    throw new Error(errorMsg);
   }
 
   // Resolve sender username dynamically for fallback
-  const senderUser = mailbox === 'orders' ? (process.env.SMTP_ORDERS_USER || process.env.SMTP_HELLO_USER)
-                   : mailbox === 'support' ? (process.env.SMTP_SUPPORT_USER || process.env.SMTP_HELLO_USER)
-                   : process.env.SMTP_HELLO_USER;
+  const senderUser =
+    mailbox === 'orders'
+      ? process.env.SMTP_ORDERS_USER || process.env.SMTP_HELLO_USER
+      : mailbox === 'support'
+      ? process.env.SMTP_SUPPORT_USER || process.env.SMTP_HELLO_USER
+      : process.env.SMTP_HELLO_USER;
 
   try {
     const info = await mailer.sendMail({
@@ -472,15 +521,19 @@ async function dispatch(opts: DispatchOpts): Promise<void> {
       subject,
       html,
     });
-    console.log(`[EMAIL_SENT] ${kind} order ${orderNumber} via ${mailbox} (Message ID: ${info.messageId})`);
+    console.log(
+      `[EMAIL_SENT] ${kind} order ${orderNumber} via Zoho SMTP (${mailbox}) (Message ID: ${info.messageId})`,
+    );
   } catch (err) {
-    // Never throw: callers are fire-and-forget.
+    const msg = err instanceof Error ? err.message : String(err);
     logEvent('email.failed', {
       kind,
       order_number: orderNumber,
-      error: err instanceof Error ? err.message : String(err),
+      error: msg,
+      provider: 'smtp',
     });
-    console.error(`[EMAIL_FAILED] ${kind} order ${orderNumber} via ${mailbox}:`, err);
+    console.error(`[EMAIL_FAILED] ${kind} order ${orderNumber} via SMTP:`, err);
+    throw new Error(`[EMAIL_FAILED] ${kind} via SMTP: ${msg}`);
   }
 }
 

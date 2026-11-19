@@ -1,6 +1,39 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { logEvent } from '@/lib/log';
+import { processJobs } from './runner';
+
+/**
+ * Triggers non-blocking queue processing immediately.
+ * In Next.js App Router (request context), leverages next/server `after()`
+ * to run safely in the background after the response is sent.
+ * In worker / script / VPS / Kubernetes contexts, falls back to setImmediate.
+ */
+export function triggerImmediateQueueProcessing(): void {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const nextServer = require('next/server');
+    if (typeof nextServer.after === 'function') {
+      nextServer.after(async () => {
+        try {
+          await processJobs();
+        } catch (err) {
+          console.error('[after() queue processor error]:', err);
+        }
+      });
+      return;
+    }
+  } catch {
+    // Calling after() outside a Next.js request lifecycle throws an error.
+    // Gracefully catch and use setImmediate below.
+  }
+
+  setImmediate(() => {
+    processJobs().catch((err) => {
+      console.error('[Immediate queue processor error]:', err);
+    });
+  });
+}
 
 /**
  * KickoffPro job queue — thin wrapper around the `job_queue` table.
@@ -90,7 +123,14 @@ export async function enqueue(
       });
       return null;
     }
-    return data?.id ?? null;
+    const jobId = data?.id ?? null;
+    if (jobId) {
+      const isFuture = input.runAt && new Date(input.runAt).getTime() > Date.now() + 1000;
+      if (!isFuture) {
+        triggerImmediateQueueProcessing();
+      }
+    }
+    return jobId;
   } catch (err) {
     logEvent('job.enqueue_failed', {
       kind: input.kind,

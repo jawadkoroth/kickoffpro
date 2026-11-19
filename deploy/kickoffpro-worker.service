@@ -1,0 +1,43 @@
+[Unit]
+Description=KickoffPro Background Queue Worker
+Documentation=https://github.com/jawadkoroth/kickoffpro
+After=network.target
+
+[Service]
+Type=simple
+
+# User & Group: Change to 'ubuntu' (default for Ubuntu OCI VMs) or 'opc' (Oracle Linux) or 'www-data'
+User=ubuntu
+Group=ubuntu
+
+# Working Directory: Absolute path to the KickoffPro project root on the VM
+WorkingDirectory=/var/www/kickoffpro
+
+# Environment File: Points to the production .env file containing API secrets & database keys
+EnvironmentFile=/var/www/kickoffpro/.env
+
+# Node environment flag
+Environment=NODE_ENV=production
+
+# Worker command: executes `tsx src/workers/queue-worker.ts` via npm
+ExecStart=/usr/bin/npm run worker
+
+# Auto-recovery configuration
+Restart=always
+RestartSec=10
+
+# Graceful shutdown: Sends SIGTERM, allows up to 30s to finish in-flight jobs, then terminates
+KillMode=mixed
+TimeoutStopSec=30
+KillSignal=SIGTERM
+
+# Logging to systemd journal (query with `journalctl -u kickoffpro-worker -f`)
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=kickoffpro-worker
+
+# Resource limits
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
