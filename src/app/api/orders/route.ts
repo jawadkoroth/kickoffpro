@@ -442,17 +442,40 @@ async function handlePOST(req: NextRequest) {
       clientUserAgent,
     };
 
-    if (!wasExisting && (tracking_event_id || fbp || fbc || gclid || clientIp || utm_source)) {
+    if (!wasExisting) {
+      const updatePayload: Record<string, unknown> = {
+        accepts_marketing: Boolean(customer.accepts_marketing),
+      };
+      if (tracking_event_id || fbp || fbc || gclid || clientIp || utm_source) {
+        updatePayload.tracking_event_id = tracking_event_id || null;
+        updatePayload.attribution_data = attributionData;
+        updatePayload.utm_source = utm_source || null;
+        updatePayload.utm_medium = utm_medium || null;
+        updatePayload.utm_campaign = utm_campaign || null;
+      }
       await supabase
         .from('orders')
-        .update({
-          tracking_event_id: tracking_event_id || null,
-          attribution_data: attributionData,
-          utm_source: utm_source || null,
-          utm_medium: utm_medium || null,
-          utm_campaign: utm_campaign || null,
-        })
+        .update(updatePayload)
         .eq('id', orderId);
+
+      // Record marketing opt-in if customer consented at checkout
+      if (customer.email && customer.accepts_marketing) {
+        Promise.resolve(
+          supabase
+            .from('newsletter_subscribers')
+            .insert({
+              email: customer.email.trim().toLowerCase(),
+              source: 'checkout',
+              user_agent: clientUserAgent,
+            }),
+        )
+          .then(({ error }) => {
+            if (error && error.code !== '23505' && !/duplicate/i.test(error.message)) {
+              logEvent('newsletter.checkout_insert_failed', { error: error.message });
+            }
+          })
+          .catch(() => {});
+      }
     }
 
     // 9. Lifecycle email + admin push, durably enqueued. Email

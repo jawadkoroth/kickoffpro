@@ -12,6 +12,7 @@ import {
   dispatchServerPurchaseTracking,
   type ServerPurchaseEventData,
 } from '@/lib/tracking/server';
+import { sendBroadcastChunk } from '@/lib/email/sendBroadcastEmail';
 
 /**
  * KickoffPro — job handler registry.
@@ -86,6 +87,62 @@ const handlers: Record<string, JobHandler> = {
       throw new Error('tracking.capi_purchase payload missing order details');
     }
     await dispatchServerPurchaseTracking(data);
+  },
+
+  // ---- email.broadcast_chunk -------------------------------------
+  'email.broadcast_chunk': async (payload, supabase) => {
+    const campaignId = (payload as { campaignId?: string }).campaignId;
+    const emails = (payload as { emails?: string[] }).emails;
+    const subject = (payload as { subject?: string }).subject || '';
+    const previewText = (payload as { previewText?: string | null }).previewText || null;
+    const bodyHtml = (payload as { bodyHtml?: string }).bodyHtml || '';
+    const ctaLabel = (payload as { ctaLabel?: string | null }).ctaLabel || null;
+    const ctaUrl = (payload as { ctaUrl?: string | null }).ctaUrl || null;
+    const isLastChunk = Boolean((payload as { isLastChunk?: boolean }).isLastChunk);
+
+    if (!campaignId || !Array.isArray(emails) || emails.length === 0) {
+      return;
+    }
+
+    // Set campaign status to 'sending' if still 'queued'
+    await supabase
+      .from('email_campaigns')
+      .update({ status: 'sending' })
+      .eq('id', campaignId)
+      .eq('status', 'queued');
+
+    const result = await sendBroadcastChunk({
+      emails,
+      subject,
+      previewText,
+      bodyHtml,
+      ctaLabel,
+      ctaUrl,
+    });
+
+    const { data: campaign } = await supabase
+      .from('email_campaigns')
+      .select('sent_count, failed_count')
+      .eq('id', campaignId)
+      .single();
+
+    const newSent = (campaign?.sent_count ?? 0) + result.sent;
+    const newFailed = (campaign?.failed_count ?? 0) + result.failed;
+
+    const updateFields: Record<string, unknown> = {
+      sent_count: newSent,
+      failed_count: newFailed,
+    };
+
+    if (isLastChunk) {
+      updateFields.status = 'sent';
+      updateFields.sent_at = new Date().toISOString();
+    }
+
+    await supabase
+      .from('email_campaigns')
+      .update(updateFields)
+      .eq('id', campaignId);
   },
 };
 

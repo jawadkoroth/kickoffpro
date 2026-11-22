@@ -195,6 +195,7 @@ function CheckoutContent() {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
+  const [acceptsMarketing, setAcceptsMarketing] = useState(false);
   const [line1, setLine1] = useState('');
   const [line2, setLine2] = useState('');
   const [city, setCity] = useState('');
@@ -621,7 +622,12 @@ function CheckoutContent() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           items: submittedLines,
-          customer: { name: name.trim(), phone, email: email || undefined },
+          customer: {
+            name: name.trim(),
+            phone,
+            email: email || undefined,
+            accepts_marketing: acceptsMarketing,
+          },
           shipping_address: {
             line1: line1.trim(),
             line2: line2.trim() || undefined,
@@ -1035,6 +1041,15 @@ function CheckoutContent() {
             <input className={`input-field ${errors.email ? 'input-error' : ''}`} placeholder="Email (optional)" value={email} onChange={e => setEmail(e.target.value)} type="email" />
             {errors.email && <span className="input-error-text">{errors.email}</span>}
           </div>
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', cursor: 'pointer', marginTop: '6px', fontSize: '0.8125rem', color: '#9CA3AF', lineHeight: 1.4 }}>
+            <input
+              type="checkbox"
+              checked={acceptsMarketing}
+              onChange={(e) => setAcceptsMarketing(e.target.checked)}
+              style={{ accentColor: '#FFC928', cursor: 'pointer', marginTop: '2px', width: '15px', height: '15px' }}
+            />
+            <span>Email me with exclusive kit drops, secret offers &amp; restocks</span>
+          </label>
         </div>
 
         {/* Shipping Address */}
