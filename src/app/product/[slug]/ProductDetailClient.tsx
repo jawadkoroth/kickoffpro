@@ -225,6 +225,22 @@ export default function ProductDetailClient({
       size: selectedSize,
       ...(couponApplied && couponCode ? { coupon: couponCode.toUpperCase() } : {}),
     });
+
+    // Proactively release virtual try-on camera stream before navigating to checkout
+    if (typeof document !== 'undefined') {
+      const iframes = document.querySelectorAll<HTMLIFrameElement>(
+        'iframe[src*="decart"], iframe[src*="anywear"]'
+      );
+      iframes.forEach((iframe) => {
+        try {
+          iframe.contentWindow?.postMessage(
+            { type: 'DECART_RELEASE_CAMERA', reason: 'widget_closed' },
+            '*'
+          );
+        } catch {}
+      });
+    }
+
     router.push(`/checkout?${params.toString()}`);
   }
 
