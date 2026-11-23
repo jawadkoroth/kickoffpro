@@ -56,6 +56,14 @@ export default function ProductDetailClient({
   const [showSizeGuide, setShowSizeGuide] = useState(false);
   const [tryOnNotice, setTryOnNotice] = useState<string | null>(null);
 
+  // Guarantee that returning to a product page never restores an open virtual try-on session
+  useEffect(() => {
+    try {
+      sessionStorage.removeItem('_decart_open');
+      sessionStorage.removeItem('_decart_pane');
+    } catch {}
+  }, []);
+
   const handleOpenTryOn = useCallback(() => {
     interface DecartWindow extends Window {
       DecartWidget?: { open: (opts?: Record<string, unknown>) => void };
@@ -71,7 +79,7 @@ export default function ProductDetailClient({
       }
     } else {
       const injectedBtn = document.querySelector<HTMLElement>(
-        '.vton-btn, #__decart-tryon-widget, [data-decart-trigger], #__decart-imgbtn',
+        '.vton-btn, #__decart-pill-btn, [data-decart-trigger], #__decart-imgbtn',
       );
       if (injectedBtn) {
         injectedBtn.click();

@@ -31,12 +31,34 @@ export default function AnywearScript({
     [pathname]
   );
 
-  // Sync data attribute with current route and release camera on route exit
+  // Sync data attribute with current route, reset Decart session state, and release camera on route changes
   useEffect(() => {
     if (typeof document === 'undefined') return;
 
+    // Always clear Decart session open/restore flags so Decart popstate/autostart
+    // listeners never auto-open the try-on drawer or activate camera on route transitions
+    try {
+      sessionStorage.removeItem('_decart_open');
+      sessionStorage.removeItem('_decart_pane');
+    } catch {}
+
     if (isProductPage) {
       document.documentElement.setAttribute('data-anywear-active', 'true');
+
+      // If a leftover try-on iframe from a previous session exists, clean the open container
+      // so Decart never attempts an autostart on SPA navigation
+      const activeIframe = document.querySelector<HTMLIFrameElement>(
+        '#__decart-tryon-widget iframe, iframe[src*="decart"], iframe[src*="anywear"]'
+      );
+      if (activeIframe) {
+        try {
+          activeIframe.contentWindow?.postMessage(
+            { type: 'DECART_RELEASE_CAMERA', reason: 'widget_closed' },
+            '*'
+          );
+        } catch {}
+        document.getElementById('__decart-tryon-widget')?.remove();
+      }
     } else {
       document.documentElement.setAttribute('data-anywear-active', 'false');
 
@@ -52,6 +74,9 @@ export default function AnywearScript({
           );
         } catch {}
       });
+
+      // Remove the try-on modal container so entering back onto a product page starts completely fresh
+      document.getElementById('__decart-tryon-widget')?.remove();
     }
   }, [isProductPage]);
 
