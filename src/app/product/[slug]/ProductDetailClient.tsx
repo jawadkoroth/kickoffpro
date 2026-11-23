@@ -55,6 +55,25 @@ export default function ProductDetailClient({
   const [addedToCart, setAddedToCart] = useState(false);
   const [showSizeGuide, setShowSizeGuide] = useState(false);
 
+  const handleOpenTryOn = useCallback(() => {
+    interface DecartWindow extends Window {
+      DecartWidget?: { open: (opts?: Record<string, unknown>) => void };
+    }
+    const decart = (window as unknown as DecartWindow).DecartWidget;
+    if (decart && typeof decart.open === 'function') {
+      decart.open();
+    } else {
+      const injectedBtn = document.querySelector<HTMLElement>(
+        '.vton-btn, #__decart-tryon-widget, [data-decart-trigger], #__decart-imgbtn',
+      );
+      if (injectedBtn) {
+        injectedBtn.click();
+      } else {
+        console.log('[ANYWEAR] Virtual Try-On widget is initializing...');
+      }
+    }
+  }, []);
+
   const sizeSelectorRef = useRef<HTMLDivElement>(null);
 
   const isSoldOut = totalStock <= 0;
@@ -263,15 +282,26 @@ export default function ProductDetailClient({
 
             {/* Size Selector */}
             <div ref={sizeSelectorRef} className={styles.section}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', flexWrap: 'wrap', gap: '8px' }}>
                 <label className="input-label" style={{ margin: 0 }}>Select Size</label>
-                <button
-                  type="button"
-                  className={styles.sizeGuideLink}
-                  onClick={() => setShowSizeGuide(true)}
-                >
-                  📏 View Size Guide
-                </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <button
+                    type="button"
+                    className={styles.tryOnLink}
+                    onClick={handleOpenTryOn}
+                    aria-label="Try this jersey virtually"
+                  >
+                    ✨ Virtual Try-On
+                  </button>
+                  <span style={{ color: 'rgba(0,0,0,0.25)', fontSize: '0.75rem' }}>·</span>
+                  <button
+                    type="button"
+                    className={styles.sizeGuideLink}
+                    onClick={() => setShowSizeGuide(true)}
+                  >
+                    📏 View Size Guide
+                  </button>
+                </div>
               </div>
               <div className={`size-grid ${sizeError ? styles.sizeGridError : ''}`}>
                 {(product.sizes as string[]).map(size => {
@@ -330,6 +360,8 @@ export default function ProductDetailClient({
             <div className={styles.desktopCta}>
               <button
                 className="btn btn-primary"
+                data-action="buy-now"
+                data-testid="buy-now-button"
                 disabled={isSoldOut}
                 onClick={handleBuyNow}
                 style={{ width: '100%', marginBottom: '12px', fontSize: '1rem', textTransform: 'uppercase' }}
@@ -342,6 +374,8 @@ export default function ProductDetailClient({
               </button>
               <button
                 className={`btn btn-secondary ${addedToCart ? 'btn-success' : ''}`}
+                data-action="add-to-cart"
+                data-testid="add-to-cart-button"
                 disabled={isSoldOut}
                 onClick={handleAddToCart}
                 style={{ width: '100%', fontSize: '0.875rem', textTransform: 'uppercase' }}
@@ -358,6 +392,8 @@ export default function ProductDetailClient({
         <div className={styles.mobileBtnRow}>
           <button
             className={`${styles.mobileCartBtn} ${addedToCart ? styles.mobileCartBtnDone : ''}`}
+            data-action="add-to-cart"
+            data-testid="mobile-add-to-cart-button"
             disabled={isSoldOut}
             onClick={handleAddToCart}
           >
@@ -365,6 +401,8 @@ export default function ProductDetailClient({
           </button>
           <button
             className="btn btn-primary"
+            data-action="buy-now"
+            data-testid="mobile-buy-now-button"
             disabled={isSoldOut}
             onClick={handleBuyNow}
             style={{ flex: 1, textTransform: 'uppercase', fontSize: '0.875rem' }}

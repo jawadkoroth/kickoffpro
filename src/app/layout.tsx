@@ -5,6 +5,7 @@ import Navbar from '@/components/Navbar';
 import CartDrawer from '@/components/cart/CartDrawer';
 import FeedbackButton from '@/components/FeedbackButton';
 import PixelScripts from '@/components/tracking/PixelScripts';
+import AnywearScript from '@/components/tryon/AnywearScript';
 import LiveHeartbeat from '@/components/tracking/LiveHeartbeat';
 import Footer from '@/components/footer/Footer';
 import FooterGate from '@/components/footer/FooterGate';
@@ -175,6 +176,7 @@ export default async function RootLayout({
               googleTagId={googleTagId}
               snapPixelId={snapPixelId}
             />
+            <AnywearScript />
             <Analytics />
             <SpeedInsights />
           </CartProvider>

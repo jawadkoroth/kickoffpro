@@ -289,6 +289,36 @@
   .mobileCtaSpacer { display: none; }
 }
 
+.tryOnLink {
+  background: rgba(47, 169, 245, 0.08);
+  border: 1px solid rgba(47, 169, 245, 0.28);
+  color: #0284c7;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 3px 10px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.2s ease;
+}
+
+:global([data-theme='dark']) .tryOnLink {
+  background: rgba(255, 201, 40, 0.12);
+  border-color: rgba(255, 201, 40, 0.35);
+  color: #FFC928;
+}
+
+.tryOnLink:hover {
+  background: rgba(47, 169, 245, 0.18);
+  transform: translateY(-1px);
+}
+
+:global([data-theme='dark']) .tryOnLink:hover {
+  background: rgba(255, 201, 40, 0.2);
+}
+
 .sizeGuideLink {
   background: none;
   border: none;
