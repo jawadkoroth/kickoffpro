@@ -319,6 +319,28 @@
   background: rgba(255, 201, 40, 0.2);
 }
 
+.tryOnNotice {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  background: rgba(47, 169, 245, 0.08);
+  border: 1px solid rgba(47, 169, 245, 0.22);
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  margin-top: 8px;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  line-height: 1.4;
+}
+
+:global([data-theme='dark']) .tryOnNotice {
+  background: rgba(255, 201, 40, 0.08);
+  border-color: rgba(255, 201, 40, 0.25);
+  color: #FFC928;
+}
+
 .sizeGuideLink {
   background: none;
   border: none;

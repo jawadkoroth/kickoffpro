@@ -18,18 +18,19 @@ import type { NextConfig } from "next";
 const csp = [
   "default-src 'self'",
   // Razorpay Checkout requires inline + eval; Supabase realtime requires self.
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://checkout.razorpay.com https://*.razorpay.com https://va.vercel-scripts.com",
-  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-  "img-src 'self' data: blob: https://*.supabase.co https://*.razorpay.com",
-  "font-src 'self' data: https://fonts.gstatic.com",
-  // Razorpay frame for the checkout sheet.
-  "frame-src 'self' https://api.razorpay.com https://*.razorpay.com",
-  // REST + Realtime (wss) to Supabase, Razorpay create-order endpoint.
-  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.razorpay.com https://lumberjack.razorpay.com https://va.vercel-scripts.com",
+  // Anywear (Decart.ai) requires widget script execution from anywear.decart.ai.
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://checkout.razorpay.com https://*.razorpay.com https://va.vercel-scripts.com https://anywear.decart.ai https://*.decart.ai",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://anywear.decart.ai https://*.decart.ai",
+  "img-src 'self' data: blob: https://*.supabase.co https://*.razorpay.com https://anywear.decart.ai https://*.decart.ai",
+  "font-src 'self' data: https://fonts.gstatic.com https://anywear.decart.ai https://*.decart.ai",
+  // Razorpay frame for the checkout sheet; Decart / Anywear for virtual try-on modal.
+  "frame-src 'self' https://api.razorpay.com https://*.razorpay.com https://anywear.decart.ai https://*.decart.ai https://tryanywear.ai https://*.tryanywear.ai",
+  // REST + Realtime (wss) to Supabase, Razorpay create-order endpoint, Decart / Anywear API & websockets.
+  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.razorpay.com https://lumberjack.razorpay.com https://va.vercel-scripts.com https://anywear.decart.ai https://*.decart.ai https://tryanywear.ai https://*.tryanywear.ai wss://*.decart.ai",
   // Web manifest, service worker scope.
   "manifest-src 'self'",
   "worker-src 'self' blob:",
-  "media-src 'self' blob: data: https://*.supabase.co",
+  "media-src 'self' blob: data: https://*.supabase.co https://anywear.decart.ai https://*.decart.ai",
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",
@@ -44,11 +45,11 @@ const securityHeaders = [
   { key: 'X-Frame-Options', value: 'DENY' },
   { key: 'X-Content-Type-Options', value: 'nosniff' },
   { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
-  // Lock down sensors / autoplay / fullscreen except where we use them.
+  // Lock down sensors / autoplay / fullscreen except where we use them (allow camera for try-on photo capture).
   {
     key: 'Permissions-Policy',
     value:
-      'camera=(), microphone=(), geolocation=(), payment=(self "https://checkout.razorpay.com"), interest-cohort=()',
+      'camera=(self "https://anywear.decart.ai" "https://*.decart.ai"), microphone=(), geolocation=(), payment=(self "https://checkout.razorpay.com"), interest-cohort=()',
   },
   // 1-year HSTS with preload + subdomains. Safe to enable always —
   // browsers ignore the header on plain HTTP.

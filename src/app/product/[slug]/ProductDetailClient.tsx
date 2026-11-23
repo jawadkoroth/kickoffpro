@@ -54,6 +54,7 @@ export default function ProductDetailClient({
   const [showCoupon, setShowCoupon] = useState(false);
   const [addedToCart, setAddedToCart] = useState(false);
   const [showSizeGuide, setShowSizeGuide] = useState(false);
+  const [tryOnNotice, setTryOnNotice] = useState<string | null>(null);
 
   const handleOpenTryOn = useCallback(() => {
     interface DecartWindow extends Window {
@@ -61,15 +62,25 @@ export default function ProductDetailClient({
     }
     const decart = (window as unknown as DecartWindow).DecartWidget;
     if (decart && typeof decart.open === 'function') {
-      decart.open();
+      try {
+        decart.open();
+        setTryOnNotice(null);
+      } catch (err) {
+        console.error('[ANYWEAR] Failed to open widget:', err);
+        setTryOnNotice('Unable to open Virtual Try-On. Please refresh the page or try again.');
+      }
     } else {
       const injectedBtn = document.querySelector<HTMLElement>(
         '.vton-btn, #__decart-tryon-widget, [data-decart-trigger], #__decart-imgbtn',
       );
       if (injectedBtn) {
         injectedBtn.click();
+        setTryOnNotice(null);
       } else {
-        console.log('[ANYWEAR] Virtual Try-On widget is initializing...');
+        console.warn('[ANYWEAR] Widget not yet ready or blocked by browser/extension.');
+        setTryOnNotice(
+          'Virtual Try-On is initializing. If it does not appear, please verify content/ad blockers are disabled and refresh.'
+        );
       }
     }
   }, []);
@@ -303,6 +314,27 @@ export default function ProductDetailClient({
                   </button>
                 </div>
               </div>
+              {tryOnNotice && (
+                <div className={styles.tryOnNotice} role="status">
+                  <span>ℹ️ {tryOnNotice}</span>
+                  <button
+                    type="button"
+                    onClick={() => setTryOnNotice(null)}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      fontSize: '1rem',
+                      color: 'inherit',
+                      padding: '0 4px',
+                      lineHeight: 1,
+                    }}
+                    aria-label="Dismiss notice"
+                  >
+                    ×
+                  </button>
+                </div>
+              )}
               <div className={`size-grid ${sizeError ? styles.sizeGridError : ''}`}>
                 {(product.sizes as string[]).map(size => {
                   const stock = getStock(size);
