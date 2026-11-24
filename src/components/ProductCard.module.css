@@ -66,11 +66,13 @@
 .saleBadge {
   background: var(--warning);
   color: var(--brand-navy);
+  z-index: 2147483647 !important;
 }
 
 .newBadge {
   background: var(--brand-blue);
   color: #FFFFFF;
+  z-index: 2147483647 !important;
 }
 
 .outOfStockPill {

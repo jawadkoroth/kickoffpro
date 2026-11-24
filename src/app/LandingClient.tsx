@@ -228,12 +228,20 @@ export default function LandingClient({ products }: LandingClientProps) {
               const teamName = getTeamName(p);
               const imageUrl = getPublicUrl(p.homepage_feature_image || p.images?.[0]) || '/product-1.png';
               return (
-                <Link key={p.id} href={`/products?q=${teamName}`} className={styles.teamCard}>
-                  <div className={styles.teamImageWrap}>
+                <Link
+                  key={p.id}
+                  href={`/products?q=${teamName}`}
+                  className={styles.teamCard}
+                  data-non-wearable="true"
+                  data-tryon="false"
+                >
+                  <div className={styles.teamImageWrap} data-non-wearable="true" data-tryon="false">
                     <img 
                       src={imageUrl} 
                       alt={teamName} 
                       loading="lazy" 
+                      data-vton-pinned="disabled"
+                      data-tryon="false"
                     />
                   </div>
                   <div className={styles.teamBody}>
@@ -261,12 +269,20 @@ export default function LandingClient({ products }: LandingClientProps) {
               const clubName = getClubName(p);
               const imageUrl = getPublicUrl(p.homepage_feature_image || p.images?.[0]) || '/product-1.png';
               return (
-                <Link key={p.id} href={`/products?q=${clubName}`} className={styles.teamCard}>
-                  <div className={styles.teamImageWrap}>
+                <Link
+                  key={p.id}
+                  href={`/products?q=${clubName}`}
+                  className={styles.teamCard}
+                  data-non-wearable="true"
+                  data-tryon="false"
+                >
+                  <div className={styles.teamImageWrap} data-non-wearable="true" data-tryon="false">
                     <img 
                       src={imageUrl} 
                       alt={clubName} 
                       loading="lazy" 
+                      data-vton-pinned="disabled"
+                      data-tryon="false"
                     />
                   </div>
                   <div className={styles.teamBody}>
@@ -416,8 +432,8 @@ export default function LandingClient({ products }: LandingClientProps) {
         </div>
         <div className={styles.instagramGrid}>
           {instagramFeed.map((post, i) => (
-            <div key={i} className={styles.instagramCard}>
-              <img src={post.image} alt={`Fan wear ${i+1}`} loading="lazy" />
+            <div key={i} className={styles.instagramCard} data-non-wearable="true" data-tryon="false">
+              <img src={post.image} alt={`Fan wear ${i+1}`} loading="lazy" data-vton-pinned="disabled" data-tryon="false" />
               <div className={styles.instagramOverlay}>
                 <div style={{ display: 'flex', gap: '16px' }}>
                   <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>

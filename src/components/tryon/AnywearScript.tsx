@@ -92,19 +92,23 @@ export default function AnywearScript({
     if (typeof document === 'undefined') return;
 
     const handleCaptureClick = (e: MouseEvent) => {
-      // If we are NOT on a product detail route, intercept any clicks on Decart's card badges/triggers
-      if (!isProductPage) {
-        const target = e.target as Element | null;
-        if (
-          target &&
-          target.closest(
-            '#__decart-imgbtn, .vton-btn, .vton-label, [data-decart-imgbtn], [data-decart-trigger]'
-          )
-        ) {
-          e.preventDefault();
-          e.stopPropagation();
-          e.stopImmediatePropagation();
-        }
+      const target = e.target as Element | null;
+      if (!target) return;
+
+      const isNonWearable = Boolean(
+        target.closest('[data-non-wearable="true"], [data-tryon="false"], [class*="teamCard"]')
+      );
+      const isAnywearBadge = Boolean(
+        target.closest(
+          '#__decart-imgbtn, .vton-btn, .vton-label, [data-decart-imgbtn], [data-decart-trigger]'
+        )
+      );
+
+      // If we are NOT on a product detail route, or clicking inside a non-wearable card, suppress the action
+      if (isAnywearBadge && (!isProductPage || isNonWearable)) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
       }
     };
 
@@ -161,6 +165,7 @@ export default function AnywearScript({
       <style
         dangerouslySetInnerHTML={{
           __html: `
+            /* Cleanly hide floating Anywear UI & modal on non-product routes */
             html:not([data-anywear-active="true"]) #__decart-tryon-widget,
             html:not([data-anywear-active="true"]) #__decart-pill-btn,
             html:not([data-anywear-active="true"]) #__decart-cam-notice,
@@ -173,6 +178,49 @@ export default function AnywearScript({
               visibility: hidden !important;
               opacity: 0 !important;
               pointer-events: none !important;
+            }
+
+            /* Never show try-on buttons on non-wearable cards, Shop By Nation, and category cards */
+            [data-non-wearable="true"] .vton-btn,
+            [data-tryon="false"] .vton-btn,
+            [class*="teamCard"] .vton-btn,
+            [class*="teamImageWrap"] .vton-btn,
+            [class*="teamGrid"] .vton-btn,
+            [class*="instagramCard"] .vton-btn {
+              display: none !important;
+              visibility: hidden !important;
+              opacity: 0 !important;
+              pointer-events: none !important;
+            }
+
+            /* Suppress hover badge when mouse is over non-wearable cards */
+            body:has([data-non-wearable="true"]:hover) #__decart-imgbtn,
+            body:has([data-tryon="false"]:hover) #__decart-imgbtn,
+            body:has([class*="teamCard"]:hover) #__decart-imgbtn,
+            body:has([class*="teamImageWrap"]:hover) #__decart-imgbtn,
+            body:has([class*="instagramCard"]:hover) #__decart-imgbtn {
+              display: none !important;
+              visibility: hidden !important;
+              opacity: 0 !important;
+              pointer-events: none !important;
+            }
+
+            /* Position pinned try-on badge on wearable product cards at bottom-left so it never covers top-left sale badge */
+            [data-wearable="true"] .vton-btn,
+            [data-product-card="true"] .vton-btn,
+            [class*="imageWrap"] .vton-btn {
+              top: auto !important;
+              bottom: 10px !important;
+              left: 10px !important;
+              right: auto !important;
+              z-index: 10 !important;
+              border-radius: 4px !important;
+            }
+
+            /* Offset hover try-on badge so it sits cleanly below the top-left sale badge */
+            #__decart-imgbtn {
+              margin-top: 34px !important;
+              border-radius: 4px !important;
             }
           `,
         }}

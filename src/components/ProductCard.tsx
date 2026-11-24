@@ -82,7 +82,11 @@ export default function ProductCard({ product }: { product: ProductCardData }) {
   };
 
   return (
-    <div className={`${styles.card} ${outOfStock ? styles.cardDisabled : ''}`}>
+    <div
+      className={`${styles.card} ${outOfStock ? styles.cardDisabled : ''}`}
+      data-product-card="true"
+      data-wearable="true"
+    >
       <Link href={`/product/${product.slug}`} className={styles.linkWrapper}>
         <div className={styles.imageWrap}>
           <img
