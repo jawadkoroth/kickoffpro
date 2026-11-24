@@ -1,9 +1,11 @@
 'use client';
 
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import useEmblaCarousel from 'embla-carousel-react';
 import { useCart } from '@/lib/cart';
+import { FEATURE_FLAGS } from '@/lib/featureFlags';
+import { estimatePincodeDelivery } from '@/lib/shipping/pincodeEta';
 import { formatPaise } from '@/lib/format';
 import { getPublicUrl } from '@/lib/media';
 import { trackViewContent, trackAddToCart } from '@/lib/tracking/client';
@@ -19,6 +21,10 @@ export interface ProductDetail {
   sale_price_paise: number | null;
   images: string[];
   sizes: string[];
+  gsm?: string | null;
+  fabric?: string | null;
+  fit?: string | null;
+  model_info?: string | null;
 }
 
 export interface InventoryItem {
@@ -55,6 +61,19 @@ export default function ProductDetailClient({
   const [addedToCart, setAddedToCart] = useState(false);
   const [showSizeGuide, setShowSizeGuide] = useState(false);
   const [tryOnNotice, setTryOnNotice] = useState<string | null>(null);
+  const [etaPincode, setEtaPincode] = useState('');
+
+  const pincodeEta = useMemo(
+    () => (FEATURE_FLAGS.PINCODE_ETA ? estimatePincodeDelivery(etaPincode) : null),
+    [etaPincode],
+  );
+
+  const fabricSpecs = useMemo(() => {
+    if (!FEATURE_FLAGS.FABRIC_SPECS) return [];
+    return [product.gsm, product.fabric, product.fit, product.model_info].filter(
+      (v): v is string => typeof v === 'string' && v.trim().length > 0,
+    );
+  }, [product.gsm, product.fabric, product.fit, product.model_info]);
 
   // Guarantee that returning to a product page never restores an open virtual try-on session
   useEffect(() => {
@@ -300,6 +319,13 @@ export default function ProductDetailClient({
 
             <p className={styles.description}>{product.description}</p>
 
+            {/* Structured Fabric & Fit Spec Strip (hidden gracefully if no metadata populated) */}
+            {fabricSpecs.length > 0 && (
+              <div className={styles.specStrip}>
+                {fabricSpecs.join('  •  ')}
+              </div>
+            )}
+
             {/* Size Selector */}
             <div ref={sizeSelectorRef} className={styles.section}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', flexWrap: 'wrap', gap: '8px' }}>
@@ -378,8 +404,29 @@ export default function ProductDetailClient({
             <div className={styles.shippingStrip}>
               <div className={styles.shippingItem}>
                 <Truck size={16} className={styles.shippingIcon} />
-                <span>Delivery in 2–5 Business Days</span>
+                <span>
+                  {pincodeEta
+                    ? `Estimated delivery by ${pincodeEta.estimatedDateLabel}`
+                    : 'Delivery in 2–5 Business Days'}
+                </span>
               </div>
+              {FEATURE_FLAGS.PINCODE_ETA && (
+                <div className={styles.pincodeRow}>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={6}
+                    placeholder="Enter 6-digit pincode for ETA"
+                    value={etaPincode}
+                    onChange={(e) => setEtaPincode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    className={styles.pincodeInput}
+                    aria-label="Check delivery date by pincode"
+                  />
+                  {pincodeEta && (
+                    <span className={styles.pincodeResult}>{pincodeEta.windowLabel}</span>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Trust Badges */}

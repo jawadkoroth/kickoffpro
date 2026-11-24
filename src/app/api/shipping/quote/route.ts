@@ -134,6 +134,7 @@ export async function POST(req: NextRequest) {
     const res = apiSuccess({
       shippingPaise: result.shippingPaise,
       codFeePaise: result.codFeePaise,
+      prepaidDiscountPaise: result.prepaidDiscountPaise,
       totalPaise: result.totalPaise,
       codAllowed: result.codAllowed,
       codEnabled: settings?.cod_enabled !== false,

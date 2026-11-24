@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useCart } from '@/lib/cart';
+import { FEATURE_FLAGS } from '@/lib/featureFlags';
 import { formatPaise } from '@/lib/format';
 import { getPublicUrl } from '@/lib/media';
 import {
@@ -24,12 +25,32 @@ import styles from './CartDrawer.module.css';
 
 const DEFAULT_SIZES = ['S', 'M', 'L', 'XL', 'XXL'];
 
+interface UpsellProduct {
+  id: string;
+  name: string;
+  slug: string;
+  price_paise: number;
+  sale_price_paise: number | null;
+  images: string[];
+  sizes: string[];
+  inventory?: { size: string; stock: number }[];
+}
+
+interface ActiveCoupon {
+  id: string;
+  code: string;
+  discount_percent: number;
+  min_cart_paise?: number | null;
+  max_discount_paise?: number | null;
+}
+
 export default function CartDrawer() {
   const router = useRouter();
   const {
     items,
     isDrawerOpen,
     closeDrawer,
+    addItem,
     removeItem,
     updateQuantity,
     swapSize,
@@ -37,7 +58,139 @@ export default function CartDrawer() {
     totalPaise,
     shippingSettings,
     promoProgress,
+    appliedCoupon,
+    applyCoupon,
+    clearCoupon,
   } = useCart();
+
+  const [upsellProducts, setUpsellProducts] = useState<UpsellProduct[]>([]);
+  const [upsellSizes, setUpsellSizes] = useState<Record<string, string>>({});
+  const [activeCoupons, setActiveCoupons] = useState<ActiveCoupon[]>([]);
+  const [couponError, setCouponError] = useState('');
+
+  // Fetch cross-sells & active coupons lazily when drawer opens
+  useEffect(() => {
+    if (!isDrawerOpen) return;
+
+    if (FEATURE_FLAGS.CART_UPSELLS && upsellProducts.length === 0) {
+      fetch('/api/products')
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          if (data?.success && Array.isArray(data.products)) {
+            setUpsellProducts(data.products);
+          }
+        })
+        .catch(() => {});
+    }
+
+    if (FEATURE_FLAGS.CART_COUPONS && activeCoupons.length === 0) {
+      fetch('/api/coupons/active')
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          if (data?.success && Array.isArray(data.coupons)) {
+            setActiveCoupons(data.coupons);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [isDrawerOpen, upsellProducts.length, activeCoupons.length]);
+
+  // Recompute applied coupon discount when totalPaise changes
+  const couponDiscountPaise = useMemo(() => {
+    if (!FEATURE_FLAGS.CART_COUPONS || !appliedCoupon || totalPaise <= 0) return 0;
+    const match = activeCoupons.find((c) => c.code === appliedCoupon.code);
+    if (match?.min_cart_paise && totalPaise < match.min_cart_paise) {
+      return 0;
+    }
+    let disc = Math.round((totalPaise * appliedCoupon.discountPercent) / 100);
+    if (match?.max_discount_paise && disc > match.max_discount_paise) {
+      disc = match.max_discount_paise;
+    }
+    return Math.min(disc, totalPaise);
+  }, [appliedCoupon, activeCoupons, totalPaise]);
+
+  // Visible cross-sell recommendations (not already in cart, with stock > 0)
+  const visibleUpsells = useMemo(() => {
+    if (!FEATURE_FLAGS.CART_UPSELLS) return [];
+    const inCartIds = new Set(items.map((i) => i.product_id));
+    return upsellProducts
+      .filter((p) => !inCartIds.has(p.id))
+      .filter((p) => {
+        if (!p.inventory || p.inventory.length === 0) return true;
+        return p.inventory.some((inv) => inv.stock > 0);
+      })
+      .slice(0, 3);
+  }, [upsellProducts, items]);
+
+  // Single unified progress bar (Safeguard #2: never render two stacked progress bars)
+  const unifiedProgress = useMemo(() => {
+    const paidCount = items
+      .filter((i) => !i.is_free_gift)
+      .reduce((sum, i) => sum + i.quantity, 0);
+
+    if (FEATURE_FLAGS.CART_PACK_BAR) {
+      // If admin configured a specialized auto-offer (percentage / BOGO), honour it cleanly
+      if (promoProgress.isBannerVisible && promoProgress.promoRewardType !== 'free_shipping') {
+        return {
+          visible: true,
+          unlocked: promoProgress.hasUnlockedGoal,
+          percent: promoProgress.goalProgressPercent,
+          message: promoProgress.hasUnlockedGoal
+            ? promoProgress.unlockedMessage
+            : promoProgress.inProgressMessage,
+          iconType: promoProgress.promoRewardType,
+        };
+      }
+
+      // Otherwise render the D2C Pack / Multi-Buy progress bar (Pack of 2 -> Pack of 3)
+      const targetPack = paidCount < 2 ? 2 : 3;
+      const remaining = Math.max(0, targetPack - paidCount);
+      const unlocked = paidCount >= 2 && (promoProgress.hasFreeShipping || paidCount >= 3);
+      const percent = Math.min(100, Math.round((paidCount / targetPack) * 100));
+
+      let message = '';
+      if (paidCount < 2) {
+        message = `Add ${remaining} more item to unlock Pack of 2 & Free Shipping`;
+      } else if (paidCount === 2) {
+        message = 'Pack of 2 unlocked! Add 1 more for Pack of 3 savings';
+      } else {
+        message = 'Pack of 3+ unlocked! Best bundle value + Free Shipping';
+      }
+
+      return {
+        visible: items.length > 0,
+        unlocked,
+        percent,
+        message,
+        iconType: 'pack' as const,
+      };
+    }
+
+    return {
+      visible: items.length > 0 && promoProgress.isBannerVisible,
+      unlocked: promoProgress.hasUnlockedGoal,
+      percent: promoProgress.goalProgressPercent,
+      message: promoProgress.hasUnlockedGoal
+        ? promoProgress.unlockedMessage
+        : promoProgress.inProgressMessage,
+      iconType: promoProgress.promoRewardType,
+    };
+  }, [items, promoProgress]);
+
+  const handleApplyCouponChip = async (coupon: ActiveCoupon) => {
+    setCouponError('');
+    if (coupon.min_cart_paise && totalPaise < coupon.min_cart_paise) {
+      setCouponError(`Add ${formatPaise(coupon.min_cart_paise - totalPaise)} more to use ${coupon.code}`);
+      return;
+    }
+    const disc = Math.round((totalPaise * coupon.discount_percent) / 100);
+    const capped = coupon.max_discount_paise ? Math.min(disc, coupon.max_discount_paise) : disc;
+    applyCoupon({
+      code: coupon.code,
+      discountPaise: Math.min(capped, totalPaise),
+      discountPercent: coupon.discount_percent,
+    });
+  };
 
   // Lock body scroll and register Escape key listener when drawer is open
   useEffect(() => {
@@ -61,7 +214,11 @@ export default function CartDrawer() {
 
   const handleCheckoutClick = () => {
     closeDrawer();
-    router.push('/checkout');
+    const couponQuery =
+      FEATURE_FLAGS.CART_COUPONS && appliedCoupon?.code
+        ? `?coupon=${encodeURIComponent(appliedCoupon.code)}`
+        : '';
+    router.push(`/checkout${couponQuery}`);
   };
 
   return (
@@ -109,38 +266,38 @@ export default function CartDrawer() {
               </button>
             </div>
 
-            {/* Dynamic Promotional Progress Bar */}
-            {items.length > 0 && promoProgress.isBannerVisible && (
+            {/* Unified Promotional / Pack Progress Bar (single bar only) */}
+            {unifiedProgress.visible && (
               <div className={styles.shippingBarContainer}>
                 <div className={styles.shippingText}>
-                  {promoProgress.hasUnlockedGoal ? (
+                  {unifiedProgress.unlocked ? (
                     <>
                       <CheckCircle2 size={16} className={styles.shippingUnlocked} />
                       <span className={styles.shippingUnlocked}>
-                        {promoProgress.unlockedMessage}
+                        {unifiedProgress.message}
                       </span>
                     </>
                   ) : (
                     <>
-                      {promoProgress.promoRewardType === 'buy_x_get_specific_free' ? (
+                      {unifiedProgress.iconType === 'buy_x_get_specific_free' ? (
                         <Gift size={16} className={styles.shippingHighlight} />
-                      ) : promoProgress.promoRewardType === 'threshold_percentage' ? (
+                      ) : unifiedProgress.iconType === 'threshold_percentage' ? (
                         <Tag size={16} className={styles.shippingHighlight} />
-                      ) : promoProgress.promoRewardType === 'buy_x_get_cheapest_free' ? (
+                      ) : unifiedProgress.iconType === 'buy_x_get_cheapest_free' || unifiedProgress.iconType === 'pack' ? (
                         <Zap size={16} className={styles.shippingHighlight} />
                       ) : (
                         <Truck size={16} className={styles.shippingHighlight} />
                       )}
-                      <span>{promoProgress.inProgressMessage}</span>
+                      <span>{unifiedProgress.message}</span>
                     </>
                   )}
                 </div>
                 <div className={styles.progressBarTrack}>
                   <div
                     className={`${styles.progressBarFill} ${
-                      promoProgress.hasUnlockedGoal ? styles.progressBarFillUnlocked : ''
+                      unifiedProgress.unlocked ? styles.progressBarFillUnlocked : ''
                     }`}
-                    style={{ width: `${promoProgress.goalProgressPercent}%` }}
+                    style={{ width: `${unifiedProgress.percent}%` }}
                   />
                 </div>
               </div>
@@ -211,27 +368,33 @@ export default function CartDrawer() {
                           </div>
 
                           {/* Inline Size-Swapping Pill Selector */}
-                          <div className={styles.sizeSwapSection}>
-                            <div className={styles.sizeLabel}>Size: {item.size}</div>
-                            <div className={styles.sizePillRow}>
-                              {sizes.map((s) => {
-                                const isSelected = s === item.size;
-                                return (
-                                  <button
-                                    key={s}
-                                    type="button"
-                                    className={`${styles.sizePill} ${
-                                      isSelected ? styles.sizePillActive : ''
-                                    }`}
-                                    onClick={() => swapSize(item.product_id, item.size, s, item.is_free_gift)}
-                                    title={`Swap to size ${s}`}
-                                  >
-                                    {s}
-                                  </button>
-                                );
-                              })}
+                          {FEATURE_FLAGS.CART_UPSELLS ? (
+                            <div className={styles.sizeSwapSection}>
+                              <div className={styles.sizeLabel}>Size: {item.size}</div>
+                              <div className={styles.sizePillRow}>
+                                {sizes.map((s) => {
+                                  const isSelected = s === item.size;
+                                  return (
+                                    <button
+                                      key={s}
+                                      type="button"
+                                      className={`${styles.sizePill} ${
+                                        isSelected ? styles.sizePillActive : ''
+                                      }`}
+                                      onClick={() => swapSize(item.product_id, item.size, s, item.is_free_gift)}
+                                      title={`Swap to size ${s}`}
+                                    >
+                                      {s}
+                                    </button>
+                                  );
+                                })}
+                              </div>
                             </div>
-                          </div>
+                          ) : (
+                            <div className={styles.sizeSwapSection}>
+                              <div className={styles.sizeLabel}>Size: {item.size}</div>
+                            </div>
+                          )}
 
                           {/* Quantity Controls & Line Total */}
                           <div className={styles.itemBottom}>
@@ -312,14 +475,157 @@ export default function CartDrawer() {
                   </div>
                 )}
 
+                {/* Quick-Add Cross-Sells */}
+                {FEATURE_FLAGS.CART_UPSELLS && visibleUpsells.length > 0 && (
+                  <div className={styles.upsellSection}>
+                    <div className={styles.upsellHeading}>Complete Your Rotation</div>
+                    <div className={styles.upsellList}>
+                      {visibleUpsells.map((up) => {
+                        const availableSizes =
+                          up.inventory && up.inventory.length > 0
+                            ? up.inventory.filter((i) => i.stock > 0).map((i) => i.size)
+                            : Array.isArray(up.sizes) && up.sizes.length > 0
+                              ? up.sizes
+                              : DEFAULT_SIZES;
+                        const chosenSize = upsellSizes[up.id] || availableSizes[0] || 'M';
+                        const stockForSize =
+                          up.inventory?.find((i) => i.size === chosenSize)?.stock ?? 10;
+                        const unitPrice =
+                          up.sale_price_paise != null && up.sale_price_paise < up.price_paise
+                            ? up.sale_price_paise
+                            : up.price_paise;
+                        const cover =
+                          getPublicUrl(
+                            Array.isArray(up.images) && up.images.length > 0 ? up.images[0] : '',
+                          ) || '/product-1.png';
+
+                        return (
+                          <div key={up.id} className={styles.upsellCard}>
+                            <img src={cover} alt={up.name} className={styles.upsellImg} />
+                            <div className={styles.upsellInfo}>
+                              <div className={styles.upsellTitle}>{up.name}</div>
+                              <div className={styles.upsellPrice}>{formatPaise(unitPrice)}</div>
+                              <div className={styles.upsellControls}>
+                                <select
+                                  aria-label={`Size for ${up.name}`}
+                                  className={styles.upsellSizeSelect}
+                                  value={chosenSize}
+                                  onChange={(e) =>
+                                    setUpsellSizes((prev) => ({ ...prev, [up.id]: e.target.value }))
+                                  }
+                                >
+                                  {availableSizes.map((sz) => (
+                                    <option key={sz} value={sz}>
+                                      {sz}
+                                    </option>
+                                  ))}
+                                </select>
+                                <button
+                                  type="button"
+                                  className={styles.upsellAddBtn}
+                                  onClick={() =>
+                                    addItem(
+                                      {
+                                        product_id: up.id,
+                                        name: up.name,
+                                        slug: up.slug,
+                                        size: chosenSize,
+                                        price_paise: unitPrice,
+                                        image: Array.isArray(up.images) ? up.images[0] || '' : '',
+                                        maxStock: stockForSize,
+                                      },
+                                      1,
+                                      { openDrawer: true },
+                                    )
+                                  }
+                                >
+                                  + Add
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
                 {/* Footer / Summary / Checkout Action */}
                 <div className={styles.footer}>
+                  {/* Click-to-Apply Coupons */}
+                  {FEATURE_FLAGS.CART_COUPONS && activeCoupons.length > 0 && (
+                    <div className={styles.couponSection}>
+                      <div className={styles.couponHeading}>
+                        <Tag size={12} />
+                        <span>Available Offers</span>
+                      </div>
+                      <div className={styles.couponChips}>
+                        {activeCoupons.map((c) => {
+                          const isApplied = appliedCoupon?.code === c.code;
+                          return (
+                            <div
+                              key={c.id}
+                              className={`${styles.couponChip} ${
+                                isApplied ? styles.couponChipActive : ''
+                              }`}
+                            >
+                              <span>
+                                <strong>{c.code}</strong> ({c.discount_percent}% OFF)
+                              </span>
+                              {isApplied ? (
+                                <button
+                                  type="button"
+                                  className={styles.couponRemoveBtn}
+                                  onClick={() => {
+                                    clearCoupon();
+                                    setCouponError('');
+                                  }}
+                                >
+                                  Remove
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className={styles.couponApplyBtn}
+                                  onClick={() => handleApplyCouponChip(c)}
+                                >
+                                  Apply
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                      {couponError && (
+                        <p style={{ fontSize: '0.72rem', color: 'var(--error, #dc2626)', marginTop: 4 }}>
+                          {couponError}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
                   <div className={styles.subtotalRow}>
                     <span className={styles.subtotalLabel}>Subtotal</span>
                     <span className={styles.subtotalValue}>
-                      {formatPaise(totalPaise)}
+                      {couponDiscountPaise > 0 ? (
+                        <>
+                          <span className={styles.strikePrice}>{formatPaise(totalPaise)}</span>
+                          <span>{formatPaise(Math.max(0, totalPaise - couponDiscountPaise))}</span>
+                        </>
+                      ) : (
+                        formatPaise(totalPaise)
+                      )}
                     </span>
                   </div>
+
+                  {couponDiscountPaise > 0 && appliedCoupon && (
+                    <div className={styles.subtotalRow} style={{ color: 'var(--success, #16a34a)' }}>
+                      <span className={styles.subtotalLabel}>Coupon ({appliedCoupon.code})</span>
+                      <span className={styles.subtotalValue} style={{ color: 'var(--success, #16a34a)', fontWeight: 700 }}>
+                        − {formatPaise(couponDiscountPaise)}
+                      </span>
+                    </div>
+                  )}
 
                   {promoProgress.autoDiscountPaise > 0 && (
                     <div className={styles.subtotalRow} style={{ color: 'var(--success, #16a34a)' }}>

@@ -144,6 +144,29 @@ const handlers: Record<string, JobHandler> = {
       .update(updateFields)
       .eq('id', campaignId);
   },
+
+  // ---- checkout.abandoned_recovery --------------------------------
+  'checkout.abandoned_recovery': async (payload, supabase) => {
+    const abandonId = (payload as { abandonId?: string }).abandonId;
+    if (!abandonId) return;
+
+    const { data: draft } = await supabase
+      .from('abandoned_checkouts')
+      .select('id, phone, email, customer_name, recovered_order_id, subtotal_paise')
+      .eq('id', abandonId)
+      .maybeSingle();
+
+    // Skip if already converted to a real order
+    if (!draft || draft.recovered_order_id) return;
+
+    // Ready hook for WhatsApp / Email recovery dispatch once templates are enabled
+    console.log('[ABANDONED_RECOVERY_HOOK]', {
+      abandonId: draft.id,
+      hasPhone: Boolean(draft.phone),
+      hasEmail: Boolean(draft.email),
+      subtotalPaise: draft.subtotal_paise,
+    });
+  },
 };
 
 export function getHandler(kind: string): JobHandler | undefined {

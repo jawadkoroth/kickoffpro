@@ -512,3 +512,39 @@
 .sizeTable tr:last-child td {
   border-bottom: none;
 }
+
+.specStrip {
+  margin-bottom: var(--space-5);
+  padding: 10px 14px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.pincodeRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.pincodeInput {
+  width: 190px;
+  padding: 6px 10px;
+  font-size: 0.8125rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.pincodeResult {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--success, #16a34a);
+}

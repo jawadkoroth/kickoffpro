@@ -5,9 +5,11 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { useCart, computePromoProgress, DEFAULT_SHIPPING_SETTINGS } from '@/lib/cart';
+import { FEATURE_FLAGS } from '@/lib/featureFlags';
+import { estimatePincodeDelivery } from '@/lib/shipping/pincodeEta';
 import { formatPaise } from '@/lib/format';
 import { getPublicUrl } from '@/lib/media';
-import { Truck, CheckCircle2, Zap } from 'lucide-react';
+import { Truck, CheckCircle2, Zap, ShieldCheck, RefreshCw, Lock } from 'lucide-react';
 import {
   getOrCreateCheckoutEventId,
   getFbp,
@@ -48,6 +50,7 @@ function CheckoutContent() {
     removeItem: removeCartItem,
     shippingSettings,
     promoProgress,
+    appliedCoupon: cartAppliedCoupon,
   } = useCart();
 
   const [isHydrated, setIsHydrated] = useState(false);
@@ -94,9 +97,10 @@ function CheckoutContent() {
   const sizeParam = searchParams.get('size') || '';
   const isBuyNow = Boolean(productId && sizeParam);
 
-  // Interactive coupon code state (synced with URL or manual entry on checkout)
-  const [couponCode, setCouponCode] = useState(searchParams.get('coupon') || '');
-  const [couponInput, setCouponInput] = useState(searchParams.get('coupon') || '');
+  // Interactive coupon code state (synced with URL, CartDrawer, or manual entry on checkout)
+  const initialCoupon = searchParams.get('coupon') || cartAppliedCoupon?.code || '';
+  const [couponCode, setCouponCode] = useState(initialCoupon);
+  const [couponInput, setCouponInput] = useState(initialCoupon);
   const [couponApplying, setCouponApplying] = useState(false);
 
   // Resolve the line set being submitted at this moment. For Buy
@@ -182,6 +186,7 @@ function CheckoutContent() {
   const [quote, setQuote] = useState<{
     shippingPaise: number;
     codFeePaise: number;
+    prepaidDiscountPaise?: number;
     totalPaise: number;
     codAllowed: boolean;
     codEnabled: boolean;
@@ -190,6 +195,15 @@ function CheckoutContent() {
     codFeePaiseSetting?: number;
   } | null>(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
+
+  // Inline Failed-Payment Recovery state (preserves form & cart)
+  const [pendingRecoveryOrder, setPendingRecoveryOrder] = useState<{
+    order_id: string;
+    customer: { name: string; phone: string; email?: string };
+    submittedLines: Array<{ product_id: string; size: string; is_free_gift?: boolean }>;
+    reason: string;
+  } | null>(null);
+  const [recoveringAction, setRecoveringAction] = useState<'retry' | 'cod' | null>(null);
 
   // Form state
   const [name, setName] = useState('');
@@ -394,6 +408,7 @@ function CheckoutContent() {
           setQuote({
             shippingPaise: data.shippingPaise ?? 0,
             codFeePaise: data.codFeePaise ?? 0,
+            prepaidDiscountPaise: data.prepaidDiscountPaise ?? 0,
             totalPaise: data.totalPaise ?? subtotalForQuote,
             codAllowed: data.codAllowed !== false,
             codEnabled: data.codEnabled !== false,
@@ -411,6 +426,51 @@ function CheckoutContent() {
       cancelled = true;
     };
   }, [preDiscountSubtotal, subtotalForQuote, paymentMethod]);
+
+  const pincodeEta = useMemo(
+    () => (FEATURE_FLAGS.PINCODE_ETA ? estimatePincodeDelivery(pincode) : null),
+    [pincode],
+  );
+
+  // Abandoned checkout capture hook (debounced 1.2s when phone or email is entered)
+  useEffect(() => {
+    if (!FEATURE_FLAGS.ABANDONED_CAPTURE) return;
+    if (!isHydrated || checkoutItems.length === 0) return;
+
+    const validPhone = /^[6-9]\d{9}$/.test(phone);
+    const validEmail = Boolean(email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email));
+    if (!validPhone && !validEmail) return;
+
+    const timer = setTimeout(() => {
+      try {
+        let sessionKey = window.sessionStorage.getItem('kickoffpro_abandon_session_key');
+        if (!sessionKey) {
+          sessionKey = crypto.randomUUID();
+          window.sessionStorage.setItem('kickoffpro_abandon_session_key', sessionKey);
+        }
+        fetch('/api/checkout/abandon', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            session_key: sessionKey,
+            phone: validPhone ? phone : undefined,
+            email: validEmail ? email : undefined,
+            customer_name: name.trim() || undefined,
+            items: checkoutItems.map((i) => ({
+              product_id: i.product_id,
+              name: i.name,
+              size: i.size,
+              quantity: i.quantity,
+              price_paise: i.price_paise,
+            })),
+            subtotal_paise: preDiscountSubtotal,
+          }),
+        }).catch(() => { });
+      } catch { }
+    }, 1200);
+
+    return () => clearTimeout(timer);
+  }, [isHydrated, phone, email, name, checkoutItems, preDiscountSubtotal]);
 
   // If the server tells us COD is disabled but the user has it
   // selected, flip back to online automatically. Prevents the
@@ -468,6 +528,7 @@ function CheckoutContent() {
   const subtotal = preDiscountSubtotal - discountAmount;
   const shippingPaise = quote?.shippingPaise ?? 0;
   const codFeePaise = quote?.codFeePaise ?? 0;
+  const prepaidDiscountPaise = quote?.prepaidDiscountPaise ?? 0;
   const total = quote ? quote.totalPaise : subtotal;
 
   const threshold = quote?.freeShippingThresholdPaise ?? effectiveSettings.free_shipping_threshold_paise;
@@ -754,7 +815,12 @@ function CheckoutContent() {
       return;
     }
 
-    const RazorpayClass = (window as unknown as { Razorpay: new (options: Record<string, unknown>) => { open: () => void } }).Razorpay;
+    const RazorpayClass = (window as unknown as {
+      Razorpay: new (options: Record<string, unknown>) => {
+        open: () => void;
+        on?: (event: string, cb: (resp: { error?: { description?: string } }) => void) => void;
+      };
+    }).Razorpay;
 
     // Build a brief description for the Razorpay modal. Single-line
     // orders show product/size; multi-line orders show line count.
@@ -801,20 +867,47 @@ function CheckoutContent() {
             const successQuery = new URLSearchParams(queryParams);
             const queryStr = successQuery.toString();
             router.push(`/order/${orderData.order_id}${queryStr ? '?' + queryStr : ''}`);
+          } else if (FEATURE_FLAGS.PAYMENT_RECOVERY) {
+            setSubmitting(false);
+            setPendingRecoveryOrder({
+              order_id: orderData.order_id,
+              customer: orderData.customer,
+              submittedLines,
+              reason: verifyData.error || 'Payment verification failed. Please retry or switch to COD.',
+            });
           } else {
             const failQuery = new URLSearchParams(queryParams);
             failQuery.set('payment', 'failed');
             router.push(`/order/${orderData.order_id}?${failQuery.toString()}`);
           }
         } catch {
-          const failQuery = new URLSearchParams(queryParams);
-          failQuery.set('payment', 'failed');
-          router.push(`/order/${orderData.order_id}?${failQuery.toString()}`);
+          if (FEATURE_FLAGS.PAYMENT_RECOVERY) {
+            setSubmitting(false);
+            setPendingRecoveryOrder({
+              order_id: orderData.order_id,
+              customer: orderData.customer,
+              submittedLines,
+              reason: 'Payment could not be verified due to a network error. Please retry or switch to COD.',
+            });
+          } else {
+            const failQuery = new URLSearchParams(queryParams);
+            failQuery.set('payment', 'failed');
+            router.push(`/order/${orderData.order_id}?${failQuery.toString()}`);
+          }
         }
       },
       modal: {
         ondismiss: function () {
           setSubmitting(false);
+          if (FEATURE_FLAGS.PAYMENT_RECOVERY) {
+            setPendingRecoveryOrder({
+              order_id: orderData.order_id,
+              customer: orderData.customer,
+              submittedLines,
+              reason: 'Payment was cancelled or interrupted before completion.',
+            });
+            return;
+          }
           const queryParams = new URLSearchParams();
           if (orderData.customer.email) queryParams.set('email', orderData.customer.email);
           if (orderData.customer.phone) queryParams.set('phone', orderData.customer.phone);
@@ -825,7 +918,88 @@ function CheckoutContent() {
       },
     });
 
+    if (FEATURE_FLAGS.PAYMENT_RECOVERY && typeof rzp.on === 'function') {
+      rzp.on('payment.failed', (resp: { error?: { description?: string } }) => {
+        setSubmitting(false);
+        setPendingRecoveryOrder({
+          order_id: orderData.order_id,
+          customer: orderData.customer,
+          submittedLines,
+          reason: resp?.error?.description || 'Your payment failed or timed out.',
+        });
+      });
+    }
+
     rzp.open();
+  }
+
+  // Safeguard #3: Retry existing unpaid order without creating a duplicate order or double-decrementing stock
+  async function handleRetryOnlinePayment() {
+    if (!pendingRecoveryOrder || recoveringAction) return;
+    setRecoveringAction('retry');
+    setOrderError('');
+    try {
+      const res = await fetch('/api/payments/retry', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ order_id: pendingRecoveryOrder.order_id }),
+      });
+      const data = await res.json();
+      if (!data?.success) {
+        setOrderError(data?.error || 'Could not re-initialize payment. Please try COD.');
+        setRecoveringAction(null);
+        return;
+      }
+      const lines = pendingRecoveryOrder.submittedLines;
+      setPendingRecoveryOrder(null);
+      setRecoveringAction(null);
+      await openRazorpay(
+        {
+          razorpay_order_id: data.razorpay_order_id,
+          amount: data.amount,
+          key_id: data.key_id,
+          order_id: pendingRecoveryOrder.order_id,
+          customer: data.customer || pendingRecoveryOrder.customer,
+        },
+        lines,
+      );
+    } catch {
+      setOrderError('Network error while retrying payment. Please try again.');
+      setRecoveringAction(null);
+    }
+  }
+
+  // Safeguard #3: Convert existing unpaid order to COD in-place without duplicating order or stock decrement
+  async function handleSwitchToCod() {
+    if (!pendingRecoveryOrder || recoveringAction) return;
+    setRecoveringAction('cod');
+    setOrderError('');
+    try {
+      const res = await fetch(`/api/orders/${pendingRecoveryOrder.order_id}/switch-to-cod`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: pendingRecoveryOrder.customer.phone }),
+      });
+      const data = await res.json();
+      if (!data?.success) {
+        setOrderError(data?.error || 'Could not switch order to COD.');
+        setRecoveringAction(null);
+        return;
+      }
+      clearSubmittedLines(pendingRecoveryOrder.submittedLines);
+      const queryParams = new URLSearchParams();
+      if (pendingRecoveryOrder.customer.email) queryParams.set('email', pendingRecoveryOrder.customer.email);
+      if (pendingRecoveryOrder.customer.phone) queryParams.set('phone', pendingRecoveryOrder.customer.phone);
+      if (trackingEventIdRef.current) queryParams.set('event_id', trackingEventIdRef.current);
+      const queryStr = queryParams.toString();
+      const targetOrderId = pendingRecoveryOrder.order_id;
+      setPendingRecoveryOrder(null);
+      setRecoveringAction(null);
+      router.push(`/order/${targetOrderId}${queryStr ? '?' + queryStr : ''}`);
+    } catch {
+      setOrderError('Network error while switching to COD. Please try again.');
+      setRecoveringAction(null);
+    }
   }
 
   return (
@@ -869,9 +1043,8 @@ function CheckoutContent() {
               </div>
               <div className={styles.progressBarTrack}>
                 <div
-                  className={`${styles.progressBarFill} ${
-                    activeProgress.hasUnlockedGoal ? styles.progressBarFillUnlocked : ''
-                  }`}
+                  className={`${styles.progressBarFill} ${activeProgress.hasUnlockedGoal ? styles.progressBarFillUnlocked : ''
+                    }`}
                   style={{ width: `${activeProgress.goalProgressPercent}%` }}
                 />
               </div>
@@ -1003,8 +1176,8 @@ function CheckoutContent() {
               {quoteLoading && !quote
                 ? '…'
                 : shippingPaise === 0
-                ? 'FREE'
-                : formatPaise(shippingPaise)}
+                  ? 'FREE'
+                  : formatPaise(shippingPaise)}
             </span>
           </div>
           {paymentMethod === 'cod' && quote && !quote.codEnabled && (
@@ -1019,6 +1192,14 @@ function CheckoutContent() {
             >
               <span>Cash on Delivery fee</span>
               <span>+ {formatPaise(codFeePaise)}</span>
+            </div>
+          )}
+          {prepaidDiscountPaise > 0 && (
+            <div className={styles.summaryRow}>
+              <span style={{ color: 'var(--success, #16a34a)', fontWeight: 600 }}>
+                Prepaid / UPI Instant Discount
+              </span>
+              <span className={styles.discountText}>− {formatPaise(prepaidDiscountPaise)}</span>
             </div>
           )}
           <div className={styles.summaryTotal}>
@@ -1165,6 +1346,12 @@ function CheckoutContent() {
           <div className="input-group">
             <input className={`input-field ${errors.pincode ? 'input-error' : ''}`} placeholder="Pincode" value={pincode} onChange={e => setPincode(e.target.value.replace(/\D/g, '').slice(0, 6))} inputMode="numeric" maxLength={6} readOnly={selectedSavedId !== null} />
             {errors.pincode && <span className="input-error-text">{errors.pincode}</span>}
+            {pincodeEta && (
+              <div className={styles.pincodeEtaBadge}>
+                <Truck size={14} />
+                <span>Estimated delivery by {pincodeEta.estimatedDateLabel} ({pincodeEta.windowLabel})</span>
+              </div>
+            )}
           </div>
 
           {userId && selectedSavedId === null && (
@@ -1229,6 +1416,52 @@ function CheckoutContent() {
                 : 'Pay when your order arrives'}
           </p>
         </div>
+
+        {/* Failed-Payment Inline Recovery */}
+        {FEATURE_FLAGS.PAYMENT_RECOVERY && pendingRecoveryOrder && (
+          <div className={styles.recoveryCard} role="alert">
+            <h4 className={styles.recoveryTitle}>Payment Not Completed</h4>
+            <p className={styles.recoveryDesc}>{pendingRecoveryOrder.reason}</p>
+            <div className={styles.recoveryActions}>
+              <button
+                type="button"
+                className={styles.recoveryPrimaryBtn}
+                onClick={handleRetryOnlinePayment}
+                disabled={recoveringAction !== null}
+              >
+                {recoveringAction === 'retry' ? 'Opening…' : 'Retry UPI / Pay with another method'}
+              </button>
+              {quote?.codEnabled !== false && (
+                <button
+                  type="button"
+                  className={styles.recoverySecondaryBtn}
+                  onClick={handleSwitchToCod}
+                  disabled={recoveringAction !== null}
+                >
+                  {recoveringAction === 'cod' ? 'Switching…' : 'Switch to COD'}
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Checkout Trust & Buyer Protection Strip */}
+        {FEATURE_FLAGS.CHECKOUT_TRUST && (
+          <div className={styles.trustStrip}>
+            <div className={styles.trustItem}>
+              <RefreshCw size={16} />
+              <span>Easy Size Exchange</span>
+            </div>
+            <div className={styles.trustItem}>
+              <Lock size={16} />
+              <span>Secure UPI &amp; Razorpay</span>
+            </div>
+            <div className={styles.trustItem}>
+              <ShieldCheck size={16} />
+              <span>Quality Guarantee</span>
+            </div>
+          </div>
+        )}
 
         {/* Submit */}
         <button

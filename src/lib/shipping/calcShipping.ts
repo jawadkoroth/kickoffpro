@@ -13,6 +13,8 @@
  * loaded `shippingSettings` row.
  */
 
+import { FEATURE_FLAGS, PREPAID_DISCOUNT_PAISE } from '@/lib/featureFlags';
+
 export type PaymentMethod = 'cod' | 'online';
 
 export interface ShippingSettingsInput {
@@ -31,6 +33,7 @@ export interface CalcShippingInput {
 export interface CalcShippingResult {
   shippingPaise: number;
   codFeePaise: number;
+  prepaidDiscountPaise: number;
   totalPaise: number;
   /**
    * True unless COD was requested but `cod_enabled` is false in
@@ -79,13 +82,23 @@ export function calcShipping({
 
   const isCod = paymentMethod === 'cod';
   const codAllowed = !isCod || codEnabled;
-  const codFeePaise = isCod && codEnabled ? codFee : 0;
+  const codFeePaise = isCod && codEnabled && FEATURE_FLAGS.COD_FEE ? codFee : 0;
 
-  const totalPaise = subtotal + shippingPaise + codFeePaise;
+  const grossBeforePrepaid = subtotal + shippingPaise + codFeePaise;
+
+  // Safeguard #4: Clamp prepaid discount so final total never goes negative
+  // and stays >= 100 paise (Razorpay ₹1 minimum) whenever subtotal > 0.
+  let prepaidDiscountPaise = 0;
+  if (!isCod && FEATURE_FLAGS.PREPAID_DISCOUNT && PREPAID_DISCOUNT_PAISE > 0 && grossBeforePrepaid > 100) {
+    prepaidDiscountPaise = Math.min(PREPAID_DISCOUNT_PAISE, grossBeforePrepaid - 100);
+  }
+
+  const totalPaise = Math.max(0, grossBeforePrepaid - prepaidDiscountPaise);
 
   return {
     shippingPaise,
     codFeePaise,
+    prepaidDiscountPaise,
     totalPaise,
     codAllowed,
   };

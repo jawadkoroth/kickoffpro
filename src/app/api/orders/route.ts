@@ -312,7 +312,9 @@ async function handlePOST(req: NextRequest) {
 
     const shippingPaise = quote.shippingPaise;
     const codFeePaise = quote.codFeePaise;
-    const total = postDiscountSubtotal + shippingPaise + codFeePaise;
+    const prepaidDiscountPaise = quote.prepaidDiscountPaise;
+    const totalDiscount = discount + prepaidDiscountPaise;
+    const total = quote.totalPaise;
 
     // 8. Atomic create-or-replay via the multi-line SQL function.
     const orderNumber = generateOrderNumber();
@@ -333,7 +335,7 @@ async function handlePOST(req: NextRequest) {
         p_order_number: orderNumber,
         p_items: rpcItemsPayload,
         p_subtotal_paise: subtotal,
-        p_discount_paise: discount,
+        p_discount_paise: totalDiscount,
         p_total_paise: total,
         p_coupon_code: appliedCoupon,
         p_payment_method: payment_method,
@@ -416,6 +418,21 @@ async function handlePOST(req: NextRequest) {
       return apiError(500, 'Order creation failed');
     }
     const orderId = rpcRow.order_id;
+
+    // Best-effort: mark any matching abandoned checkout draft as recovered
+    if (customer.phone || customer.email) {
+      const orFilters: string[] = [];
+      if (customer.phone) orFilters.push(`phone.eq.${customer.phone}`);
+      if (customer.email) orFilters.push(`email.eq.${customer.email.toLowerCase()}`);
+      if (orFilters.length > 0) {
+        supabase
+          .from('abandoned_checkouts')
+          .update({ recovered_order_id: orderId, updated_at: new Date().toISOString() })
+          .is('recovered_order_id', null)
+          .or(orFilters.join(','))
+          .then(() => {}, () => {});
+      }
+    }
     const finalOrderNumber = rpcRow.order_number;
     const wasExisting = rpcRow.was_existing;
 

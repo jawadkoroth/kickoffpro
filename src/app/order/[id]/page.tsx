@@ -3,7 +3,11 @@
 import { useState, useEffect, useRef, use } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth/AuthProvider';
+import { useCart } from '@/lib/cart';
+import { FEATURE_FLAGS } from '@/lib/featureFlags';
+import { getPublicUrl } from '@/lib/media';
 import { trackPurchase, clearCheckoutEventId } from '@/lib/tracking/client';
 import styles from './page.module.css';
 
@@ -44,15 +48,56 @@ interface Order {
 
 export default function OrderPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  const router = useRouter();
   const { user } = useAuth();
+  const { addItem } = useCart();
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [retrying, setRetrying] = useState(false);
+  const [upsellProduct, setUpsellProduct] = useState<{
+    id: string;
+    name: string;
+    slug: string;
+    price_paise: number;
+    sale_price_paise: number | null;
+    images: string[];
+    sizes: string[];
+    inventory?: { size: string; stock: number }[];
+  } | null>(null);
+  const [upsellSize, setUpsellSize] = useState('M');
   const hasTrackedPurchaseRef = useRef(false);
 
   useEffect(() => {
     fetchOrder();
   }, [id]);
+
+  // Fetch post-purchase upsell candidate when flag is enabled
+  useEffect(() => {
+    if (!FEATURE_FLAGS.POST_PURCHASE_UPSELL || !order) return;
+    const isSuccess =
+      order.payment_status.toLowerCase() === 'paid' ||
+      order.payment_method.toLowerCase() === 'cod';
+    if (!isSuccess || upsellProduct) return;
+
+    fetch('/api/products')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!data?.success || !Array.isArray(data.products)) return;
+        const orderedIds = new Set((order.items ?? []).map((it) => it.product_id));
+        const candidates = data.products.filter(
+          (p: { id: string; inventory?: { size: string; stock: number }[] }) =>
+            !orderedIds.has(p.id) &&
+            (!p.inventory || p.inventory.length === 0 || p.inventory.some((i) => i.stock > 0)),
+        );
+        const picked = candidates[0] || data.products[0];
+        if (picked) {
+          setUpsellProduct(picked);
+          const firstAvail = picked.inventory?.find((i: { stock: number }) => i.stock > 0)?.size;
+          if (firstAvail) setUpsellSize(firstAvail);
+        }
+      })
+      .catch(() => {});
+  }, [order, upsellProduct]);
 
   async function fetchOrder() {
     try {
@@ -480,6 +525,99 @@ export default function OrderPage({ params }: { params: Promise<{ id: string }> 
             )}
           </section>
         )}
+
+        {/* POST-PURCHASE ONE-CLICK UPSELL SLOT */}
+        {FEATURE_FLAGS.POST_PURCHASE_UPSELL &&
+          upsellProduct &&
+          (order.payment_status.toLowerCase() === 'paid' ||
+            order.payment_method.toLowerCase() === 'cod') && (
+            <section className={styles.summarySection}>
+              <p className={styles.sectionTitle}>Complete Your Wardrobe</p>
+              <div className={styles.summaryProductItem}>
+                <div className={styles.summaryThumb}>
+                  <img
+                    src={
+                      getPublicUrl(
+                        Array.isArray(upsellProduct.images) && upsellProduct.images.length > 0
+                          ? upsellProduct.images[0]
+                          : '',
+                      ) || '/product-1.png'
+                    }
+                    alt={upsellProduct.name}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  />
+                </div>
+                <div className={styles.summaryDetails}>
+                  <div className={styles.summaryProductName}>{upsellProduct.name}</div>
+                  <div className={styles.summaryProductMeta}>
+                    {formatPrice(
+                      upsellProduct.sale_price_paise != null &&
+                        upsellProduct.sale_price_paise < upsellProduct.price_paise
+                        ? upsellProduct.sale_price_paise
+                        : upsellProduct.price_paise,
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8, flexWrap: 'wrap' }}>
+                    <select
+                      aria-label="Select upsell size"
+                      value={upsellSize}
+                      onChange={(e) => setUpsellSize(e.target.value)}
+                      style={{
+                        padding: '4px 8px',
+                        borderRadius: 6,
+                        border: '1px solid var(--border-color, #cbd5e1)',
+                        fontSize: '0.8rem',
+                        fontWeight: 700,
+                      }}
+                    >
+                      {(upsellProduct.inventory && upsellProduct.inventory.length > 0
+                        ? upsellProduct.inventory.filter((i) => i.stock > 0).map((i) => i.size)
+                        : upsellProduct.sizes?.length
+                          ? upsellProduct.sizes
+                          : ['S', 'M', 'L', 'XL']
+                      ).map((sz) => (
+                        <option key={sz} value={sz}>
+                          Size {sz}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      className={styles.btnPrimary}
+                      style={{ padding: '6px 14px', fontSize: '0.8rem', minHeight: 'auto' }}
+                      onClick={() => {
+                        const unitPrice =
+                          upsellProduct.sale_price_paise != null &&
+                          upsellProduct.sale_price_paise < upsellProduct.price_paise
+                            ? upsellProduct.sale_price_paise
+                            : upsellProduct.price_paise;
+                        const maxStock =
+                          upsellProduct.inventory?.find((i) => i.size === upsellSize)?.stock ?? 10;
+                        addItem(
+                          {
+                            product_id: upsellProduct.id,
+                            name: upsellProduct.name,
+                            slug: upsellProduct.slug,
+                            size: upsellSize,
+                            price_paise: unitPrice,
+                            image: Array.isArray(upsellProduct.images) ? upsellProduct.images[0] || '' : '',
+                            maxStock,
+                          },
+                          1,
+                          { openDrawer: false },
+                        );
+                        router.push(
+                          `/checkout?product_id=${upsellProduct.id}&size=${encodeURIComponent(upsellSize)}`,
+                        );
+                      }}
+                    >
+                      Add &amp; Checkout →
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </section>
+          )}
 
         {/* CTA BUTTONS */}
         <div className={styles.buttonGroup}>

@@ -305,11 +305,17 @@ interface CartContextType {
   shippingLoading: boolean;
   promoProgress: PromoProgressSummary;
   refreshShippingSettings: () => Promise<void>;
+
+  /** Cart-level coupon state (synced with CartDrawer & Checkout) */
+  appliedCoupon: { code: string; discountPaise: number; discountPercent: number } | null;
+  applyCoupon: (coupon: { code: string; discountPaise: number; discountPercent: number }) => void;
+  clearCoupon: () => void;
 }
 
 const CartContext = createContext<CartContextType | null>(null);
 
 const CART_KEY = 'kickoffpro_cart';
+const COUPON_KEY = 'kickoffpro_cart_coupon';
 
 function isCartItem(value: unknown): value is CartItem {
   if (!value || typeof value !== 'object') return false;
@@ -365,6 +371,40 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const [loaded, setLoaded] = useState(false);
   const [validatedAt, setValidatedAt] = useState<number | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [appliedCoupon, setAppliedCoupon] = useState<{
+    code: string;
+    discountPaise: number;
+    discountPercent: number;
+  } | null>(null);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(COUPON_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed.code === 'string') {
+          setAppliedCoupon(parsed);
+        }
+      }
+    } catch {}
+  }, []);
+
+  const applyCoupon = useCallback(
+    (coupon: { code: string; discountPaise: number; discountPercent: number }) => {
+      setAppliedCoupon(coupon);
+      try {
+        localStorage.setItem(COUPON_KEY, JSON.stringify(coupon));
+      } catch {}
+    },
+    [],
+  );
+
+  const clearCoupon = useCallback(() => {
+    setAppliedCoupon(null);
+    try {
+      localStorage.removeItem(COUPON_KEY);
+    } catch {}
+  }, []);
 
   // Dynamic shipping & promotional settings sync
   const [shippingSettings, setShippingSettings] = useState<ShippingSettingsSummary>(DEFAULT_SHIPPING_SETTINGS);
@@ -858,6 +898,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
       shippingLoading,
       promoProgress,
       refreshShippingSettings,
+      appliedCoupon,
+      applyCoupon,
+      clearCoupon,
     }),
     [
       items,
@@ -880,6 +923,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
       shippingLoading,
       promoProgress,
       refreshShippingSettings,
+      appliedCoupon,
+      applyCoupon,
+      clearCoupon,
     ],
   );
 

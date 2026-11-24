@@ -23,6 +23,10 @@ interface ProductRow {
   images: unknown;
   sizes: unknown;
   is_active: boolean;
+  gsm?: string | null;
+  fabric?: string | null;
+  fit?: string | null;
+  model_info?: string | null;
 }
 
 interface InventoryRow {
@@ -130,7 +134,7 @@ export default async function ProductDetailPage({
 
   const { data: productRow } = await supabase
     .from('products')
-    .select('id, name, slug, description, price_paise, sale_price_paise, images, sizes, is_active')
+    .select('*')
     .eq('slug', normalized)
     .eq('is_active', true)
     .maybeSingle<ProductRow>();
@@ -167,6 +171,10 @@ export default async function ProductDetailPage({
     sale_price_paise: productRow.sale_price_paise ?? null,
     images: Array.isArray(productRow.images) ? (productRow.images as string[]) : [],
     sizes: Array.isArray(productRow.sizes) ? (productRow.sizes as string[]) : [],
+    gsm: productRow.gsm ?? null,
+    fabric: productRow.fabric ?? null,
+    fit: productRow.fit ?? null,
+    model_info: productRow.model_info ?? null,
   };
 
   const productUrl = canonicalUrl(`/product/${slug}`);
