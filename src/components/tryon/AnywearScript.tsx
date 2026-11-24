@@ -14,12 +14,19 @@ interface AnywearScriptProps {
  *
  * Injects and manages the Anywear (Decart.ai) virtual try-on widget.
  *
- * Performance & Stability Guarantees:
+ * Behavior & Safety Guarantees:
  * 1. Script is loaded once asynchronously via Next.js Script strategy="afterInteractive".
- * 2. Route visibility is managed 100% declaratively via CSS scoped to html:not([data-anywear-active="true"]).
- * 3. Absolutely ZERO MutationObservers, ZERO setInterval/polling loops, and ZERO synthetic clicks.
- * 4. Leaving product routes safely signals camera stream release via DECART_RELEASE_CAMERA postMessage.
- * 5. Entering product routes NEVER automatically triggers or opens try-on without direct user interaction.
+ * 2. On non-product routes (/products, /, /checkout, /cart, /admin):
+ *    - The floating try-on modal (#__decart-tryon-widget) and floating pill (#__decart-pill-btn) are hidden.
+ *    - The "+ Try-On" card badge (#__decart-imgbtn) remains visible on collection cards.
+ *    - A capture-phase click listener stops all click events on the badge so clicking it is a complete no-op
+ *      and never starts the camera or opens try-on.
+ * 3. On product detail routes (/product/[slug]):
+ *    - The widget and virtual try-on button operate normally.
+ * 4. Background Tab Camera Release (visibilitychange):
+ *    - Whenever document.visibilityState === 'hidden' (e.g. switching Chrome tabs),
+ *      DECART_RELEASE_CAMERA is sent and session storage is cleared, instantly turning off the webcam.
+ * 5. Absolutely zero MutationObservers, polling loops, or layout thrashing.
  */
 export default function AnywearScript({
   domain: propDomain,
@@ -80,6 +87,64 @@ export default function AnywearScript({
     }
   }, [isProductPage]);
 
+  // Capture-phase click interceptor: disable "+ Try-On" card badge clicks on collection/catalog pages
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+
+    const handleCaptureClick = (e: MouseEvent) => {
+      // If we are NOT on a product detail route, intercept any clicks on Decart's card badges/triggers
+      if (!isProductPage) {
+        const target = e.target as Element | null;
+        if (
+          target &&
+          target.closest(
+            '#__decart-imgbtn, .vton-btn, .vton-label, [data-decart-imgbtn], [data-decart-trigger]'
+          )
+        ) {
+          e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation();
+        }
+      }
+    };
+
+    document.addEventListener('click', handleCaptureClick, true);
+    return () => {
+      document.removeEventListener('click', handleCaptureClick, true);
+    };
+  }, [isProductPage]);
+
+  // Release camera immediately when tab becomes hidden (e.g. user switches tabs)
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        try {
+          sessionStorage.removeItem('_decart_open');
+          sessionStorage.removeItem('_decart_pane');
+        } catch {}
+
+        const iframes = document.querySelectorAll<HTMLIFrameElement>(
+          'iframe[src*="decart"], iframe[src*="anywear"]'
+        );
+        iframes.forEach((iframe) => {
+          try {
+            iframe.contentWindow?.postMessage(
+              { type: 'DECART_RELEASE_CAMERA', reason: 'widget_closed' },
+              '*'
+            );
+          } catch {}
+        });
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
+
   const isExplicitlyDisabled =
     propEnabled === false || process.env.NEXT_PUBLIC_ANYWEAR_ENABLED === 'false';
 
@@ -92,20 +157,16 @@ export default function AnywearScript({
 
   return (
     <>
-      {/* Declarative CSS rule: cleanly hides floating Anywear UI on non-product routes without main-thread overhead */}
+      {/* Declarative CSS rule: cleanly hides floating Anywear UI & modal on non-product routes without hiding card badges */}
       <style
         dangerouslySetInnerHTML={{
           __html: `
             html:not([data-anywear-active="true"]) #__decart-tryon-widget,
             html:not([data-anywear-active="true"]) #__decart-pill-btn,
-            html:not([data-anywear-active="true"]) #__decart-imgbtn,
             html:not([data-anywear-active="true"]) #__decart-cam-notice,
             html:not([data-anywear-active="true"]) #__decart-placeholder,
             html:not([data-anywear-active="true"]) #pane-anywear-link,
-            html:not([data-anywear-active="true"]) [id^="__decart"],
-            html:not([data-anywear-active="true"]) [id^="decart"],
             html:not([data-anywear-active="true"]) [class*="vtonPinned"],
-            html:not([data-anywear-active="true"]) [class*="decart-"],
             html:not([data-anywear-active="true"]) .__decartExpandPill,
             html:not([data-anywear-active="true"]) .decartMobileCamera {
               display: none !important;
