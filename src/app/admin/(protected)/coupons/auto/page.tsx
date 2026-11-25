@@ -411,6 +411,7 @@ export default function AdminAutoOffersPage() {
   ).replace(/\{cod_fee\}/g, currentCodFeeText);
 
   return (
+    <>
     <div className="card">
       <div style={{ marginBottom: 16 }}>
         <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: 0, lineHeight: 1.6 }}>
@@ -937,8 +938,9 @@ export default function AdminAutoOffersPage() {
           SAVE AUTO OFFERS
         </button>
       </div>
+    </div>
 
-      {toast && (
+    {toast && (
         <div
           role="status"
           aria-live="polite"
@@ -963,6 +965,6 @@ export default function AdminAutoOffersPage() {
           <span>{toast.message}</span>
         </div>
       )}
-    </div>
+    </>
   );
 }
