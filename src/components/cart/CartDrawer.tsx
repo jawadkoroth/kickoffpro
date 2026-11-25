@@ -383,13 +383,82 @@ export default function CartDrawer() {
       };
     }
 
-    if (!promoProgress.isBannerVisible) {
+    if (shippingSettings.promo_banner_enabled === false || !promoProgress.isBannerVisible) {
       return {
         visible: false,
         unlocked: false,
         percent: 0,
         message: '',
         iconType: 'free_shipping' as const,
+      };
+    }
+
+    if (shippingSettings.promo_reward_type === 'manual_coupon_only') {
+      if (!FEATURE_FLAGS.CART_COUPONS || activeCoupons.length === 0) {
+        return {
+          visible: false,
+          unlocked: false,
+          percent: 0,
+          message: '',
+          iconType: 'threshold_percentage' as const,
+        };
+      }
+
+      const explicitCode = shippingSettings.promo_manual_coupon_code?.trim().toUpperCase();
+      let trackedCoupon = explicitCode
+        ? activeCoupons.find((c) => c.code.toUpperCase() === explicitCode)
+        : undefined;
+
+      if (!trackedCoupon) {
+        const sorted = [...activeCoupons]
+          .map((c) => ({
+            coupon: c,
+            ...getCouponShortfall(c, totalPaise, paidCount),
+          }))
+          .sort((a, b) => a.shortfallPaise - b.shortfallPaise || a.shortfallItems - b.shortfallItems);
+        trackedCoupon = sorted[0]?.coupon;
+      }
+
+      if (!trackedCoupon) {
+        return {
+          visible: false,
+          unlocked: false,
+          percent: 0,
+          message: '',
+          iconType: 'threshold_percentage' as const,
+        };
+      }
+
+      const { minCartReq, requiredItems, shortfallPaise, shortfallItems, isEligible } =
+        getCouponShortfall(trackedCoupon, totalPaise, paidCount);
+      const unlocked = isEligible;
+      const percent = unlocked
+        ? 100
+        : requiredItems > 0 && (shortfallItems > 0 || minCartReq === 0)
+          ? Math.min(100, Math.round((paidCount / requiredItems) * 100))
+          : minCartReq > 0
+            ? Math.min(100, Math.round((totalPaise / minCartReq) * 100))
+            : 100;
+
+      const offerLabel = formatCouponOfferLabel(trackedCoupon);
+      const shortfallText = formatShortfallMessage(shortfallPaise, shortfallItems);
+      const savingsPaise = calcCouponDiscountPaise(trackedCoupon, totalPaise, items);
+
+      let message = '';
+      if (!unlocked) {
+        message = `Add ${shortfallText} to unlock ${trackedCoupon.code} (${offerLabel})`;
+      } else if (appliedCoupon?.code === trackedCoupon.code) {
+        message = `${trackedCoupon.code} applied — saving ${formatPaise(savingsPaise)}!`;
+      } else {
+        message = `You unlocked ${trackedCoupon.code}! Click Apply below to save ${formatPaise(savingsPaise)}`;
+      }
+
+      return {
+        visible: true,
+        unlocked,
+        percent,
+        message,
+        iconType: 'threshold_percentage' as const,
       };
     }
 
@@ -440,7 +509,18 @@ export default function CartDrawer() {
         : promoProgress.inProgressMessage,
       iconType: promoProgress.promoRewardType,
     };
-  }, [items, promoProgress, activeCoupons, totalPaise, appliedCoupon?.code, shippingSettings.magic_cart_mode, shippingSettings.free_shipping_threshold_paise]);
+  }, [
+    items,
+    paidCount,
+    promoProgress,
+    activeCoupons,
+    totalPaise,
+    appliedCoupon?.code,
+    shippingSettings.promo_banner_enabled,
+    shippingSettings.promo_reward_type,
+    shippingSettings.promo_manual_coupon_code,
+    shippingSettings.free_shipping_threshold_paise,
+  ]);
 
   const handleApplyCouponChip = async (coupon: ActiveCoupon) => {
     setCouponError('');

@@ -37,6 +37,7 @@ export interface ShippingSettingsSummary {
   promo_nudge_text: string;
   // Advanced Cart Offers
   promo_reward_type: PromoRewardType;
+  promo_manual_coupon_code?: string | null;
   reward_percentage: number;
   reward_product_id: string | null;
   reward_product_name?: string | null;
@@ -108,6 +109,7 @@ export const DEFAULT_SHIPPING_SETTINGS: ShippingSettingsSummary = {
   promo_nudge_badge: 'LOWEST PRICE',
   promo_nudge_text: 'Instant UPI avoids the {cod_fee} COD handling charge and guarantees Priority Dispatch within 24 hours.',
   promo_reward_type: 'free_shipping',
+  promo_manual_coupon_code: null,
   reward_percentage: 10,
   reward_product_id: null,
   reward_product_name: null,
@@ -530,6 +532,10 @@ export function CartProvider({ children }: { children: ReactNode }) {
               payload.promo_nudge_text ||
               'Instant UPI avoids the {cod_fee} COD handling charge and guarantees Priority Dispatch within 24 hours.',
             promo_reward_type: (payload.promo_reward_type as PromoRewardType) || 'free_shipping',
+            promo_manual_coupon_code:
+              typeof payload.promo_manual_coupon_code === 'string'
+                ? payload.promo_manual_coupon_code
+                : null,
             reward_percentage: toNum(payload.reward_percentage, 0),
             reward_product_id: payload.reward_product_id ?? null,
             reward_product_name:

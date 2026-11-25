@@ -4,11 +4,13 @@ export type PromoRewardType =
   | 'free_shipping'
   | 'threshold_percentage'
   | 'buy_x_get_specific_free'
-  | 'buy_x_get_cheapest_free';
+  | 'buy_x_get_cheapest_free'
+  | 'manual_coupon_only';
 
 export interface CartOfferSettings {
   promo_banner_enabled?: boolean;
   promo_reward_type?: PromoRewardType | string;
+  promo_manual_coupon_code?: string | null;
   promo_goal_type?: 'amount' | 'item_count' | string;
   promo_goal_threshold_paise?: number;
   promo_goal_item_count?: number;
@@ -95,7 +97,7 @@ export function calcAutoOfferDiscount(
   let defaultUnlocked = 'You unlocked FREE Standard Shipping!';
   let rewardBadge = 'FREE SHIPPING';
 
-  if (!isEnabled) {
+  if (!isEnabled || rewardType === 'manual_coupon_only') {
     return {
       promoRewardType: rewardType,
       hasUnlockedGoal: false,

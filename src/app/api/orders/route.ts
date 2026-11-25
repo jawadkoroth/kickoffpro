@@ -280,9 +280,12 @@ async function handlePOST(req: NextRequest) {
     }
 
     // 7. Server-authoritative shipping + COD fee + Magic Cart auto-offers.
-    // Mutual exclusivity: if a non-stackable manual coupon is applied, suppress
-    // the automated reward discount so double-dipping (e.g. 20% + 20%) never happens.
-    if (!appliedCoupon || stackableWithPromo) {
+    // Mutual exclusivity: bypass auto-offers when promo_reward_type is 'manual_coupon_only',
+    // and suppress automated reward discounts when a non-stackable manual coupon is applied.
+    if (
+      shippingSettings?.promo_reward_type !== 'manual_coupon_only' &&
+      (!appliedCoupon || stackableWithPromo)
+    ) {
       const autoOffer = calcAutoOfferDiscount(
         shippingSettings,
         subtotal,

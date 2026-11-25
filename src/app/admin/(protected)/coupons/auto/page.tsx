@@ -9,7 +9,8 @@ type PromoRewardType =
   | 'free_shipping'
   | 'threshold_percentage'
   | 'buy_x_get_specific_free'
-  | 'buy_x_get_cheapest_free';
+  | 'buy_x_get_cheapest_free'
+  | 'manual_coupon_only';
 
 interface AutoOfferState {
   free_shipping_threshold_paise: number;
@@ -26,6 +27,7 @@ interface AutoOfferState {
   promo_nudge_badge: string;
   promo_nudge_text: string;
   promo_reward_type: PromoRewardType;
+  promo_manual_coupon_code: string | null;
   reward_percentage: number;
   reward_product_id: string | null;
   buy_x_quantity: number;
@@ -48,6 +50,7 @@ const EMPTY_STATE: AutoOfferState = {
   promo_nudge_text:
     'Instant UPI avoids the {cod_fee} COD handling charge and guarantees Priority Dispatch within 24 hours.',
   promo_reward_type: 'free_shipping',
+  promo_manual_coupon_code: null,
   reward_percentage: 10,
   reward_product_id: null,
   buy_x_quantity: 2,
@@ -70,6 +73,10 @@ const REWARD_DEFAULTS: Record<PromoRewardType, { progress: string; unlocked: str
   buy_x_get_specific_free: {
     progress: 'Add {remaining_items} more to unlock FREE {reward_product}!',
     unlocked: '🎁 Free {reward_product} unlocked with your order!',
+  },
+  manual_coupon_only: {
+    progress: 'Add {remaining} more to unlock your coupon!',
+    unlocked: 'You unlocked a manual coupon — click Apply below!',
   },
 };
 
@@ -175,19 +182,35 @@ export default function AdminAutoOffersPage() {
   const [storeProducts, setStoreProducts] = useState<
     Array<{ id: string; name: string; price_paise: number }>
   >([]);
+  const [activeManualCoupons, setActiveManualCoupons] = useState<
+    Array<{
+      id: string;
+      code: string;
+      discount_type: string | null;
+      discount_percent: number;
+      discount_paise: number | null;
+      min_cart_paise: number | null;
+    }>
+  >([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
   const loadSettings = useCallback(async () => {
     try {
-      const [shipRes, prodRes] = await Promise.all([
+      const supabase = createClient();
+      const [shipRes, prodRes, coupRes] = await Promise.all([
         fetch('/api/admin/shipping'),
-        createClient()
+        supabase
           .from('products')
           .select('id, name, price_paise')
           .eq('is_active', true)
           .order('name', { ascending: true })
           .limit(100),
+        supabase
+          .from('coupons')
+          .select('id, code, discount_type, discount_percent, discount_paise, min_cart_paise')
+          .eq('is_active', true)
+          .order('created_at', { ascending: false }),
       ]);
 
       const data = await shipRes.json();
@@ -221,6 +244,7 @@ export default function AdminAutoOffersPage() {
         promo_nudge_badge: raw.promo_nudge_badge ?? EMPTY_STATE.promo_nudge_badge,
         promo_nudge_text: raw.promo_nudge_text ?? EMPTY_STATE.promo_nudge_text,
         promo_reward_type: rewardType,
+        promo_manual_coupon_code: raw.promo_manual_coupon_code ?? null,
         reward_percentage: Number(raw.reward_percentage) || EMPTY_STATE.reward_percentage,
         reward_product_id: raw.reward_product_id ?? null,
         buy_x_quantity: Number(raw.buy_x_quantity) || EMPTY_STATE.buy_x_quantity,
@@ -231,6 +255,18 @@ export default function AdminAutoOffersPage() {
 
       if (prodRes.data) {
         setStoreProducts(prodRes.data as Array<{ id: string; name: string; price_paise: number }>);
+      }
+      if (coupRes.data) {
+        setActiveManualCoupons(
+          (coupRes.data as Array<{
+            id: string;
+            code: string;
+            discount_type: string | null;
+            discount_percent: number;
+            discount_paise: number | null;
+            min_cart_paise: number | null;
+          }>).filter((c) => c.discount_type !== 'bxgy'),
+        );
       }
     } catch {
       showToast('Failed to load auto-offer settings', 'error');
@@ -280,6 +316,10 @@ export default function AdminAutoOffersPage() {
         promo_nudge_badge: state.promo_nudge_badge,
         promo_nudge_text: state.promo_nudge_text,
         promo_reward_type: state.promo_reward_type || 'free_shipping',
+        promo_manual_coupon_code:
+          state.promo_reward_type === 'manual_coupon_only'
+            ? state.promo_manual_coupon_code || null
+            : null,
         reward_percentage: Number(state.reward_percentage) || 0,
         reward_product_id: state.reward_product_id ?? null,
         buy_x_quantity: Number(state.buy_x_quantity) || 2,
@@ -324,6 +364,12 @@ export default function AdminAutoOffersPage() {
   if (state.promo_reward_type === 'threshold_percentage') previewBannerIcon = '🏷️';
   else if (state.promo_reward_type === 'buy_x_get_cheapest_free') previewBannerIcon = '⚡';
   else if (state.promo_reward_type === 'buy_x_get_specific_free') previewBannerIcon = '🎁';
+  else if (state.promo_reward_type === 'manual_coupon_only') previewBannerIcon = '🎟️';
+
+  const previewManualCoupon =
+    (state.promo_manual_coupon_code
+      ? activeManualCoupons.find((c) => c.code === state.promo_manual_coupon_code)
+      : null) ?? activeManualCoupons[0];
 
   const activeFallback =
     REWARD_DEFAULTS[state.promo_reward_type || 'free_shipping']?.progress ||
@@ -336,15 +382,24 @@ export default function AdminAutoOffersPage() {
       ? activeFallback
       : rawPreviewTpl;
 
-  const previewProgressText = effectivePreviewTpl
-    .replace(/\{remaining\}/g, previewRemaining)
-    .replace(/\{remaining_items\}/g, '1 item')
-    .replace(/\{item_count\}/g, String(state.promo_goal_item_count || 2))
-    .replace(/\{threshold\}/g, `₹${effectivePromoGoalRs}`)
-    .replace(/\{reward_percentage\}/g, `${state.reward_percentage || 10}%`)
-    .replace(/\{reward_product\}/g, giftLabel)
-    .replace(/\{buy_x\}/g, String(state.buy_x_quantity || 2))
-    .replace(/\{get_y\}/g, String(state.get_y_quantity || 1));
+  const previewProgressText =
+    state.promo_reward_type === 'manual_coupon_only'
+      ? previewManualCoupon
+        ? `Add ₹349 more to unlock ${previewManualCoupon.code} (${
+            previewManualCoupon.discount_type === 'flat' && previewManualCoupon.discount_paise
+              ? `₹${Math.round(previewManualCoupon.discount_paise / 100)} OFF`
+              : `${previewManualCoupon.discount_percent}% OFF`
+          })`
+        : 'Add ₹349 more to unlock your manual coupon!'
+      : effectivePreviewTpl
+          .replace(/\{remaining\}/g, previewRemaining)
+          .replace(/\{remaining_items\}/g, '1 item')
+          .replace(/\{item_count\}/g, String(state.promo_goal_item_count || 2))
+          .replace(/\{threshold\}/g, `₹${effectivePromoGoalRs}`)
+          .replace(/\{reward_percentage\}/g, `${state.reward_percentage || 10}%`)
+          .replace(/\{reward_product\}/g, giftLabel)
+          .replace(/\{buy_x\}/g, String(state.buy_x_quantity || 2))
+          .replace(/\{get_y\}/g, String(state.get_y_quantity || 1));
 
   const previewNudgeTitle = (state.promo_nudge_title || 'Pay with UPI & Save {cod_fee}').replace(
     /\{cod_fee\}/g,
@@ -541,6 +596,11 @@ export default function AdminAutoOffersPage() {
                   id: 'buy_x_get_specific_free' as const,
                   title: '🎁 Buy X Get Free Specific Gift',
                   desc: 'Buy X items, receive a designated catalog item free',
+                },
+                {
+                  id: 'manual_coupon_only' as const,
+                  title: '🎟️ Manual Coupon Only (Auto Offers OFF)',
+                  desc: 'Disable all automatic cart discounts and track a manual coupon in the progress bar',
                 },
               ].map((opt) => (
                 <button
@@ -756,28 +816,65 @@ export default function AdminAutoOffersPage() {
             </>
           )}
 
-          <Field
-            label="In-Progress Copy Template"
-            hint="Supports {remaining}, {remaining_items}, {threshold}, {reward_percentage}, {reward_product}, {buy_x}"
-          >
-            <input
-              className="input-field"
-              type="text"
-              placeholder="Add {remaining} more to unlock reward"
-              value={state.promo_progress_template}
-              onChange={(e) => onStateChange({ promo_progress_template: e.target.value })}
-            />
-          </Field>
+          {state.promo_reward_type === 'manual_coupon_only' && (
+            <Field
+              label="Progress Bar Manual Coupon"
+              hint="All automatic Magic Cart discounts are disabled. Customers must click Apply on the manual coupon once unlocked."
+            >
+              <select
+                className="input-field"
+                value={state.promo_manual_coupon_code || ''}
+                onChange={(e) =>
+                  onStateChange({ promo_manual_coupon_code: e.target.value || null })
+                }
+                style={{ background: 'var(--bg-input)', color: 'var(--text-primary)' }}
+              >
+                <option value="">Auto-pick closest active manual coupon</option>
+                {activeManualCoupons.map((c) => {
+                  const offerLabel =
+                    c.discount_type === 'flat' && c.discount_paise
+                      ? `₹${Math.round(c.discount_paise / 100).toLocaleString('en-IN')} OFF`
+                      : `${c.discount_percent}% OFF`;
+                  const minLabel = c.min_cart_paise
+                    ? ` · Min ₹${Math.round(c.min_cart_paise / 100).toLocaleString('en-IN')}`
+                    : '';
+                  return (
+                    <option key={c.id} value={c.code}>
+                      {c.code} ({offerLabel}
+                      {minLabel})
+                    </option>
+                  );
+                })}
+              </select>
+            </Field>
+          )}
 
-          <Field label="Unlocked Congratulations Message" hint="Rendered when goal is reached">
-            <input
-              className="input-field"
-              type="text"
-              placeholder="Congratulations! Your reward has been unlocked!"
-              value={state.promo_unlocked_text}
-              onChange={(e) => onStateChange({ promo_unlocked_text: e.target.value })}
-            />
-          </Field>
+          {state.promo_reward_type !== 'manual_coupon_only' && (
+            <>
+              <Field
+                label="In-Progress Copy Template"
+                hint="Supports {remaining}, {remaining_items}, {threshold}, {reward_percentage}, {reward_product}, {buy_x}"
+              >
+                <input
+                  className="input-field"
+                  type="text"
+                  placeholder="Add {remaining} more to unlock reward"
+                  value={state.promo_progress_template}
+                  onChange={(e) => onStateChange({ promo_progress_template: e.target.value })}
+                />
+              </Field>
+
+              <Field label="Unlocked Congratulations Message" hint="Rendered when goal is reached">
+                <input
+                  className="input-field"
+                  type="text"
+                  placeholder="Congratulations! Your reward has been unlocked!"
+                  value={state.promo_unlocked_text}
+                  onChange={(e) => onStateChange({ promo_unlocked_text: e.target.value })}
+                />
+              </Field>
+            </>
+          )}
         </div>
       )}
 

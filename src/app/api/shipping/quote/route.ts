@@ -7,7 +7,7 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const QUOTE_SETTINGS_COLUMNS =
-  'free_shipping_threshold_paise, default_shipping_charge_paise, cod_enabled, cod_fee_paise, magic_cart_mode, promo_banner_enabled, promo_goal_type, promo_goal_threshold_paise, promo_goal_item_count, promo_progress_template, promo_unlocked_text, promo_nudge_enabled, promo_nudge_title, promo_nudge_badge, promo_nudge_text, promo_reward_type, reward_percentage, reward_product_id, buy_x_quantity, get_y_quantity';
+  'free_shipping_threshold_paise, default_shipping_charge_paise, cod_enabled, cod_fee_paise, magic_cart_mode, promo_banner_enabled, promo_goal_type, promo_goal_threshold_paise, promo_goal_item_count, promo_progress_template, promo_unlocked_text, promo_nudge_enabled, promo_nudge_title, promo_nudge_badge, promo_nudge_text, promo_reward_type, promo_manual_coupon_code, reward_percentage, reward_product_id, buy_x_quantity, get_y_quantity';
 
 async function loadPublicSettings(supabase: ReturnType<typeof createAdminClient>) {
   const { data: settings } = await supabase
@@ -69,6 +69,7 @@ async function loadPublicSettings(supabase: ReturnType<typeof createAdminClient>
       promo_nudge_badge: settings?.promo_nudge_badge || 'LOWEST PRICE',
       promo_nudge_text: settings?.promo_nudge_text || 'Instant UPI avoids the {cod_fee} COD handling charge and guarantees Priority Dispatch within 24 hours.',
       promo_reward_type: settings?.promo_reward_type || 'free_shipping',
+      promo_manual_coupon_code: settings?.promo_manual_coupon_code ?? null,
       reward_percentage: Number(settings?.reward_percentage) || 0,
       reward_product_id: settings?.reward_product_id ?? null,
       reward_product_name: rewardProductName,

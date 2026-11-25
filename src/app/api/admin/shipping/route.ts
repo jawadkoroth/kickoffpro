@@ -98,6 +98,7 @@ const READ_COLUMNS = [
   'promo_nudge_badge',
   'promo_nudge_text',
   'promo_reward_type',
+  'promo_manual_coupon_code',
   'reward_percentage',
   'reward_product_id',
   'buy_x_quantity',
@@ -340,9 +341,19 @@ export async function PATCH(req: NextRequest) {
 
   // Advanced Multi-Rule Cart Rewards
   if (typeof (body as any).promo_reward_type === 'string') {
-    const validRewards = ['free_shipping', 'threshold_percentage', 'buy_x_get_specific_free', 'buy_x_get_cheapest_free'];
+    const validRewards = [
+      'free_shipping',
+      'threshold_percentage',
+      'buy_x_get_specific_free',
+      'buy_x_get_cheapest_free',
+      'manual_coupon_only',
+    ];
     const rType = (body as any).promo_reward_type;
     update.promo_reward_type = validRewards.includes(rType) ? rType : 'free_shipping';
+  }
+  if ((body as any).promo_manual_coupon_code !== undefined) {
+    const rawCode = toStringOrNull((body as any).promo_manual_coupon_code);
+    update.promo_manual_coupon_code = rawCode ? rawCode.toUpperCase() : null;
   }
   if ((body as any).reward_percentage !== undefined) {
     const p = Number((body as any).reward_percentage);
