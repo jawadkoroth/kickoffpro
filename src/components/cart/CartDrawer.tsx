@@ -36,35 +36,89 @@ interface UpsellProduct {
   inventory?: { size: string; stock: number }[];
 }
 
+import { calcBxgyDiscountPaise } from '@/lib/coupons/evaluateCoupon';
+
 interface ActiveCoupon {
   id: string;
   code: string;
-  discount_type?: 'percent' | 'flat';
+  discount_type?: 'percent' | 'flat' | 'bxgy';
   discount_percent: number;
   discount_paise?: number | null;
   min_cart_paise?: number | null;
   min_order_paise?: number | null;
+  min_items?: number | null;
+  buy_qty?: number | null;
+  get_qty?: number | null;
   max_discount_paise?: number | null;
   cart_mode?: 'sync_auto' | 'manual_with_progress' | 'manual_only';
   stackable_with_promo?: boolean;
 }
 
-function formatCouponOfferLabel(c: Pick<ActiveCoupon, 'discount_type' | 'discount_percent' | 'discount_paise'>): string {
+function formatCouponOfferLabel(
+  c: Pick<ActiveCoupon, 'discount_type' | 'discount_percent' | 'discount_paise' | 'buy_qty' | 'get_qty'>,
+): string {
+  if (c.discount_type === 'bxgy') {
+    return `Buy ${c.buy_qty ?? 2} Get ${c.get_qty ?? 1} Free`;
+  }
   if (c.discount_type === 'flat' && c.discount_paise && c.discount_paise > 0) {
     return `₹${Math.round(c.discount_paise / 100).toLocaleString('en-IN')} OFF`;
   }
   return `${c.discount_percent}% OFF`;
 }
 
-function calcCouponDiscountPaise(
-  c: Pick<ActiveCoupon, 'discount_type' | 'discount_percent' | 'discount_paise' | 'max_discount_paise'>,
+function getCouponShortfall(
+  c: Pick<ActiveCoupon, 'discount_type' | 'min_cart_paise' | 'min_order_paise' | 'min_items' | 'buy_qty' | 'get_qty'>,
   subtotalPaise: number,
+  paidCount: number,
+) {
+  const minCartReq = c.min_cart_paise ?? c.min_order_paise ?? 0;
+  const requiredItems =
+    c.discount_type === 'bxgy'
+      ? (c.buy_qty ?? 2) + (c.get_qty ?? 1)
+      : (c.min_items ?? 0);
+  const shortfallPaise = minCartReq > 0 ? Math.max(0, minCartReq - subtotalPaise) : 0;
+  const shortfallItems = requiredItems > 0 ? Math.max(0, requiredItems - paidCount) : 0;
+  return {
+    minCartReq,
+    requiredItems,
+    shortfallPaise,
+    shortfallItems,
+    isEligible: subtotalPaise > 0 && shortfallPaise === 0 && shortfallItems === 0,
+  };
+}
+
+function formatShortfallMessage(shortfallPaise: number, shortfallItems: number): string {
+  const parts: string[] = [];
+  if (shortfallPaise > 0) {
+    parts.push(`₹${Math.ceil(shortfallPaise / 100).toLocaleString('en-IN')}`);
+  }
+  if (shortfallItems > 0) {
+    parts.push(`${shortfallItems} more item${shortfallItems === 1 ? '' : 's'}`);
+  }
+  if (parts.length === 0) return '';
+  if (shortfallPaise > 0 && shortfallItems === 0) {
+    return `${parts[0]} more`;
+  }
+  return parts.join(' & ');
+}
+
+function calcCouponDiscountPaise(
+  c: Pick<ActiveCoupon, 'discount_type' | 'discount_percent' | 'discount_paise' | 'max_discount_paise' | 'buy_qty' | 'get_qty'>,
+  subtotalPaise: number,
+  cartItems: { price_paise: number; quantity: number; is_free_gift?: boolean }[] = [],
 ): number {
   if (subtotalPaise <= 0) return 0;
-  if (c.discount_type === 'flat' && c.discount_paise && c.discount_paise > 0) {
-    return Math.min(c.discount_paise, subtotalPaise);
+  let disc = 0;
+  if (c.discount_type === 'bxgy') {
+    const paidItems = cartItems
+      .filter((i) => !i.is_free_gift)
+      .map((i) => ({ unit_price_paise: i.price_paise, quantity: i.quantity }));
+    disc = calcBxgyDiscountPaise(paidItems, c.buy_qty ?? 2, c.get_qty ?? 1);
+  } else if (c.discount_type === 'flat' && c.discount_paise && c.discount_paise > 0) {
+    disc = Math.min(c.discount_paise, subtotalPaise);
+  } else {
+    disc = Math.round((subtotalPaise * c.discount_percent) / 100);
   }
-  let disc = Math.round((subtotalPaise * c.discount_percent) / 100);
   if (c.max_discount_paise && c.max_discount_paise > 0 && disc > c.max_discount_paise) {
     disc = c.max_discount_paise;
   }
@@ -139,17 +193,33 @@ export default function CartDrawer() {
     }
   }, [isDrawerOpen, upsellProducts.length, activeCoupons.length]);
 
-  // Recompute applied coupon discount when totalPaise changes
+  const paidCount = useMemo(
+    () => items.filter((i) => !i.is_free_gift).reduce((sum, i) => sum + i.quantity, 0),
+    [items],
+  );
+
+  // Recompute applied coupon discount when totalPaise or items change
   const couponDiscountPaise = useMemo(() => {
     if (!FEATURE_FLAGS.CART_COUPONS || !appliedCoupon || totalPaise <= 0) return 0;
     const match = activeCoupons.find((c) => c.code === appliedCoupon.code);
     if (match) {
-      const minReq = match.min_cart_paise ?? match.min_order_paise ?? 0;
-      if (minReq > 0 && totalPaise < minReq) return 0;
-      return calcCouponDiscountPaise(match, totalPaise);
+      const { isEligible } = getCouponShortfall(match, totalPaise, paidCount);
+      if (!isEligible) return 0;
+      return calcCouponDiscountPaise(match, totalPaise, items);
     }
-    return Math.min(appliedCoupon.discountPaise || Math.round((totalPaise * appliedCoupon.discountPercent) / 100), totalPaise);
-  }, [appliedCoupon, activeCoupons, totalPaise]);
+    return calcCouponDiscountPaise(
+      {
+        discount_type: appliedCoupon.discountType ?? 'percent',
+        discount_percent: appliedCoupon.discountPercent,
+        discount_paise: appliedCoupon.discountPaiseFlat ?? null,
+        max_discount_paise: appliedCoupon.maxDiscountPaise ?? null,
+        buy_qty: appliedCoupon.buyQty ?? null,
+        get_qty: appliedCoupon.getQty ?? null,
+      },
+      totalPaise,
+      items,
+    );
+  }, [appliedCoupon, activeCoupons, totalPaise, paidCount, items]);
 
   // Visible cross-sell recommendations (not already in cart, with stock > 0, max 2 items)
   const visibleUpsells = useMemo(() => {
@@ -168,27 +238,35 @@ export default function CartDrawer() {
   useEffect(() => {
     if (!FEATURE_FLAGS.CART_COUPONS || activeCoupons.length === 0) return;
 
-    // 1. If a coupon is applied, verify its live min_cart_paise against totalPaise
+    // 1. If a coupon is applied, verify its live eligibility against totalPaise & paidCount
     if (appliedCoupon) {
       const match = activeCoupons.find((c) => c.code === appliedCoupon.code);
       if (match) {
-        const minReq = match.min_cart_paise ?? match.min_order_paise ?? 0;
-        if (totalPaise <= 0 || (minReq > 0 && totalPaise < minReq)) {
+        const { isEligible } = getCouponShortfall(match, totalPaise, paidCount);
+        if (!isEligible) {
           clearCoupon();
           return;
         }
-        // Keep metadata fresh in case admin updated min_cart or stackable_with_promo
+        // Keep metadata fresh in case admin updated rules
+        const nextType = match.discount_type ?? 'percent';
         if (
           appliedCoupon.minCartPaise !== (match.min_cart_paise ?? null) ||
+          appliedCoupon.minItems !== (match.min_items ?? 0) ||
+          appliedCoupon.discountType !== nextType ||
+          appliedCoupon.buyQty !== (match.buy_qty ?? null) ||
+          appliedCoupon.getQty !== (match.get_qty ?? null) ||
           appliedCoupon.stackableWithPromo !== Boolean(match.stackable_with_promo)
         ) {
-          const disc = Math.round((totalPaise * match.discount_percent) / 100);
-          const capped = match.max_discount_paise ? Math.min(disc, match.max_discount_paise) : disc;
           applyCoupon({
             code: match.code,
-            discountPaise: Math.min(capped, totalPaise),
+            discountPaise: calcCouponDiscountPaise(match, totalPaise, items),
             discountPercent: match.discount_percent,
+            discountType: nextType,
+            discountPaiseFlat: match.discount_paise ?? null,
             minCartPaise: match.min_cart_paise ?? null,
+            minItems: match.min_items ?? 0,
+            buyQty: match.buy_qty ?? null,
+            getQty: match.get_qty ?? null,
             maxDiscountPaise: match.max_discount_paise ?? null,
             stackableWithPromo: Boolean(match.stackable_with_promo),
             cartMode: match.cart_mode ?? 'manual_only',
@@ -202,13 +280,18 @@ export default function CartDrawer() {
     // 2. If no coupon is applied and there is a sync_auto coupon whose threshold is met, auto-apply it
     const syncCoupon = activeCoupons.find((c) => c.cart_mode === 'sync_auto');
     if (syncCoupon && totalPaise > 0) {
-      const minReq = syncCoupon.min_cart_paise ?? syncCoupon.min_order_paise ?? 0;
-      if (totalPaise >= minReq) {
+      const { isEligible } = getCouponShortfall(syncCoupon, totalPaise, paidCount);
+      if (isEligible) {
         applyCoupon({
           code: syncCoupon.code,
-          discountPaise: calcCouponDiscountPaise(syncCoupon, totalPaise),
+          discountPaise: calcCouponDiscountPaise(syncCoupon, totalPaise, items),
           discountPercent: syncCoupon.discount_percent,
+          discountType: syncCoupon.discount_type ?? 'percent',
+          discountPaiseFlat: syncCoupon.discount_paise ?? null,
           minCartPaise: syncCoupon.min_cart_paise ?? null,
+          minItems: syncCoupon.min_items ?? 0,
+          buyQty: syncCoupon.buy_qty ?? null,
+          getQty: syncCoupon.get_qty ?? null,
           maxDiscountPaise: syncCoupon.max_discount_paise ?? null,
           stackableWithPromo: Boolean(syncCoupon.stackable_with_promo),
           cartMode: 'sync_auto',
@@ -216,7 +299,7 @@ export default function CartDrawer() {
         });
       }
     }
-  }, [activeCoupons, appliedCoupon, totalPaise, applyCoupon, clearCoupon]);
+  }, [activeCoupons, appliedCoupon, totalPaise, paidCount, items, applyCoupon, clearCoupon]);
 
   // Mutual exclusion: never double-dip Reward Discount + non-stackable Coupon
   const effectiveAutoDiscountPaise = useMemo(() => {
@@ -247,24 +330,41 @@ export default function CartDrawer() {
       ? activeCoupons.find(
           (c) =>
             (c.cart_mode === 'sync_auto' || c.cart_mode === 'manual_with_progress') &&
-            (c.min_cart_paise ?? c.min_order_paise ?? 0) > 0,
+            ((c.min_cart_paise ?? c.min_order_paise ?? 0) > 0 ||
+              c.discount_type === 'bxgy' ||
+              (c.min_items ?? 0) > 0),
         )
       : undefined;
 
     if (progressCoupon) {
-      const targetPaise = progressCoupon.min_cart_paise ?? progressCoupon.min_order_paise ?? 0;
-      const shortfallPaise = Math.max(0, targetPaise - totalPaise);
-      const percent = targetPaise > 0 ? Math.min(100, Math.round((totalPaise / targetPaise) * 100)) : 100;
-      const unlocked = shortfallPaise === 0;
-      const shortfallRupees = Math.ceil(shortfallPaise / 100).toLocaleString('en-IN');
+      const { minCartReq, requiredItems, shortfallPaise, shortfallItems, isEligible } =
+        getCouponShortfall(progressCoupon, totalPaise, paidCount);
+      const unlocked = isEligible;
+      const percent = unlocked
+        ? 100
+        : requiredItems > 0 && (shortfallItems > 0 || minCartReq === 0)
+          ? Math.min(100, Math.round((paidCount / requiredItems) * 100))
+          : minCartReq > 0
+            ? Math.min(100, Math.round((totalPaise / minCartReq) * 100))
+            : 100;
       const offerLabel = formatCouponOfferLabel(progressCoupon);
+      const shortfallText = formatShortfallMessage(shortfallPaise, shortfallItems);
 
       let message = '';
       if (!unlocked) {
-        message =
-          progressCoupon.cart_mode === 'sync_auto'
-            ? `Add ₹${shortfallRupees} more to auto-apply ${progressCoupon.code} (${offerLabel})`
-            : `Add ₹${shortfallRupees} more to unlock ${progressCoupon.code} (${offerLabel})`;
+        if (progressCoupon.discount_type === 'bxgy' && shortfallItems > 0 && shortfallPaise === 0) {
+          const getQty = progressCoupon.get_qty ?? 1;
+          const freeText = getQty === 1 ? 'get your lowest-priced item FREE!' : `get ${getQty} lowest-priced items FREE!`;
+          message =
+            progressCoupon.cart_mode === 'sync_auto'
+              ? `Add ${shortfallText} to ${freeText}`
+              : `Add ${shortfallText} to unlock ${progressCoupon.code} (${offerLabel})`;
+        } else {
+          message =
+            progressCoupon.cart_mode === 'sync_auto'
+              ? `Add ${shortfallText} to auto-apply ${progressCoupon.code} (${offerLabel})`
+              : `Add ${shortfallText} to unlock ${progressCoupon.code} (${offerLabel})`;
+        }
       } else if (progressCoupon.cart_mode === 'sync_auto' || appliedCoupon?.code === progressCoupon.code) {
         message = `${progressCoupon.code} (${offerLabel}) applied!`;
       } else {
@@ -276,7 +376,10 @@ export default function CartDrawer() {
         unlocked,
         percent,
         message,
-        iconType: 'threshold_percentage' as const,
+        iconType:
+          progressCoupon.discount_type === 'bxgy'
+            ? ('buy_x_get_cheapest_free' as const)
+            : ('threshold_percentage' as const),
       };
     }
 
@@ -350,17 +453,21 @@ export default function CartDrawer() {
   const handleApplyCouponChip = async (coupon: ActiveCoupon) => {
     setCouponError('');
     clearCouponNotice();
-    const minReq = coupon.min_cart_paise ?? coupon.min_order_paise ?? 0;
-    if (minReq > 0 && totalPaise < minReq) {
-      const shortfallRupees = Math.ceil((minReq - totalPaise) / 100).toLocaleString('en-IN');
-      setCouponError(`Add ₹${shortfallRupees} more to unlock ${coupon.code} (${formatCouponOfferLabel(coupon)})`);
+    const { shortfallPaise, shortfallItems, isEligible } = getCouponShortfall(coupon, totalPaise, paidCount);
+    if (!isEligible) {
+      setCouponError(`Add ${formatShortfallMessage(shortfallPaise, shortfallItems)} to unlock ${coupon.code} (${formatCouponOfferLabel(coupon)})`);
       return;
     }
     applyCoupon({
       code: coupon.code,
-      discountPaise: calcCouponDiscountPaise(coupon, totalPaise),
+      discountPaise: calcCouponDiscountPaise(coupon, totalPaise, items),
       discountPercent: coupon.discount_percent,
+      discountType: coupon.discount_type ?? 'percent',
+      discountPaiseFlat: coupon.discount_paise ?? null,
       minCartPaise: coupon.min_cart_paise ?? null,
+      minItems: coupon.min_items ?? 0,
+      buyQty: coupon.buy_qty ?? null,
+      getQty: coupon.get_qty ?? null,
       maxDiscountPaise: coupon.max_discount_paise ?? null,
       stackableWithPromo: Boolean(coupon.stackable_with_promo),
       cartMode: coupon.cart_mode ?? 'manual_only',
@@ -739,10 +846,12 @@ export default function CartDrawer() {
                           <div className={styles.couponChips}>
                             {activeCoupons.map((c) => {
                               const isApplied = appliedCoupon?.code === c.code;
-                              const minReq = c.min_cart_paise ?? c.min_order_paise ?? 0;
-                              const shortfallPaise = Math.max(0, minReq - totalPaise);
-                              const isEligible = shortfallPaise === 0 && totalPaise > 0;
-                              const shortfallRupees = Math.ceil(shortfallPaise / 100).toLocaleString('en-IN');
+                              const { shortfallPaise, shortfallItems, isEligible } = getCouponShortfall(
+                                c,
+                                totalPaise,
+                                paidCount,
+                              );
+                              const shortfallText = formatShortfallMessage(shortfallPaise, shortfallItems);
 
                               return (
                                 <div
@@ -783,9 +892,9 @@ export default function CartDrawer() {
                                       </button>
                                     )}
                                   </div>
-                                  {!isApplied && !isEligible && shortfallPaise > 0 && (
+                                  {!isApplied && !isEligible && shortfallText && (
                                     <span className={styles.couponShortfall}>
-                                      Add ₹{shortfallRupees} more to unlock
+                                      Add {shortfallText} to unlock
                                     </span>
                                   )}
                                 </div>

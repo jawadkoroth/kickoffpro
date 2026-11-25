@@ -28,7 +28,7 @@ const ACCENTS: { id: string; label: string; swatch: string }[] = [
 ];
 
 type CouponCartMode = 'sync_auto' | 'manual_with_progress' | 'manual_only';
-type CouponDiscountType = 'percent' | 'flat';
+type CouponDiscountType = 'percent' | 'flat' | 'bxgy';
 type MagicCartMode = 'off' | 'free_shipping' | 'coupon_goal';
 
 interface Coupon {
@@ -43,6 +43,9 @@ interface Coupon {
   homepage_text: string | null;
   homepage_accent: string | null;
   min_cart_paise: number | null;
+  min_items: number | null;
+  buy_qty: number | null;
+  get_qty: number | null;
   max_discount_paise: number | null;
   starts_at: string | null;
   expires_at: string | null;
@@ -58,6 +61,9 @@ interface DraftState {
   discountType: CouponDiscountType;
   percent: string;
   flatRupees: string;
+  buyQty: string;
+  getQty: string;
+  minItems: string;
   isActive: boolean;
   newUsersOnly: boolean;
   showOnHomepage: boolean;
@@ -80,6 +86,9 @@ const EMPTY_DRAFT: DraftState = {
   discountType: 'percent',
   percent: '',
   flatRupees: '',
+  buyQty: '',
+  getQty: '',
+  minItems: '',
   isActive: true,
   newUsersOnly: false,
   showOnHomepage: false,
@@ -168,7 +177,7 @@ export default function AdminCoupons() {
     const { data } = await supabase
       .from('coupons')
       .select(
-        'id, code, discount_type, discount_percent, discount_paise, is_active, new_users_only, show_on_homepage, homepage_text, homepage_accent, min_cart_paise, max_discount_paise, starts_at, expires_at, per_user_limit, usage_limit, cart_mode, stackable_with_promo, created_at',
+        'id, code, discount_type, discount_percent, discount_paise, is_active, new_users_only, show_on_homepage, homepage_text, homepage_accent, min_cart_paise, min_items, buy_qty, get_qty, max_discount_paise, starts_at, expires_at, per_user_limit, usage_limit, cart_mode, stackable_with_promo, created_at',
       )
       .order('created_at', { ascending: false });
     const list = (data as Coupon[]) ?? [];
@@ -234,8 +243,11 @@ export default function AdminCoupons() {
     setDraft({
       code: c.code,
       discountType: c.discount_type ?? 'percent',
-      percent: c.discount_type === 'flat' ? '' : String(c.discount_percent),
+      percent: c.discount_type === 'percent' || !c.discount_type ? String(c.discount_percent) : '',
       flatRupees: c.discount_type === 'flat' && c.discount_paise ? String(c.discount_paise / 100) : '',
+      buyQty: c.discount_type === 'bxgy' && c.buy_qty ? String(c.buy_qty) : '',
+      getQty: c.discount_type === 'bxgy' && c.get_qty ? String(c.get_qty) : '',
+      minItems: c.min_items && c.min_items > 0 ? String(c.min_items) : '',
       isActive: c.is_active,
       newUsersOnly: c.new_users_only,
       showOnHomepage: c.show_on_homepage,
@@ -259,16 +271,27 @@ export default function AdminCoupons() {
     if (!code) return setError('Coupon code is required');
 
     const isFlat = draft.discountType === 'flat';
-    const percent = isFlat ? 0 : parseInt(draft.percent, 10);
+    const isBxgy = draft.discountType === 'bxgy';
+    const percent = isFlat || isBxgy ? 0 : parseInt(draft.percent, 10);
     const flatPaise = isFlat && draft.flatRupees.trim()
       ? Math.round(parseFloat(draft.flatRupees) * 100)
       : null;
+    const buyQty = isBxgy ? parsePositiveInt(draft.buyQty) : null;
+    const getQty = isBxgy ? parsePositiveInt(draft.getQty) : null;
 
-    if (!isFlat && (Number.isNaN(percent) || percent < 1 || percent > 100)) {
+    if (!isFlat && !isBxgy && (Number.isNaN(percent) || percent < 1 || percent > 100)) {
       return setError('Discount % must be between 1 and 100');
     }
     if (isFlat && (!flatPaise || Number.isNaN(flatPaise) || flatPaise < 100)) {
       return setError('Flat discount must be at least ₹1');
+    }
+    if (isBxgy && (!buyQty || !getQty)) {
+      return setError('Buy Qty and Get Free Qty must each be 1 or higher');
+    }
+
+    const minItems = !isBxgy && draft.minItems.trim() ? parsePositiveInt(draft.minItems) : 0;
+    if (!isBxgy && draft.minItems.trim() && minItems === null) {
+      return setError('Min items must be 1 or higher');
     }
 
     // Optional numeric / date fields. Empty input = NULL in the
@@ -321,6 +344,9 @@ export default function AdminCoupons() {
       homepage_text: draft.homepageText.trim() || null,
       homepage_accent: draft.showOnHomepage ? draft.homepageAccent : null,
       min_cart_paise: minCartPaise,
+      min_items: minItems ?? 0,
+      buy_qty: buyQty,
+      get_qty: getQty,
       max_discount_paise: maxDiscountPaise,
       starts_at: startsAtIso,
       expires_at: expiresAtIso,
@@ -406,12 +432,23 @@ export default function AdminCoupons() {
     }
     if (activeGoalCoupon) {
       const discLabel =
-        activeGoalCoupon.discount_type === 'flat' && activeGoalCoupon.discount_paise
-          ? `₹${Math.round(activeGoalCoupon.discount_paise / 100).toLocaleString('en-IN')} OFF`
-          : `${activeGoalCoupon.discount_percent}% OFF`;
-      const minLabel = activeGoalCoupon.min_cart_paise
-        ? `at ₹${Math.round(activeGoalCoupon.min_cart_paise / 100).toLocaleString('en-IN')}`
-        : 'on any order';
+        activeGoalCoupon.discount_type === 'bxgy'
+          ? `Buy ${activeGoalCoupon.buy_qty ?? 2} Get ${activeGoalCoupon.get_qty ?? 1} Free`
+          : activeGoalCoupon.discount_type === 'flat' && activeGoalCoupon.discount_paise
+            ? `₹${Math.round(activeGoalCoupon.discount_paise / 100).toLocaleString('en-IN')} OFF`
+            : `${activeGoalCoupon.discount_percent}% OFF`;
+      const minParts: string[] = [];
+      if (activeGoalCoupon.discount_type === 'bxgy') {
+        minParts.push(`at ${(activeGoalCoupon.buy_qty ?? 2) + (activeGoalCoupon.get_qty ?? 1)} items`);
+      } else {
+        if (activeGoalCoupon.min_cart_paise) {
+          minParts.push(`at ₹${Math.round(activeGoalCoupon.min_cart_paise / 100).toLocaleString('en-IN')}`);
+        }
+        if (activeGoalCoupon.min_items && activeGoalCoupon.min_items > 0) {
+          minParts.push(`at ${activeGoalCoupon.min_items} items`);
+        }
+      }
+      const minLabel = minParts.length > 0 ? minParts.join(' & ') : 'on any order';
       const applyMode =
         goalApplyStyle === 'sync_auto'
           ? 'auto-applies when unlocked'
@@ -517,12 +554,22 @@ export default function AdminCoupons() {
                 onChange={(e) => setGoalCouponId(e.target.value)}
               >
                 <option value="">-- Select an active coupon --</option>
-                {coupons.filter((c) => c.is_active).map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.code} ({c.discount_type === 'flat' && c.discount_paise ? `₹${Math.round(c.discount_paise / 100)} OFF` : `${c.discount_percent}% OFF`}
-                    {c.min_cart_paise ? ` · Min ₹${Math.round(c.min_cart_paise / 100)}` : ''})
-                  </option>
-                ))}
+                {coupons.filter((c) => c.is_active).map((c) => {
+                  const label =
+                    c.discount_type === 'bxgy'
+                      ? `Buy ${c.buy_qty ?? 2} Get ${c.get_qty ?? 1} Free`
+                      : c.discount_type === 'flat' && c.discount_paise
+                        ? `₹${Math.round(c.discount_paise / 100)} OFF`
+                        : `${c.discount_percent}% OFF`;
+                  const reqs: string[] = [];
+                  if (c.min_cart_paise) reqs.push(`Min ₹${Math.round(c.min_cart_paise / 100)}`);
+                  if (c.discount_type !== 'bxgy' && c.min_items && c.min_items > 0) reqs.push(`Min ${c.min_items} items`);
+                  return (
+                    <option key={c.id} value={c.id}>
+                      {c.code} ({label}{reqs.length > 0 ? ` · ${reqs.join(', ')}` : ''})
+                    </option>
+                  );
+                })}
               </select>
             </div>
             <div className="input-group">
@@ -579,9 +626,35 @@ export default function AdminCoupons() {
               >
                 <option value="percent">Percentage (% OFF)</option>
                 <option value="flat">Flat Amount (₹ OFF)</option>
+                <option value="bxgy">Buy X Get Y Free (BXGY)</option>
               </select>
             </div>
-            {draft.discountType === 'flat' ? (
+            {draft.discountType === 'bxgy' ? (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-2)' }}>
+                <div className="input-group">
+                  <label className="input-label">Buy Qty (X)</label>
+                  <input
+                    className="input-field"
+                    type="number"
+                    placeholder="2"
+                    min="1"
+                    value={draft.buyQty}
+                    onChange={(e) => setDraft({ ...draft, buyQty: e.target.value })}
+                  />
+                </div>
+                <div className="input-group">
+                  <label className="input-label">Get Free Qty (Y)</label>
+                  <input
+                    className="input-field"
+                    type="number"
+                    placeholder="1"
+                    min="1"
+                    value={draft.getQty}
+                    onChange={(e) => setDraft({ ...draft, getQty: e.target.value })}
+                  />
+                </div>
+              </div>
+            ) : draft.discountType === 'flat' ? (
               <div className="input-group">
                 <label className="input-label">Flat Discount (₹)</label>
                 <input
@@ -647,6 +720,20 @@ export default function AdminCoupons() {
                 onChange={(e) => setDraft({ ...draft, minCartRupees: e.target.value })}
               />
             </div>
+            {draft.discountType !== 'bxgy' && (
+              <div className="input-group">
+                <label className="input-label">Min items (qty)</label>
+                <input
+                  className="input-field"
+                  type="number"
+                  min="0"
+                  step="1"
+                  placeholder="e.g. 2"
+                  value={draft.minItems}
+                  onChange={(e) => setDraft({ ...draft, minItems: e.target.value })}
+                />
+              </div>
+            )}
             <div className="input-group">
               <label className="input-label">Max discount (₹)</label>
               <input
@@ -851,7 +938,11 @@ export default function AdminCoupons() {
             disabled={
               saving ||
               !draft.code.trim() ||
-              (draft.discountType === 'flat' ? !draft.flatRupees : !draft.percent)
+              (draft.discountType === 'bxgy'
+                ? !draft.buyQty || !draft.getQty
+                : draft.discountType === 'flat'
+                  ? !draft.flatRupees
+                  : !draft.percent)
             }
           >
             {editingId ? 'SAVE CHANGES' : 'CREATE COUPON'}
@@ -865,9 +956,11 @@ export default function AdminCoupons() {
             magicMode === 'coupon_goal' &&
             (coupon.cart_mode === 'sync_auto' || coupon.cart_mode === 'manual_with_progress');
           const discLabel =
-            coupon.discount_type === 'flat' && coupon.discount_paise
-              ? `₹${Math.round(coupon.discount_paise / 100).toLocaleString('en-IN')} off`
-              : `${coupon.discount_percent}% off`;
+            coupon.discount_type === 'bxgy'
+              ? `Buy ${coupon.buy_qty ?? 2} Get ${coupon.get_qty ?? 1} Free`
+              : coupon.discount_type === 'flat' && coupon.discount_paise
+                ? `₹${Math.round(coupon.discount_paise / 100).toLocaleString('en-IN')} off`
+                : `${coupon.discount_percent}% off`;
 
           return (
           <div
@@ -903,6 +996,9 @@ export default function AdminCoupons() {
               </span>
               {coupon.min_cart_paise ? (
                 <span className="badge badge-confirmed">MIN ₹{(coupon.min_cart_paise / 100).toLocaleString('en-IN')}</span>
+              ) : null}
+              {coupon.discount_type !== 'bxgy' && coupon.min_items && coupon.min_items > 0 ? (
+                <span className="badge badge-confirmed">MIN {coupon.min_items} ITEMS</span>
               ) : null}
               {coupon.stackable_with_promo && (
                 <span className="badge badge-confirmed">STACKABLE</span>

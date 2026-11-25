@@ -258,6 +258,11 @@ async function handlePOST(req: NextRequest) {
       const evalResult = await evaluateCoupon(supabase, {
         code: coupon_code,
         subtotalPaise: subtotal,
+        totalItems: qualifyingCount,
+        items: lineItems.map((li) => ({
+          unit_price_paise: li.unit_price_paise,
+          quantity: li.quantity,
+        })),
         userId,
       });
       if (evalResult.ok) {
@@ -302,13 +307,24 @@ async function handlePOST(req: NextRequest) {
       }
     }
 
-    const postDiscountSubtotal = Math.max(0, subtotal - discount);
+    let postDiscountSubtotal = Math.max(0, subtotal - discount);
 
-    const quote = calcShipping({
+    let quote = calcShipping({
       subtotalPaise: postDiscountSubtotal,
       paymentMethod: payment_method,
       shippingSettings: shippingSettings ?? null,
     });
+
+    // Enforce Razorpay minimum 100 paise floor on online orders
+    if (payment_method === 'online' && subtotal > 0 && quote.totalPaise < 100) {
+      discount = Math.max(0, discount - (100 - quote.totalPaise));
+      postDiscountSubtotal = Math.max(0, subtotal - discount);
+      quote = calcShipping({
+        subtotalPaise: postDiscountSubtotal,
+        paymentMethod: payment_method,
+        shippingSettings: shippingSettings ?? null,
+      });
+    }
 
     if (!quote.codAllowed) {
       logEvent('order.cod_disabled_rejected', {});

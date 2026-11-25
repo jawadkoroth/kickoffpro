@@ -158,11 +158,14 @@ function CheckoutContent() {
     Array<{
       id: string;
       code: string;
-      discount_type?: 'percent' | 'flat';
+      discount_type?: 'percent' | 'flat' | 'bxgy';
       discount_percent: number;
       discount_paise?: number | null;
       min_cart_paise?: number | null;
       min_order_paise?: number | null;
+      min_items?: number | null;
+      buy_qty?: number | null;
+      get_qty?: number | null;
       cart_mode?: string;
     }>
   >([]);
@@ -337,6 +340,11 @@ function CheckoutContent() {
   // subtotal changes. Uses /api/coupons/validate with subtotalPaise
   // so min_cart, max_discount, expiry, and usage limits are all
   // enforced for the *displayed* number.
+  const checkoutPaidCount = useMemo(
+    () => cartItems.filter((i) => !i.is_free_gift).reduce((s, i) => s + i.quantity, 0),
+    [cartItems],
+  );
+
   useEffect(() => {
     if (!couponCode) {
       setDiscountPaise(0);
@@ -355,6 +363,10 @@ function CheckoutContent() {
           body: JSON.stringify({
             code: couponCode,
             subtotalPaise: preDiscountSubtotal,
+            totalItems: checkoutPaidCount,
+            items: cartItems
+              .filter((i) => !i.is_free_gift)
+              .map((i) => ({ unit_price_paise: i.price_paise, quantity: i.quantity })),
           }),
         });
         const data = await res.json();
@@ -405,7 +417,7 @@ function CheckoutContent() {
           setCheckoutActiveCoupons(data.coupons);
         }
       })
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   // Auto-apply sync_auto coupon on /checkout if eligible and no manual coupon is entered
@@ -414,12 +426,16 @@ function CheckoutContent() {
     const syncCoupon = checkoutActiveCoupons.find((c) => c.cart_mode === 'sync_auto');
     if (syncCoupon) {
       const minReq = syncCoupon.min_cart_paise ?? syncCoupon.min_order_paise ?? 0;
-      if (preDiscountSubtotal >= minReq) {
+      const reqItems =
+        syncCoupon.discount_type === 'bxgy'
+          ? (syncCoupon.buy_qty ?? 2) + (syncCoupon.get_qty ?? 1)
+          : (syncCoupon.min_items ?? 0);
+      if (preDiscountSubtotal >= minReq && checkoutPaidCount >= reqItems) {
         setCouponInput(syncCoupon.code);
         setCouponCode(syncCoupon.code);
       }
     }
-  }, [couponCode, preDiscountSubtotal, checkoutActiveCoupons]);
+  }, [couponCode, preDiscountSubtotal, checkoutPaidCount, checkoutActiveCoupons]);
 
   const nextOfferNudge = useMemo(() => {
     if (preDiscountSubtotal <= 0 || checkoutActiveCoupons.length === 0) return null;
@@ -428,23 +444,29 @@ function CheckoutContent() {
     );
     if (candidates.length === 0) return null;
 
+    const getReqs = (c: (typeof candidates)[number]) => {
+      const minCart = c.min_cart_paise ?? c.min_order_paise ?? 0;
+      const reqItems =
+        c.discount_type === 'bxgy'
+          ? (c.buy_qty ?? 2) + (c.get_qty ?? 1)
+          : (c.min_items ?? 0);
+      const shortfallPaise = Math.max(0, minCart - preDiscountSubtotal);
+      const shortfallItems = Math.max(0, reqItems - checkoutPaidCount);
+      return { shortfallPaise, shortfallItems, eligible: shortfallPaise === 0 && shortfallItems === 0 };
+    };
+
     // Prefer an already-eligible coupon first, otherwise closest upcoming threshold
-    const eligible = candidates.find(
-      (c) => preDiscountSubtotal >= (c.min_cart_paise ?? c.min_order_paise ?? 0),
-    );
+    const eligible = candidates.find((c) => getReqs(c).eligible);
     if (eligible) {
-      return { coupon: eligible, eligible: true, shortfallPaise: 0 };
+      return { coupon: eligible, eligible: true, shortfallPaise: 0, shortfallItems: 0 };
     }
 
     const upcoming = [...candidates]
-      .map((c) => ({
-        coupon: c,
-        shortfallPaise: Math.max(0, (c.min_cart_paise ?? c.min_order_paise ?? 0) - preDiscountSubtotal),
-      }))
-      .sort((a, b) => a.shortfallPaise - b.shortfallPaise)[0];
+      .map((c) => ({ coupon: c, ...getReqs(c) }))
+      .sort((a, b) => (a.shortfallItems - b.shortfallItems) || (a.shortfallPaise - b.shortfallPaise))[0];
 
     return upcoming ? { ...upcoming, eligible: false } : null;
-  }, [checkoutActiveCoupons, preDiscountSubtotal, couponOk, couponCode]);
+  }, [checkoutActiveCoupons, preDiscountSubtotal, checkoutPaidCount, couponOk, couponCode]);
 
   useEffect(() => {
     if (preDiscountSubtotal <= 0) {
@@ -1227,9 +1249,11 @@ function CheckoutContent() {
                   <>
                     <span>
                       Offer unlocked: <strong>{nextOfferNudge.coupon.code}</strong> (
-                      {nextOfferNudge.coupon.discount_type === 'flat' && nextOfferNudge.coupon.discount_paise
-                        ? `₹${Math.round(nextOfferNudge.coupon.discount_paise / 100).toLocaleString('en-IN')} OFF`
-                        : `${nextOfferNudge.coupon.discount_percent}% OFF`}
+                      {nextOfferNudge.coupon.discount_type === 'bxgy'
+                        ? `Buy ${nextOfferNudge.coupon.buy_qty ?? 2} Get ${nextOfferNudge.coupon.get_qty ?? 1} Free`
+                        : nextOfferNudge.coupon.discount_type === 'flat' && nextOfferNudge.coupon.discount_paise
+                          ? `₹${Math.round(nextOfferNudge.coupon.discount_paise / 100).toLocaleString('en-IN')} OFF`
+                          : `${nextOfferNudge.coupon.discount_percent}% OFF`}
                       )
                     </span>
                     <button
@@ -1254,15 +1278,26 @@ function CheckoutContent() {
                   </>
                 ) : (
                   <span>
-                    Don&apos;t miss out: You&apos;re{' '}
+                    Don&apos;t miss out: Add{' '}
                     <strong>
-                      ₹{Math.ceil(nextOfferNudge.shortfallPaise / 100).toLocaleString('en-IN')}
+                      {[
+                        nextOfferNudge.shortfallPaise > 0
+                          ? `₹${Math.ceil(nextOfferNudge.shortfallPaise / 100).toLocaleString('en-IN')}`
+                          : null,
+                        nextOfferNudge.shortfallItems > 0
+                          ? `${nextOfferNudge.shortfallItems} more item${nextOfferNudge.shortfallItems === 1 ? '' : 's'}`
+                          : null,
+                      ]
+                        .filter(Boolean)
+                        .join(' & ')}
                     </strong>{' '}
-                    away from{' '}
+                    to unlock{' '}
                     <strong>
-                      {nextOfferNudge.coupon.discount_type === 'flat' && nextOfferNudge.coupon.discount_paise
-                        ? `₹${Math.round(nextOfferNudge.coupon.discount_paise / 100).toLocaleString('en-IN')} OFF`
-                        : `${nextOfferNudge.coupon.discount_percent}% OFF`}
+                      {nextOfferNudge.coupon.discount_type === 'bxgy'
+                        ? `Buy ${nextOfferNudge.coupon.buy_qty ?? 2} Get ${nextOfferNudge.coupon.get_qty ?? 1} Free`
+                        : nextOfferNudge.coupon.discount_type === 'flat' && nextOfferNudge.coupon.discount_paise
+                          ? `₹${Math.round(nextOfferNudge.coupon.discount_paise / 100).toLocaleString('en-IN')} OFF`
+                          : `${nextOfferNudge.coupon.discount_percent}% OFF`}
                     </strong>{' '}
                     with <strong>{nextOfferNudge.coupon.code}</strong>
                   </span>

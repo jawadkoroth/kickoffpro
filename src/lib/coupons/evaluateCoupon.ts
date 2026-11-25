@@ -27,7 +27,13 @@ export type CouponRejectReason =
   | 'auth_required';
 
 export type CouponCartMode = 'sync_auto' | 'manual_with_progress' | 'manual_only';
-export type CouponDiscountType = 'percent' | 'flat';
+export type CouponDiscountType = 'percent' | 'flat' | 'bxgy';
+
+export interface CouponLineItem {
+  unit_price_paise: number;
+  quantity: number;
+  is_free_gift?: boolean;
+}
 
 export interface CouponRow {
   id: string;
@@ -38,6 +44,9 @@ export interface CouponRow {
   is_active: boolean;
   new_users_only?: boolean | null;
   min_cart_paise?: number | null;
+  min_items?: number | null;
+  buy_qty?: number | null;
+  get_qty?: number | null;
   max_discount_paise?: number | null;
   starts_at?: string | null;
   expires_at?: string | null;
@@ -55,10 +64,37 @@ export interface EvaluateInput {
    * priced yet — `min_cart_paise` is then deferred to order time.
    */
   subtotalPaise: number | null;
+  /** Total paid item count in cart (used for `min_items` and `bxgy` gates). */
+  totalItems?: number | null;
+  /** Line items for computing BXGY lowest-priced free unit(s). */
+  items?: CouponLineItem[] | null;
   /** Authenticated user id, or null for guest. */
   userId: string | null;
   /** Reference time, defaults to now(). */
   now?: Date;
+}
+
+/**
+ * Pure BXGY helper: sums the lowest `getQty` unit prices when total quantity >= `buyQty + getQty`.
+ */
+export function calcBxgyDiscountPaise(
+  items: CouponLineItem[],
+  buyQty: number,
+  getQty: number,
+): number {
+  const b = Math.max(1, buyQty || 2);
+  const g = Math.max(1, getQty || 1);
+  const unitPrices: number[] = [];
+  for (const it of items) {
+    if (it.is_free_gift) continue;
+    const qty = Math.max(0, Math.floor(it.quantity || 0));
+    for (let i = 0; i < qty; i++) {
+      unitPrices.push(Math.max(0, Math.floor(it.unit_price_paise || 0)));
+    }
+  }
+  if (unitPrices.length < b + g) return 0;
+  unitPrices.sort((a, z) => a - z);
+  return unitPrices.slice(0, g).reduce((sum, p) => sum + p, 0);
 }
 
 export interface EvaluateOk {
@@ -80,6 +116,8 @@ export interface EvaluateRejected {
    */
   minCartPaise?: number;
   shortfallPaise?: number;
+  minItems?: number;
+  shortfallItems?: number;
 }
 
 const REJECT_COPY: Record<CouponRejectReason, string> = {
@@ -117,7 +155,7 @@ export async function evaluateCoupon(
   const { data, error } = await supabase
     .from('coupons')
     .select(
-      'id, code, discount_type, discount_percent, discount_paise, is_active, new_users_only, min_cart_paise, max_discount_paise, starts_at, expires_at, per_user_limit, usage_limit, cart_mode, stackable_with_promo',
+      'id, code, discount_type, discount_percent, discount_paise, is_active, new_users_only, min_cart_paise, min_items, buy_qty, get_qty, max_discount_paise, starts_at, expires_at, per_user_limit, usage_limit, cart_mode, stackable_with_promo',
     )
     .eq('code', code)
     .maybeSingle();
@@ -139,8 +177,14 @@ export async function evaluateCoupon(
     return reject('expired');
   }
 
-  // min_cart: only enforce when we know the subtotal. Validate
-  // route may pass null at preflight time.
+  const offerLabel =
+    coupon.discount_type === 'bxgy'
+      ? `Buy ${Math.max(1, coupon.buy_qty || 2)} Get ${Math.max(1, coupon.get_qty || 1)} Free`
+      : coupon.discount_type === 'flat' && coupon.discount_paise
+        ? `₹${Math.round(coupon.discount_paise / 100).toLocaleString('en-IN')} OFF`
+        : `${coupon.discount_percent}% OFF`;
+
+  // min_cart: only enforce when we know the subtotal.
   if (
     coupon.min_cart_paise &&
     coupon.min_cart_paise > 0 &&
@@ -149,16 +193,43 @@ export async function evaluateCoupon(
   ) {
     const shortfallPaise = coupon.min_cart_paise - input.subtotalPaise;
     const shortfallRupees = Math.ceil(shortfallPaise / 100).toLocaleString('en-IN');
-    const offerLabel =
-      coupon.discount_type === 'flat' && coupon.discount_paise
-        ? `₹${Math.round(coupon.discount_paise / 100).toLocaleString('en-IN')} OFF`
-        : `${coupon.discount_percent}% OFF`;
     return {
       ok: false,
       reason: 'min_cart',
       message: `Add ₹${shortfallRupees} more to unlock ${coupon.code} (${offerLabel})`,
       minCartPaise: coupon.min_cart_paise,
       shortfallPaise,
+    };
+  }
+
+  // min_items / bxgy quantity gate
+  const requiredItems =
+    coupon.discount_type === 'bxgy'
+      ? Math.max(1, coupon.buy_qty || 2) + Math.max(1, coupon.get_qty || 1)
+      : Math.max(0, coupon.min_items || 0);
+
+  if (
+    requiredItems > 0 &&
+    input.totalItems !== undefined &&
+    input.totalItems !== null &&
+    input.totalItems < requiredItems
+  ) {
+    const shortfallItems = requiredItems - input.totalItems;
+    const itemWord = shortfallItems === 1 ? 'item' : 'items';
+    const msg =
+      coupon.discount_type === 'bxgy'
+        ? `Add ${shortfallItems} more ${itemWord} to get ${
+            (coupon.get_qty || 1) === 1
+              ? 'your lowest-priced item FREE'
+              : `${coupon.get_qty} lowest-priced items FREE`
+          } (${coupon.code})`
+        : `Add ${shortfallItems} more ${itemWord} to unlock ${coupon.code} (${offerLabel})`;
+    return {
+      ok: false,
+      reason: 'min_cart',
+      message: msg,
+      minItems: requiredItems,
+      shortfallItems,
     };
   }
 
@@ -212,11 +283,30 @@ export async function evaluateCoupon(
     if ((globalUsed ?? 0) >= coupon.usage_limit) return reject('usage_limit');
   }
 
-  // Compute effective discount (percent or flat ₹), clamped to subtotal.
+  // Compute effective discount (bxgy, flat ₹, or percent %), clamped to subtotal.
   let discountPaise = 0;
   let effectivePercent = coupon.discount_percent;
   if (input.subtotalPaise !== null) {
-    if (coupon.discount_type === 'flat' && coupon.discount_paise && coupon.discount_paise > 0) {
+    if (coupon.discount_type === 'bxgy') {
+      const itemsList = input.items ?? [];
+      discountPaise = calcBxgyDiscountPaise(
+        itemsList,
+        coupon.buy_qty || 2,
+        coupon.get_qty || 1,
+      );
+      if (
+        coupon.max_discount_paise &&
+        coupon.max_discount_paise > 0 &&
+        discountPaise > coupon.max_discount_paise
+      ) {
+        discountPaise = coupon.max_discount_paise;
+      }
+      discountPaise = Math.min(discountPaise, input.subtotalPaise);
+      effectivePercent =
+        input.subtotalPaise > 0
+          ? Math.round((discountPaise / input.subtotalPaise) * 100)
+          : 0;
+    } else if (coupon.discount_type === 'flat' && coupon.discount_paise && coupon.discount_paise > 0) {
       discountPaise = Math.min(coupon.discount_paise, input.subtotalPaise);
       effectivePercent =
         input.subtotalPaise > 0

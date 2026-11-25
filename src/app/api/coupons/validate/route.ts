@@ -32,9 +32,11 @@ export async function POST(req: NextRequest) {
     if (limited) return limited;
 
     const body = await req.json().catch(() => ({}));
-    const { code, subtotalPaise } = body as {
+    const { code, subtotalPaise, totalItems, items } = body as {
       code?: string;
       subtotalPaise?: number;
+      totalItems?: number;
+      items?: Array<{ unit_price_paise: number; quantity: number }>;
     };
 
     if (!code || typeof code !== 'string') {
@@ -56,10 +58,20 @@ export async function POST(req: NextRequest) {
         typeof subtotalPaise === 'number' && subtotalPaise >= 0
           ? subtotalPaise
           : null,
+      totalItems:
+        typeof totalItems === 'number' && totalItems >= 0
+          ? totalItems
+          : null,
+      items: Array.isArray(items) ? items : null,
       userId: user?.id ?? null,
     });
 
     if (!result.ok) {
+      const meta: Record<string, number> = {};
+      if (result.minCartPaise !== undefined) meta.minCartPaise = result.minCartPaise;
+      if (result.shortfallPaise !== undefined) meta.shortfallPaise = result.shortfallPaise;
+      if (result.minItems !== undefined) meta.minItems = result.minItems;
+      if (result.shortfallItems !== undefined) meta.shortfallItems = result.shortfallItems;
       return apiError(
         result.reason === 'not_found' || result.reason === 'inactive'
           ? 404
@@ -67,9 +79,7 @@ export async function POST(req: NextRequest) {
             ? 401
             : 403,
         result.message,
-        result.minCartPaise !== undefined
-          ? { minCartPaise: result.minCartPaise, shortfallPaise: result.shortfallPaise }
-          : undefined,
+        Object.keys(meta).length > 0 ? meta : undefined,
       );
     }
 
@@ -82,6 +92,9 @@ export async function POST(req: NextRequest) {
       discount_paise: result.discountPaise,
       new_users_only: !!result.coupon.new_users_only,
       min_cart_paise: result.coupon.min_cart_paise ?? null,
+      min_items: result.coupon.min_items ?? 0,
+      buy_qty: result.coupon.buy_qty ?? null,
+      get_qty: result.coupon.get_qty ?? null,
       max_discount_paise: result.coupon.max_discount_paise ?? null,
       expires_at: result.coupon.expires_at ?? null,
       cart_mode: result.coupon.cart_mode ?? 'manual_only',

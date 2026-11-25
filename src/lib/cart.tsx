@@ -322,7 +322,12 @@ interface CartContextType {
     code: string;
     discountPaise: number;
     discountPercent: number;
+    discountType?: 'percent' | 'flat' | 'bxgy';
+    discountPaiseFlat?: number | null;
     minCartPaise?: number | null;
+    minItems?: number | null;
+    buyQty?: number | null;
+    getQty?: number | null;
     maxDiscountPaise?: number | null;
     stackableWithPromo?: boolean;
     cartMode?: 'sync_auto' | 'manual_with_progress' | 'manual_only';
@@ -333,7 +338,12 @@ interface CartContextType {
     code: string;
     discountPaise: number;
     discountPercent: number;
+    discountType?: 'percent' | 'flat' | 'bxgy';
+    discountPaiseFlat?: number | null;
     minCartPaise?: number | null;
+    minItems?: number | null;
+    buyQty?: number | null;
+    getQty?: number | null;
     maxDiscountPaise?: number | null;
     stackableWithPromo?: boolean;
     cartMode?: 'sync_auto' | 'manual_with_progress' | 'manual_only';
@@ -406,7 +416,12 @@ export function CartProvider({ children }: { children: ReactNode }) {
     code: string;
     discountPaise: number;
     discountPercent: number;
+    discountType?: 'percent' | 'flat' | 'bxgy';
+    discountPaiseFlat?: number | null;
     minCartPaise?: number | null;
+    minItems?: number | null;
+    buyQty?: number | null;
+    getQty?: number | null;
     maxDiscountPaise?: number | null;
     stackableWithPromo?: boolean;
     cartMode?: 'sync_auto' | 'manual_with_progress' | 'manual_only';
@@ -431,7 +446,12 @@ export function CartProvider({ children }: { children: ReactNode }) {
       code: string;
       discountPaise: number;
       discountPercent: number;
+      discountType?: 'percent' | 'flat' | 'bxgy';
+      discountPaiseFlat?: number | null;
       minCartPaise?: number | null;
+      minItems?: number | null;
+      buyQty?: number | null;
+      getQty?: number | null;
       maxDiscountPaise?: number | null;
       stackableWithPromo?: boolean;
       cartMode?: 'sync_auto' | 'manual_with_progress' | 'manual_only';
@@ -935,13 +955,28 @@ export function CartProvider({ children }: { children: ReactNode }) {
       clearCoupon();
       return;
     }
+    const paidCount = items.filter((i) => !i.is_free_gift).reduce((s, i) => s + i.quantity, 0);
+    const requiredItems =
+      appliedCoupon.discountType === 'bxgy'
+        ? (appliedCoupon.buyQty ?? 2) + (appliedCoupon.getQty ?? 1)
+        : (appliedCoupon.minItems ?? 0);
+
     if (appliedCoupon.minCartPaise && totalPaise < appliedCoupon.minCartPaise) {
       const shortfallRupees = Math.ceil((appliedCoupon.minCartPaise - totalPaise) / 100).toLocaleString('en-IN');
       const code = appliedCoupon.code;
       clearCoupon();
       setCouponNotice(`${code} removed — add ₹${shortfallRupees} more to re-apply`);
+      return;
     }
-  }, [loaded, totalPaise, appliedCoupon, clearCoupon]);
+    if (requiredItems > 0 && paidCount < requiredItems) {
+      const shortfallItems = requiredItems - paidCount;
+      const code = appliedCoupon.code;
+      clearCoupon();
+      setCouponNotice(
+        `${code} removed — add ${shortfallItems} more item${shortfallItems === 1 ? '' : 's'} to re-apply`,
+      );
+    }
+  }, [loaded, totalPaise, items, appliedCoupon, clearCoupon]);
 
   const getTotal = useCallback(() => totalPaise, [totalPaise]);
 
