@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { useToast } from '@/hooks/useToast';
 
 const ACCENTS: { id: string; label: string; swatch: string }[] = [
   { id: 'royal-blue', label: 'Royal Blue', swatch: '#1F3A8A' },
@@ -93,6 +94,7 @@ function parsePositiveInt(v: string): number | null {
 }
 
 export default function AdminManualCouponsPage() {
+  const { toast, showToast } = useToast();
   const [coupons, setCoupons] = useState<Coupon[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -205,7 +207,6 @@ export default function AdminManualCouponsPage() {
 
     setSaving(true);
     setError('');
-    const supabase = createClient();
     const payload = {
       code,
       discount_type: draft.discountType,
@@ -229,26 +230,54 @@ export default function AdminManualCouponsPage() {
       stackable_with_promo: draft.stackableWithPromo,
     };
 
-    const result = editingId
-      ? await supabase.from('coupons').update(payload).eq('id', editingId)
-      : await supabase.from('coupons').insert(payload);
+    try {
+      const res = await fetch(
+        editingId ? `/api/admin/coupons/${editingId}` : '/api/admin/coupons',
+        {
+          method: editingId ? 'PATCH' : 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        },
+      );
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const msg = data?.error || 'Failed to save coupon';
+        setError(msg);
+        showToast(msg, 'error');
+        setSaving(false);
+        return;
+      }
 
-    if (result.error) {
-      setError(result.error.message || 'Failed to save coupon');
+      const wasEditing = Boolean(editingId);
+      setShowForm(false);
+      resetDraft();
       setSaving(false);
-      return;
+      showToast(wasEditing ? `Coupon ${code} updated` : `Coupon ${code} created`, 'success');
+      await fetchCoupons();
+    } catch {
+      setError('Network error while saving coupon');
+      showToast('Network error while saving coupon', 'error');
+      setSaving(false);
     }
-
-    setShowForm(false);
-    resetDraft();
-    setSaving(false);
-    await fetchCoupons();
   }
 
   async function toggleActive(id: string, current: boolean) {
-    const supabase = createClient();
-    await supabase.from('coupons').update({ is_active: !current }).eq('id', id);
-    await fetchCoupons();
+    try {
+      const res = await fetch(`/api/admin/coupons/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_active: !current }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        showToast(data?.error || 'Failed to update coupon status', 'error');
+        return;
+      }
+      showToast(!current ? 'Coupon activated' : 'Coupon deactivated', 'success');
+      await fetchCoupons();
+    } catch {
+      showToast('Network error updating coupon', 'error');
+    }
   }
 
   async function handleConfirmDelete() {
@@ -260,14 +289,18 @@ export default function AdminManualCouponsPage() {
       const data = await res.json();
       if (!res.ok) {
         setDeleteError(data?.error || 'Failed to delete coupon.');
+        showToast(data?.error || 'Failed to delete coupon.', 'error');
         setDeletePending(false);
         return;
       }
+      const deletedCode = deleting.code;
       setDeleting(null);
       setDeletePending(false);
+      showToast(`Coupon ${deletedCode} deleted`, 'success');
       await fetchCoupons();
     } catch {
       setDeleteError('Network error. Please try again.');
+      showToast('Network error deleting coupon', 'error');
       setDeletePending(false);
     }
   }
@@ -511,26 +544,39 @@ export default function AdminManualCouponsPage() {
             </div>
           </label>
 
-          <label
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 'var(--space-3)',
-              marginBottom: 'var(--space-3)',
-            }}
-          >
-            <input
-              type="checkbox"
-              checked={draft.showOnHomepage}
-              onChange={(e) => setDraft({ ...draft, showOnHomepage: e.target.checked })}
-            />
-            <div>
-              <div style={{ fontWeight: 500 }}>Show banner on homepage</div>
-              <div className="text-xs text-muted">
-                Surfaces this offer in the storefront banner.
-              </div>
-            </div>
-          </label>
+          {(() => {
+            const otherHomepageCoupon = coupons.find(
+              (c) => c.show_on_homepage && c.id !== editingId,
+            );
+            const isBlocked = Boolean(otherHomepageCoupon);
+            return (
+              <label
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 'var(--space-3)',
+                  marginBottom: 'var(--space-3)',
+                  opacity: isBlocked ? 0.55 : 1,
+                  cursor: isBlocked ? 'not-allowed' : 'pointer',
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={draft.showOnHomepage}
+                  disabled={isBlocked}
+                  onChange={(e) => setDraft({ ...draft, showOnHomepage: e.target.checked })}
+                />
+                <div>
+                  <div style={{ fontWeight: 500 }}>Show banner on homepage</div>
+                  <div className="text-xs text-muted">
+                    {otherHomepageCoupon
+                      ? `Currently active on ${otherHomepageCoupon.code} — uncheck it there first to switch.`
+                      : 'Surfaces this offer in the storefront banner.'}
+                  </div>
+                </div>
+              </label>
+            );
+          })()}
 
           {draft.showOnHomepage && (
             <div
@@ -735,6 +781,31 @@ export default function AdminManualCouponsPage() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+      {toast && (
+        <div
+          role="status"
+          aria-live="polite"
+          style={{
+            position: 'fixed',
+            top: 20,
+            right: 20,
+            zIndex: 9999,
+            padding: '12px 18px',
+            borderRadius: 10,
+            fontSize: '0.8125rem',
+            fontWeight: 700,
+            color: '#FFFFFF',
+            background: toast.type === 'error' ? '#DC2626' : '#059669',
+            boxShadow: '0 10px 25px rgba(0,0,0,0.28)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+          }}
+        >
+          <span>{toast.type === 'error' ? '✕' : '✓'}</span>
+          <span>{toast.message}</span>
         </div>
       )}
     </div>

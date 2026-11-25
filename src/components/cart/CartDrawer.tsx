@@ -844,6 +844,10 @@ export default function CartDrawer() {
                                 paidCount,
                               );
                               const shortfallText = formatShortfallMessage(shortfallPaise, shortfallItems);
+                              const chipSavingsPaise = isEligible
+                                ? calcCouponDiscountPaise(c, totalPaise, items)
+                                : 0;
+                              const chipPayablePaise = Math.max(0, totalPaise - chipSavingsPaise);
 
                               return (
                                 <div
@@ -884,6 +888,17 @@ export default function CartDrawer() {
                                       </button>
                                     )}
                                   </div>
+                                  {!isApplied && isEligible && chipSavingsPaise > 0 && (
+                                    <span
+                                      style={{
+                                        fontSize: '0.7rem',
+                                        fontWeight: 600,
+                                        color: 'var(--success, #059669)',
+                                      }}
+                                    >
+                                      Save {formatPaise(chipSavingsPaise)} → Pay {formatPaise(chipPayablePaise)}
+                                    </span>
+                                  )}
                                   {!isApplied && !isEligible && shortfallText && (
                                     <span className={styles.couponShortfall}>
                                       Add {shortfallText} to unlock

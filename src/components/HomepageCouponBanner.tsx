@@ -33,9 +33,13 @@ const ACCENT_COLORS: Record<string, { bg: string; fg: string; border: string }> 
 
 interface BannerCoupon {
   code: string;
+  discount_type?: 'percent' | 'flat' | 'bxgy' | null;
   discount_percent: number;
+  discount_paise?: number | null;
   homepage_text: string | null;
   homepage_accent: string | null;
+  starts_at?: string | null;
+  expires_at?: string | null;
 }
 
 export default function HomepageCouponBanner() {
@@ -44,17 +48,24 @@ export default function HomepageCouponBanner() {
   useEffect(() => {
     let cancelled = false;
     const supabase = createClient();
+    const nowIso = new Date().toISOString();
     supabase
       .from('coupons')
-      .select('code, discount_percent, homepage_text, homepage_accent')
+      .select(
+        'code, discount_type, discount_percent, discount_paise, homepage_text, homepage_accent, starts_at, expires_at',
+      )
       .eq('is_active', true)
       .eq('show_on_homepage', true)
       .order('updated_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
+      .limit(5)
       .then(({ data }) => {
-        if (cancelled) return;
-        if (data) setBanner(data as BannerCoupon);
+        if (cancelled || !data) return;
+        const valid = (data as BannerCoupon[]).find((c) => {
+          if (c.starts_at && c.starts_at > nowIso) return false;
+          if (c.expires_at && c.expires_at <= nowIso) return false;
+          return true;
+        });
+        if (valid) setBanner(valid);
       });
 
     return () => {
@@ -66,9 +77,14 @@ export default function HomepageCouponBanner() {
 
   const accent = ACCENT_COLORS[banner.homepage_accent ?? 'default'] ?? ACCENT_COLORS.default;
 
+  const defaultOffer =
+    banner.discount_type === 'flat' && banner.discount_paise
+      ? `₹${Math.round(banner.discount_paise / 100).toLocaleString('en-IN')} off`
+      : `${banner.discount_percent}% off`;
+
   const text =
     (banner.homepage_text && banner.homepage_text.trim()) ||
-    `Use code ${banner.code} for ${banner.discount_percent}% off`;
+    `Use code ${banner.code} for ${defaultOffer}`;
 
   return (
     <div

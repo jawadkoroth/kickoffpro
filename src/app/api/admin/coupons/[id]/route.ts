@@ -36,6 +36,55 @@ async function gateAdmin() {
   return { ok: true as const, admin, adminId: user.id };
 }
 
+export async function PATCH(
+  req: NextRequest,
+  context: { params: Promise<{ id: string }> },
+) {
+  const gate = await gateAdmin();
+  if (!gate.ok) return apiError(gate.status, gate.message);
+
+  const { id } = await context.params;
+  if (!id || !/^[0-9a-f-]{8,}$/i.test(id)) {
+    return apiError(400, 'Invalid coupon id');
+  }
+
+  const body = await req.json().catch(() => null);
+  if (!body || typeof body !== 'object') {
+    return apiError(400, 'Invalid JSON body');
+  }
+
+  const payload = body as Record<string, unknown>;
+  if (payload.show_on_homepage === true) {
+    const { data: existingHomepage } = await gate.admin
+      .from('coupons')
+      .select('id, code')
+      .eq('show_on_homepage', true)
+      .neq('id', id)
+      .limit(1)
+      .maybeSingle();
+
+    if (existingHomepage) {
+      return apiError(
+        409,
+        `Homepage banner is currently active on ${existingHomepage.code} — uncheck it there first to switch.`,
+      );
+    }
+  }
+
+  const { data, error } = await gate.admin
+    .from('coupons')
+    .update(payload)
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error) {
+    return apiError(400, error.message || 'Failed to update coupon');
+  }
+
+  return apiSuccess({ coupon: data });
+}
+
 export async function DELETE(
   _req: NextRequest,
   context: { params: Promise<{ id: string }> },

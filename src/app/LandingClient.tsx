@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import ProductCard, { ProductCardData } from '@/components/ProductCard';
+import HomepageCouponBanner from '@/components/HomepageCouponBanner';
 import { 
   Truck, 
   ShieldCheck, 
@@ -169,7 +170,8 @@ export default function LandingClient({ products }: LandingClientProps) {
 
   return (
     <main className={styles.page}>
-      
+      <HomepageCouponBanner />
+
       {/* SECTION 1: WORLD CUP HERO */}
       <section className={styles.hero}>
         <div className={styles.heroBackground}>

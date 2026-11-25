@@ -169,7 +169,7 @@ function ToggleRow({
 }
 
 export default function AdminAutoOffersPage() {
-  const { showToast } = useToast();
+  const { toast, showToast } = useToast();
   const [state, setState] = useState<AutoOfferState>(EMPTY_STATE);
   const [promoThresholdRs, setPromoThresholdRs] = useState('999');
   const [storeProducts, setStoreProducts] = useState<
@@ -840,6 +840,32 @@ export default function AdminAutoOffersPage() {
           SAVE AUTO OFFERS
         </button>
       </div>
+
+      {toast && (
+        <div
+          role="status"
+          aria-live="polite"
+          style={{
+            position: 'fixed',
+            top: 20,
+            right: 20,
+            zIndex: 9999,
+            padding: '12px 18px',
+            borderRadius: 10,
+            fontSize: '0.8125rem',
+            fontWeight: 700,
+            color: '#FFFFFF',
+            background: toast.type === 'error' ? '#DC2626' : '#059669',
+            boxShadow: '0 10px 25px rgba(0,0,0,0.28)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+          }}
+        >
+          <span>{toast.type === 'error' ? '✕' : '✓'}</span>
+          <span>{toast.message}</span>
+        </div>
+      )}
     </div>
   );
 }
