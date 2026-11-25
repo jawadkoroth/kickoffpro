@@ -27,11 +27,14 @@ export type CouponRejectReason =
   | 'auth_required';
 
 export type CouponCartMode = 'sync_auto' | 'manual_with_progress' | 'manual_only';
+export type CouponDiscountType = 'percent' | 'flat';
 
 export interface CouponRow {
   id: string;
   code: string;
+  discount_type?: CouponDiscountType | null;
   discount_percent: number;
+  discount_paise?: number | null;
   is_active: boolean;
   new_users_only?: boolean | null;
   min_cart_paise?: number | null;
@@ -114,7 +117,7 @@ export async function evaluateCoupon(
   const { data, error } = await supabase
     .from('coupons')
     .select(
-      'id, code, discount_percent, is_active, new_users_only, min_cart_paise, max_discount_paise, starts_at, expires_at, per_user_limit, usage_limit, cart_mode, stackable_with_promo',
+      'id, code, discount_type, discount_percent, discount_paise, is_active, new_users_only, min_cart_paise, max_discount_paise, starts_at, expires_at, per_user_limit, usage_limit, cart_mode, stackable_with_promo',
     )
     .eq('code', code)
     .maybeSingle();
@@ -146,10 +149,14 @@ export async function evaluateCoupon(
   ) {
     const shortfallPaise = coupon.min_cart_paise - input.subtotalPaise;
     const shortfallRupees = Math.ceil(shortfallPaise / 100).toLocaleString('en-IN');
+    const offerLabel =
+      coupon.discount_type === 'flat' && coupon.discount_paise
+        ? `₹${Math.round(coupon.discount_paise / 100).toLocaleString('en-IN')} OFF`
+        : `${coupon.discount_percent}% OFF`;
     return {
       ok: false,
       reason: 'min_cart',
-      message: `Add ₹${shortfallRupees} more to unlock ${coupon.code} (${coupon.discount_percent}% OFF)`,
+      message: `Add ₹${shortfallRupees} more to unlock ${coupon.code} (${offerLabel})`,
       minCartPaise: coupon.min_cart_paise,
       shortfallPaise,
     };
@@ -205,26 +212,31 @@ export async function evaluateCoupon(
     if ((globalUsed ?? 0) >= coupon.usage_limit) return reject('usage_limit');
   }
 
-  // Compute effective discount. We only apply the cap when we
-  // actually have a subtotal to project against.
+  // Compute effective discount (percent or flat ₹), clamped to subtotal.
   let discountPaise = 0;
   let effectivePercent = coupon.discount_percent;
   if (input.subtotalPaise !== null) {
-    discountPaise = Math.round(
-      (input.subtotalPaise * coupon.discount_percent) / 100,
-    );
-    if (
-      coupon.max_discount_paise &&
-      coupon.max_discount_paise > 0 &&
-      discountPaise > coupon.max_discount_paise
-    ) {
-      discountPaise = coupon.max_discount_paise;
-      // Recompute the effective percent so callers can display a
-      // honest "you saved X% (capped)" line if they want.
+    if (coupon.discount_type === 'flat' && coupon.discount_paise && coupon.discount_paise > 0) {
+      discountPaise = Math.min(coupon.discount_paise, input.subtotalPaise);
       effectivePercent =
         input.subtotalPaise > 0
           ? Math.round((discountPaise / input.subtotalPaise) * 100)
           : 0;
+    } else {
+      discountPaise = Math.round(
+        (input.subtotalPaise * coupon.discount_percent) / 100,
+      );
+      if (
+        coupon.max_discount_paise &&
+        coupon.max_discount_paise > 0 &&
+        discountPaise > coupon.max_discount_paise
+      ) {
+        discountPaise = coupon.max_discount_paise;
+        effectivePercent =
+          input.subtotalPaise > 0
+            ? Math.round((discountPaise / input.subtotalPaise) * 100)
+            : 0;
+      }
     }
   }
 

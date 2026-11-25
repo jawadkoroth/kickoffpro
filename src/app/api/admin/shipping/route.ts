@@ -86,6 +86,7 @@ const READ_COLUMNS = [
   'default_shipping_charge_paise',
   'cod_enabled',
   'cod_fee_paise',
+  'magic_cart_mode',
   'promo_banner_enabled',
   'promo_goal_type',
   'promo_goal_threshold_paise',
@@ -294,6 +295,14 @@ export async function PATCH(req: NextRequest) {
   }
 
   // Promotional Drawer & Banner customization
+  if (typeof (body as any).magic_cart_mode === 'string') {
+    const mode = (body as any).magic_cart_mode;
+    if (mode === 'off' || mode === 'free_shipping' || mode === 'coupon_goal') {
+      update.magic_cart_mode = mode;
+      update.promo_banner_enabled = mode !== 'off';
+      update.promo_reward_type = 'free_shipping';
+    }
+  }
   if (typeof (body as any).promo_banner_enabled === 'boolean') {
     update.promo_banner_enabled = (body as any).promo_banner_enabled;
   }

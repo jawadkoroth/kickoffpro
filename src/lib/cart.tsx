@@ -24,6 +24,7 @@ export interface ShippingSettingsSummary {
   default_shipping_charge_paise: number;
   cod_fee_paise: number;
   cod_enabled: boolean;
+  magic_cart_mode?: 'off' | 'free_shipping' | 'coupon_goal';
   promo_banner_enabled: boolean;
   promo_goal_type: 'amount' | 'item_count';
   promo_goal_threshold_paise: number;
@@ -95,6 +96,7 @@ export const DEFAULT_SHIPPING_SETTINGS: ShippingSettingsSummary = {
   default_shipping_charge_paise: 9900,
   cod_fee_paise: 5000,
   cod_enabled: true,
+  magic_cart_mode: 'free_shipping',
   promo_banner_enabled: true,
   promo_goal_type: 'amount',
   promo_goal_threshold_paise: 99900,
@@ -160,6 +162,9 @@ export function computePromoProgress(
 
   const nudgeBadge = settings.promo_nudge_badge || 'LOWEST PRICE';
 
+  const isBannerEnabled =
+    settings.magic_cart_mode ? settings.magic_cart_mode !== 'off' : settings.promo_banner_enabled !== false;
+
   return {
     thresholdPaise,
     hasFreeShipping,
@@ -178,7 +183,13 @@ export function computePromoProgress(
     remainingGoalPaise: autoOffer.remainingGoalPaise,
     remainingGoalItems: autoOffer.remainingGoalItems,
     goalProgressPercent: autoOffer.goalProgressPercent,
-    autoDiscountPaise: autoOffer.autoDiscountPaise,
+    // Coupons in /admin/coupons are the single source of truth for all discounts
+    autoDiscountPaise:
+      settings.magic_cart_mode === 'off' ||
+      settings.magic_cart_mode === 'free_shipping' ||
+      settings.magic_cart_mode === 'coupon_goal'
+        ? 0
+        : autoOffer.autoDiscountPaise,
     discountedItemKeys: autoOffer.discountedItemKeys,
     inProgressMessage: autoOffer.inProgressMessage,
     unlockedMessage: autoOffer.unlockedMessage,
@@ -186,7 +197,7 @@ export function computePromoProgress(
     nudgeTitle,
     nudgeText,
     nudgeBadge,
-    isBannerVisible: settings.promo_banner_enabled !== false,
+    isBannerVisible: isBannerEnabled,
     isNudgeVisible: settings.promo_nudge_enabled !== false,
   };
 }
@@ -476,6 +487,14 @@ export function CartProvider({ children }: { children: ReactNode }) {
             default_shipping_charge_paise: toNum(payload.default_shipping_charge_paise, 9900),
             cod_fee_paise: toNum(payload.cod_fee_paise, 5000),
             cod_enabled: payload.cod_enabled !== false,
+            magic_cart_mode:
+              payload.magic_cart_mode === 'off' ||
+              payload.magic_cart_mode === 'free_shipping' ||
+              payload.magic_cart_mode === 'coupon_goal'
+                ? payload.magic_cart_mode
+                : payload.promo_banner_enabled === false
+                  ? 'off'
+                  : 'free_shipping',
             promo_banner_enabled: payload.promo_banner_enabled !== false,
             promo_goal_type: payload.promo_goal_type === 'item_count' ? 'item_count' : 'amount',
             promo_goal_threshold_paise: toNum(payload.promo_goal_threshold_paise, freeThresh),

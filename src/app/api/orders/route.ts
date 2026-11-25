@@ -174,7 +174,7 @@ async function handlePOST(req: NextRequest) {
       supabase
         .from('shipping_settings')
         .select(
-          'free_shipping_threshold_paise, default_shipping_charge_paise, cod_enabled, cod_fee_paise, promo_banner_enabled, promo_reward_type, promo_goal_type, promo_goal_threshold_paise, promo_goal_item_count, reward_percentage, reward_product_id, buy_x_quantity, get_y_quantity',
+          'free_shipping_threshold_paise, default_shipping_charge_paise, cod_enabled, cod_fee_paise, magic_cart_mode, promo_banner_enabled, promo_reward_type, promo_goal_type, promo_goal_threshold_paise, promo_goal_item_count, reward_percentage, reward_product_id, buy_x_quantity, get_y_quantity',
         )
         .limit(1)
         .maybeSingle(),
@@ -274,10 +274,14 @@ async function handlePOST(req: NextRequest) {
       }
     }
 
-    // 7. Server-authoritative shipping + COD fee + auto-offers.
-    // Mutual exclusivity: if a non-stackable coupon is applied, never also apply
-    // the promotional Reward Discount (prevents 20% + 20% = 40% double-dipping).
-    if (!appliedCoupon || stackableWithPromo) {
+    // 7. Server-authoritative shipping + COD fee.
+    // Mutual exclusivity & single source of truth: /admin/coupons owns all discounts.
+    // Legacy shipping_settings auto-offers only fire if magic_cart_mode is unset/legacy.
+    const magicMode = (shippingSettings as { magic_cart_mode?: string } | null)?.magic_cart_mode;
+    const allowLegacyShippingPromo =
+      magicMode !== 'off' && magicMode !== 'free_shipping' && magicMode !== 'coupon_goal';
+
+    if (allowLegacyShippingPromo && (!appliedCoupon || stackableWithPromo)) {
       const autoOffer = calcAutoOfferDiscount(
         shippingSettings,
         subtotal,

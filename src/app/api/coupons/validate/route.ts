@@ -75,7 +75,9 @@ export async function POST(req: NextRequest) {
 
     return apiSuccess({
       code: result.coupon.code,
+      discount_type: result.coupon.discount_type ?? 'percent',
       discount_percent: result.coupon.discount_percent,
+      discount_paise_flat: result.coupon.discount_paise ?? null,
       effective_percent: result.effectivePercent,
       discount_paise: result.discountPaise,
       new_users_only: !!result.coupon.new_users_only,

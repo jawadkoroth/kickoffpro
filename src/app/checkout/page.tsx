@@ -158,7 +158,9 @@ function CheckoutContent() {
     Array<{
       id: string;
       code: string;
+      discount_type?: 'percent' | 'flat';
       discount_percent: number;
+      discount_paise?: number | null;
       min_cart_paise?: number | null;
       min_order_paise?: number | null;
       cart_mode?: string;
@@ -405,6 +407,19 @@ function CheckoutContent() {
       })
       .catch(() => {});
   }, []);
+
+  // Auto-apply sync_auto coupon on /checkout if eligible and no manual coupon is entered
+  useEffect(() => {
+    if (couponCode || preDiscountSubtotal <= 0 || checkoutActiveCoupons.length === 0) return;
+    const syncCoupon = checkoutActiveCoupons.find((c) => c.cart_mode === 'sync_auto');
+    if (syncCoupon) {
+      const minReq = syncCoupon.min_cart_paise ?? syncCoupon.min_order_paise ?? 0;
+      if (preDiscountSubtotal >= minReq) {
+        setCouponInput(syncCoupon.code);
+        setCouponCode(syncCoupon.code);
+      }
+    }
+  }, [couponCode, preDiscountSubtotal, checkoutActiveCoupons]);
 
   const nextOfferNudge = useMemo(() => {
     if (preDiscountSubtotal <= 0 || checkoutActiveCoupons.length === 0) return null;
@@ -1211,7 +1226,11 @@ function CheckoutContent() {
                 {nextOfferNudge.eligible ? (
                   <>
                     <span>
-                      Offer unlocked: <strong>{nextOfferNudge.coupon.code}</strong> ({nextOfferNudge.coupon.discount_percent}% OFF)
+                      Offer unlocked: <strong>{nextOfferNudge.coupon.code}</strong> (
+                      {nextOfferNudge.coupon.discount_type === 'flat' && nextOfferNudge.coupon.discount_paise
+                        ? `₹${Math.round(nextOfferNudge.coupon.discount_paise / 100).toLocaleString('en-IN')} OFF`
+                        : `${nextOfferNudge.coupon.discount_percent}% OFF`}
+                      )
                     </span>
                     <button
                       type="button"
@@ -1239,8 +1258,13 @@ function CheckoutContent() {
                     <strong>
                       ₹{Math.ceil(nextOfferNudge.shortfallPaise / 100).toLocaleString('en-IN')}
                     </strong>{' '}
-                    away from <strong>{nextOfferNudge.coupon.discount_percent}% OFF</strong> with{' '}
-                    <strong>{nextOfferNudge.coupon.code}</strong>
+                    away from{' '}
+                    <strong>
+                      {nextOfferNudge.coupon.discount_type === 'flat' && nextOfferNudge.coupon.discount_paise
+                        ? `₹${Math.round(nextOfferNudge.coupon.discount_paise / 100).toLocaleString('en-IN')} OFF`
+                        : `${nextOfferNudge.coupon.discount_percent}% OFF`}
+                    </strong>{' '}
+                    with <strong>{nextOfferNudge.coupon.code}</strong>
                   </span>
                 )}
               </div>

@@ -39,12 +39,36 @@ interface UpsellProduct {
 interface ActiveCoupon {
   id: string;
   code: string;
+  discount_type?: 'percent' | 'flat';
   discount_percent: number;
+  discount_paise?: number | null;
   min_cart_paise?: number | null;
   min_order_paise?: number | null;
   max_discount_paise?: number | null;
   cart_mode?: 'sync_auto' | 'manual_with_progress' | 'manual_only';
   stackable_with_promo?: boolean;
+}
+
+function formatCouponOfferLabel(c: Pick<ActiveCoupon, 'discount_type' | 'discount_percent' | 'discount_paise'>): string {
+  if (c.discount_type === 'flat' && c.discount_paise && c.discount_paise > 0) {
+    return `₹${Math.round(c.discount_paise / 100).toLocaleString('en-IN')} OFF`;
+  }
+  return `${c.discount_percent}% OFF`;
+}
+
+function calcCouponDiscountPaise(
+  c: Pick<ActiveCoupon, 'discount_type' | 'discount_percent' | 'discount_paise' | 'max_discount_paise'>,
+  subtotalPaise: number,
+): number {
+  if (subtotalPaise <= 0) return 0;
+  if (c.discount_type === 'flat' && c.discount_paise && c.discount_paise > 0) {
+    return Math.min(c.discount_paise, subtotalPaise);
+  }
+  let disc = Math.round((subtotalPaise * c.discount_percent) / 100);
+  if (c.max_discount_paise && c.max_discount_paise > 0 && disc > c.max_discount_paise) {
+    disc = c.max_discount_paise;
+  }
+  return Math.min(disc, subtotalPaise);
 }
 
 export default function CartDrawer() {
@@ -119,14 +143,12 @@ export default function CartDrawer() {
   const couponDiscountPaise = useMemo(() => {
     if (!FEATURE_FLAGS.CART_COUPONS || !appliedCoupon || totalPaise <= 0) return 0;
     const match = activeCoupons.find((c) => c.code === appliedCoupon.code);
-    if (match?.min_cart_paise && totalPaise < match.min_cart_paise) {
-      return 0;
+    if (match) {
+      const minReq = match.min_cart_paise ?? match.min_order_paise ?? 0;
+      if (minReq > 0 && totalPaise < minReq) return 0;
+      return calcCouponDiscountPaise(match, totalPaise);
     }
-    let disc = Math.round((totalPaise * appliedCoupon.discountPercent) / 100);
-    if (match?.max_discount_paise && disc > match.max_discount_paise) {
-      disc = match.max_discount_paise;
-    }
-    return Math.min(disc, totalPaise);
+    return Math.min(appliedCoupon.discountPaise || Math.round((totalPaise * appliedCoupon.discountPercent) / 100), totalPaise);
   }, [appliedCoupon, activeCoupons, totalPaise]);
 
   // Visible cross-sell recommendations (not already in cart, with stock > 0, max 2 items)
@@ -182,11 +204,9 @@ export default function CartDrawer() {
     if (syncCoupon && totalPaise > 0) {
       const minReq = syncCoupon.min_cart_paise ?? syncCoupon.min_order_paise ?? 0;
       if (totalPaise >= minReq) {
-        const disc = Math.round((totalPaise * syncCoupon.discount_percent) / 100);
-        const capped = syncCoupon.max_discount_paise ? Math.min(disc, syncCoupon.max_discount_paise) : disc;
         applyCoupon({
           code: syncCoupon.code,
-          discountPaise: Math.min(capped, totalPaise),
+          discountPaise: calcCouponDiscountPaise(syncCoupon, totalPaise),
           discountPercent: syncCoupon.discount_percent,
           minCartPaise: syncCoupon.min_cart_paise ?? null,
           maxDiscountPaise: syncCoupon.max_discount_paise ?? null,
@@ -206,8 +226,18 @@ export default function CartDrawer() {
     return promoProgress.autoDiscountPaise;
   }, [couponDiscountPaise, appliedCoupon, promoProgress.autoDiscountPaise]);
 
-  // Single unified progress bar (Safeguard #2: never render two stacked progress bars)
+  // Single unified progress bar (respects /admin/coupons Section A master mode)
   const unifiedProgress = useMemo(() => {
+    if (items.length === 0 || shippingSettings.magic_cart_mode === 'off') {
+      return {
+        visible: false,
+        unlocked: false,
+        percent: 0,
+        message: '',
+        iconType: 'free_shipping' as const,
+      };
+    }
+
     const paidCount = items
       .filter((i) => !i.is_free_gift)
       .reduce((sum, i) => sum + i.quantity, 0);
@@ -221,23 +251,24 @@ export default function CartDrawer() {
         )
       : undefined;
 
-    if (progressCoupon && items.length > 0) {
+    if (progressCoupon) {
       const targetPaise = progressCoupon.min_cart_paise ?? progressCoupon.min_order_paise ?? 0;
       const shortfallPaise = Math.max(0, targetPaise - totalPaise);
       const percent = targetPaise > 0 ? Math.min(100, Math.round((totalPaise / targetPaise) * 100)) : 100;
       const unlocked = shortfallPaise === 0;
       const shortfallRupees = Math.ceil(shortfallPaise / 100).toLocaleString('en-IN');
+      const offerLabel = formatCouponOfferLabel(progressCoupon);
 
       let message = '';
       if (!unlocked) {
         message =
           progressCoupon.cart_mode === 'sync_auto'
-            ? `Add ₹${shortfallRupees} more to auto-apply ${progressCoupon.code} (${progressCoupon.discount_percent}% OFF)`
-            : `Add ₹${shortfallRupees} more to unlock ${progressCoupon.code} (${progressCoupon.discount_percent}% OFF)`;
+            ? `Add ₹${shortfallRupees} more to auto-apply ${progressCoupon.code} (${offerLabel})`
+            : `Add ₹${shortfallRupees} more to unlock ${progressCoupon.code} (${offerLabel})`;
       } else if (progressCoupon.cart_mode === 'sync_auto' || appliedCoupon?.code === progressCoupon.code) {
-        message = `${progressCoupon.code} (${progressCoupon.discount_percent}% OFF) applied!`;
+        message = `${progressCoupon.code} (${offerLabel}) applied!`;
       } else {
-        message = `${progressCoupon.code} (${progressCoupon.discount_percent}% OFF) unlocked — click Apply below!`;
+        message = `${progressCoupon.code} (${offerLabel}) unlocked — click Apply below!`;
       }
 
       return {
@@ -247,6 +278,24 @@ export default function CartDrawer() {
         message,
         iconType: 'threshold_percentage' as const,
       };
+    }
+
+    if (shippingSettings.magic_cart_mode === 'free_shipping') {
+      const freeThresh = shippingSettings.free_shipping_threshold_paise || 0;
+      if (freeThresh > 0) {
+        const shortfall = Math.max(0, freeThresh - totalPaise);
+        const unlocked = shortfall === 0;
+        const percent = Math.min(100, Math.round((totalPaise / freeThresh) * 100));
+        return {
+          visible: true,
+          unlocked,
+          percent,
+          message: unlocked
+            ? 'You unlocked FREE Standard Shipping!'
+            : `Add ${formatPaise(shortfall)} more to unlock FREE SHIPPING`,
+          iconType: 'free_shipping' as const,
+        };
+      }
     }
 
     if (FEATURE_FLAGS.CART_PACK_BAR) {
@@ -296,7 +345,7 @@ export default function CartDrawer() {
         : promoProgress.inProgressMessage,
       iconType: promoProgress.promoRewardType,
     };
-  }, [items, promoProgress, activeCoupons, totalPaise, appliedCoupon?.code]);
+  }, [items, promoProgress, activeCoupons, totalPaise, appliedCoupon?.code, shippingSettings.magic_cart_mode, shippingSettings.free_shipping_threshold_paise]);
 
   const handleApplyCouponChip = async (coupon: ActiveCoupon) => {
     setCouponError('');
@@ -304,14 +353,12 @@ export default function CartDrawer() {
     const minReq = coupon.min_cart_paise ?? coupon.min_order_paise ?? 0;
     if (minReq > 0 && totalPaise < minReq) {
       const shortfallRupees = Math.ceil((minReq - totalPaise) / 100).toLocaleString('en-IN');
-      setCouponError(`Add ₹${shortfallRupees} more to unlock ${coupon.code} (${coupon.discount_percent}% OFF)`);
+      setCouponError(`Add ₹${shortfallRupees} more to unlock ${coupon.code} (${formatCouponOfferLabel(coupon)})`);
       return;
     }
-    const disc = Math.round((totalPaise * coupon.discount_percent) / 100);
-    const capped = coupon.max_discount_paise ? Math.min(disc, coupon.max_discount_paise) : disc;
     applyCoupon({
       code: coupon.code,
-      discountPaise: Math.min(capped, totalPaise),
+      discountPaise: calcCouponDiscountPaise(coupon, totalPaise),
       discountPercent: coupon.discount_percent,
       minCartPaise: coupon.min_cart_paise ?? null,
       maxDiscountPaise: coupon.max_discount_paise ?? null,
@@ -711,7 +758,7 @@ export default function CartDrawer() {
                                 >
                                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', justifyContent: 'space-between' }}>
                                     <span>
-                                      <strong>{c.code}</strong> ({c.discount_percent}% OFF)
+                                      <strong>{c.code}</strong> ({formatCouponOfferLabel(c)})
                                     </span>
                                     {isApplied ? (
                                       <button

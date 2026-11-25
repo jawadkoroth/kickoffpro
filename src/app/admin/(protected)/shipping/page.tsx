@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import Link from 'next/link';
 import { useToast } from '@/hooks/useToast';
 
 /* ─────────────────────────────────────────────────────────────────────
@@ -40,7 +41,7 @@ interface SettingsState {
   get_y_quantity: number;
 }
 
-type Tab = 'providers' | 'promotions' | 'cod' | 'diagnostics';
+type Tab = 'providers' | 'cod' | 'diagnostics';
 
 /* ─────────────────────────────────────────────────────────────────────
    Constants
@@ -200,8 +201,7 @@ function CapPill({ label, active }: { label: string; active: boolean }) {
 ───────────────────────────────────────────────────────────────────── */
 const TABS: { id: Tab; label: string }[] = [
   { id: 'providers', label: 'Providers' },
-  { id: 'promotions', label: 'Rules & Offers' },
-  { id: 'cod', label: 'COD' },
+  { id: 'cod', label: 'Shipping & COD' },
   { id: 'diagnostics', label: 'Diagnostics' },
 ];
 
@@ -1126,10 +1126,12 @@ function RulesAndOffersTab({
 }
 
 function CodTab({
-  state, onStateChange, codFeeRs, setCodFeeRs, errors, onSave, saving,
+  state, onStateChange, freeThresholdRs, setFreeThresholdRs, shippingChargeRs, setShippingChargeRs, codFeeRs, setCodFeeRs, errors, onSave, saving,
 }: {
   state: SettingsState;
   onStateChange: (patch: Partial<SettingsState>) => void;
+  freeThresholdRs: string; setFreeThresholdRs: (v: string) => void;
+  shippingChargeRs: string; setShippingChargeRs: (v: string) => void;
   codFeeRs: string; setCodFeeRs: (v: string) => void;
   errors: Record<string, string>; onSave: () => void; saving: boolean;
 }) {
@@ -1139,8 +1141,26 @@ function CodTab({
     <div>
       <div style={{ marginBottom: 24 }}>
         <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: 0, lineHeight: 1.6 }}>
-          Cash on Delivery policy. These controls apply globally to all orders and are provider-independent.
+          Shipping rates, free-shipping threshold, and Cash on Delivery policy. These logistics controls apply globally to all orders.
         </p>
+      </div>
+
+      {/* Base Shipping & Free Shipping Threshold */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, marginBottom: 24 }}>
+        <Field label="Base shipping charge (₹)" hint="Applied below free-shipping threshold" error={errors.default_shipping_charge_paise}>
+          <input
+            className={`input-field${errors.default_shipping_charge_paise ? ' input-error' : ''}`}
+            type="number" min={0} step={1} placeholder="99"
+            value={shippingChargeRs} onChange={(e) => setShippingChargeRs(e.target.value)}
+          />
+        </Field>
+        <Field label="Free shipping threshold (₹)" hint="0 = never free" error={errors.free_shipping_threshold_paise}>
+          <input
+            className={`input-field${errors.free_shipping_threshold_paise ? ' input-error' : ''}`}
+            type="number" min={0} step={1} placeholder="999"
+            value={freeThresholdRs} onChange={(e) => setFreeThresholdRs(e.target.value)}
+          />
+        </Field>
       </div>
 
       {/* Status preview */}
@@ -1717,6 +1737,28 @@ export default function AdminShipping() {
       </div>
 
       {/* Tab bar */}
+      <div
+        style={{
+          marginBottom: 20,
+          padding: '10px 14px',
+          borderRadius: 'var(--radius-sm)',
+          background: 'var(--bg-input)',
+          border: '1px solid var(--border-color)',
+          fontSize: '0.8125rem',
+          color: 'var(--text-secondary)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+          flexWrap: 'wrap',
+        }}
+      >
+        <span>Looking for discounts or Magic Cart progress bar offers?</span>
+        <Link href="/admin/coupons" style={{ color: 'var(--brand-blue)', fontWeight: 700, textDecoration: 'none' }}>
+          Manage them in Coupons →
+        </Link>
+      </div>
+
       <TabBar active={activeTab} onChange={setActiveTab} />
 
       {/* Tab content — constrained to 600px for form readability on desktop */}
@@ -1732,27 +1774,14 @@ export default function AdminShipping() {
             saving={saving}
           />
         )}
-        {activeTab === 'promotions' && (
-          <RulesAndOffersTab
+        {activeTab === 'cod' && (
+          <CodTab
             state={state}
             onStateChange={(patch) => setState((s) => ({ ...s, ...patch }))}
             freeThresholdRs={freeThresholdRs}
             setFreeThresholdRs={setFreeThresholdRs}
             shippingChargeRs={shippingChargeRs}
             setShippingChargeRs={setShippingChargeRs}
-            promoThresholdRs={promoThresholdRs}
-            setPromoThresholdRs={setPromoThresholdRs}
-            codFeeRs={codFeeRs}
-            storeProducts={storeProducts}
-            errors={errors}
-            onSave={handleSave}
-            saving={saving}
-          />
-        )}
-        {activeTab === 'cod' && (
-          <CodTab
-            state={state}
-            onStateChange={(patch) => setState((s) => ({ ...s, ...patch }))}
             codFeeRs={codFeeRs} setCodFeeRs={setCodFeeRs}
             errors={errors} onSave={handleSave} saving={saving}
           />

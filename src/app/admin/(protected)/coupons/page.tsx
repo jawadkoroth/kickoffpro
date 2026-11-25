@@ -28,17 +28,15 @@ const ACCENTS: { id: string; label: string; swatch: string }[] = [
 ];
 
 type CouponCartMode = 'sync_auto' | 'manual_with_progress' | 'manual_only';
-
-const CART_MODE_LABELS: Record<CouponCartMode, string> = {
-  sync_auto: 'Sync with Magic Cart Automation',
-  manual_with_progress: 'Separate Manual Code + Progress Bar',
-  manual_only: 'Normal Manual Coupon',
-};
+type CouponDiscountType = 'percent' | 'flat';
+type MagicCartMode = 'off' | 'free_shipping' | 'coupon_goal';
 
 interface Coupon {
   id: string;
   code: string;
+  discount_type: CouponDiscountType;
   discount_percent: number;
+  discount_paise: number | null;
   is_active: boolean;
   new_users_only: boolean;
   show_on_homepage: boolean;
@@ -57,7 +55,10 @@ interface Coupon {
 
 interface DraftState {
   code: string;
+  discountType: CouponDiscountType;
   percent: string;
+  flatRupees: string;
+  isActive: boolean;
   newUsersOnly: boolean;
   showOnHomepage: boolean;
   homepageText: string;
@@ -76,7 +77,10 @@ interface DraftState {
 
 const EMPTY_DRAFT: DraftState = {
   code: '',
+  discountType: 'percent',
   percent: '',
+  flatRupees: '',
+  isActive: true,
   newUsersOnly: false,
   showOnHomepage: false,
   homepageText: '',
@@ -128,20 +132,95 @@ export default function AdminCoupons() {
   const [deletePending, setDeletePending] = useState(false);
   const [deleteError, setDeleteError] = useState('');
 
+  // Section A: Master Magic Cart Progress Bar state
+  const [magicMode, setMagicMode] = useState<MagicCartMode>('free_shipping');
+  const [freeShipThresholdPaise, setFreeShipThresholdPaise] = useState<number>(99900);
+  const [goalCouponId, setGoalCouponId] = useState<string>('');
+  const [goalApplyStyle, setGoalApplyStyle] = useState<'sync_auto' | 'manual_with_progress'>('sync_auto');
+  const [savingMagic, setSavingMagic] = useState(false);
+  const [magicMsg, setMagicMsg] = useState('');
+
   useEffect(() => {
     fetchCoupons();
+    fetchShippingMagicSettings();
   }, []);
+
+  async function fetchShippingMagicSettings() {
+    try {
+      const res = await fetch('/api/admin/shipping', { cache: 'no-store' });
+      const json = await res.json();
+      const s = json?.data?.settings ?? json?.settings;
+      if (s) {
+        setFreeShipThresholdPaise(Number(s.free_shipping_threshold_paise) || 99900);
+        const mode: MagicCartMode =
+          s.magic_cart_mode === 'off' || s.magic_cart_mode === 'free_shipping' || s.magic_cart_mode === 'coupon_goal'
+            ? s.magic_cart_mode
+            : s.promo_banner_enabled === false
+              ? 'off'
+              : 'free_shipping';
+        setMagicMode(mode);
+      }
+    } catch {}
+  }
 
   async function fetchCoupons() {
     const supabase = createClient();
     const { data } = await supabase
       .from('coupons')
       .select(
-        'id, code, discount_percent, is_active, new_users_only, show_on_homepage, homepage_text, homepage_accent, min_cart_paise, max_discount_paise, starts_at, expires_at, per_user_limit, usage_limit, cart_mode, stackable_with_promo, created_at',
+        'id, code, discount_type, discount_percent, discount_paise, is_active, new_users_only, show_on_homepage, homepage_text, homepage_accent, min_cart_paise, max_discount_paise, starts_at, expires_at, per_user_limit, usage_limit, cart_mode, stackable_with_promo, created_at',
       )
       .order('created_at', { ascending: false });
-    setCoupons((data as Coupon[]) ?? []);
+    const list = (data as Coupon[]) ?? [];
+    setCoupons(list);
+
+    const activeGoal = list.find(
+      (c) => c.is_active && (c.cart_mode === 'sync_auto' || c.cart_mode === 'manual_with_progress'),
+    );
+    if (activeGoal) {
+      setGoalCouponId(activeGoal.id);
+      setGoalApplyStyle(activeGoal.cart_mode === 'sync_auto' ? 'sync_auto' : 'manual_with_progress');
+    } else if (list.length > 0 && !goalCouponId) {
+      const firstActive = list.find((c) => c.is_active);
+      if (firstActive) setGoalCouponId(firstActive.id);
+    }
+
     setLoading(false);
+  }
+
+  async function saveMagicCartBar(
+    nextMode: MagicCartMode = magicMode,
+    nextCouponId: string = goalCouponId,
+    nextStyle: 'sync_auto' | 'manual_with_progress' = goalApplyStyle,
+  ) {
+    setSavingMagic(true);
+    setMagicMsg('');
+    try {
+      // 1. Save master mode on shipping_settings (clearing any legacy promo_reward_type overrides)
+      await fetch('/api/admin/shipping', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ magic_cart_mode: nextMode }),
+      });
+
+      // 2. Sync coupon cart_mode flags so at most ONE coupon drives the progress bar
+      const supabase = createClient();
+      await supabase.from('coupons').update({ cart_mode: 'manual_only' }).neq('cart_mode', 'manual_only');
+      if (nextMode === 'coupon_goal' && nextCouponId) {
+        await supabase.from('coupons').update({ cart_mode: nextStyle }).eq('id', nextCouponId);
+      }
+
+      setMagicMode(nextMode);
+      setGoalCouponId(nextCouponId);
+      setGoalApplyStyle(nextStyle);
+      setMagicMsg('Saved');
+      setTimeout(() => setMagicMsg(''), 2500);
+      await fetchCoupons();
+    } catch {
+      setMagicMsg('Failed to save');
+    } finally {
+      setSavingMagic(false);
+    }
   }
 
   function resetDraft() {
@@ -154,7 +233,10 @@ export default function AdminCoupons() {
     setEditingId(c.id);
     setDraft({
       code: c.code,
-      percent: String(c.discount_percent),
+      discountType: c.discount_type ?? 'percent',
+      percent: c.discount_type === 'flat' ? '' : String(c.discount_percent),
+      flatRupees: c.discount_type === 'flat' && c.discount_paise ? String(c.discount_paise / 100) : '',
+      isActive: c.is_active,
       newUsersOnly: c.new_users_only,
       showOnHomepage: c.show_on_homepage,
       homepageText: c.homepage_text ?? '',
@@ -174,10 +256,19 @@ export default function AdminCoupons() {
 
   async function handleSave() {
     const code = draft.code.toUpperCase().trim();
-    const percent = parseInt(draft.percent, 10);
     if (!code) return setError('Coupon code is required');
-    if (Number.isNaN(percent) || percent < 1 || percent > 100) {
-      return setError('Discount must be between 1 and 100');
+
+    const isFlat = draft.discountType === 'flat';
+    const percent = isFlat ? 0 : parseInt(draft.percent, 10);
+    const flatPaise = isFlat && draft.flatRupees.trim()
+      ? Math.round(parseFloat(draft.flatRupees) * 100)
+      : null;
+
+    if (!isFlat && (Number.isNaN(percent) || percent < 1 || percent > 100)) {
+      return setError('Discount % must be between 1 and 100');
+    }
+    if (isFlat && (!flatPaise || Number.isNaN(flatPaise) || flatPaise < 100)) {
+      return setError('Flat discount must be at least ₹1');
     }
 
     // Optional numeric / date fields. Empty input = NULL in the
@@ -221,7 +312,10 @@ export default function AdminCoupons() {
     const supabase = createClient();
     const payload = {
       code,
+      discount_type: draft.discountType,
       discount_percent: percent,
+      discount_paise: flatPaise,
+      is_active: draft.isActive,
       new_users_only: draft.newUsersOnly,
       show_on_homepage: draft.showOnHomepage,
       homepage_text: draft.homepageText.trim() || null,
@@ -235,6 +329,17 @@ export default function AdminCoupons() {
       cart_mode: draft.cartMode,
       stackable_with_promo: draft.stackableWithPromo,
     };
+
+    // If this coupon is set to drive the progress bar, reset others cleanly so there's never a conflict
+    if (draft.cartMode === 'sync_auto' || draft.cartMode === 'manual_with_progress') {
+      await supabase.from('coupons').update({ cart_mode: 'manual_only' }).neq('code', code);
+      await fetch('/api/admin/shipping', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ magic_cart_mode: 'coupon_goal' }),
+      }).catch(() => {});
+      setMagicMode('coupon_goal');
+    }
 
     const result = editingId
       ? await supabase.from('coupons').update(payload).eq('id', editingId)
@@ -290,10 +395,41 @@ export default function AdminCoupons() {
     );
   }
 
+  const activeGoalCoupon = coupons.find((c) => c.id === goalCouponId && c.is_active);
+  const liveSummarySentence = (() => {
+    if (magicMode === 'off') {
+      return 'Customers see NO progress bar in the Cart Drawer; only active manual coupon codes are available.';
+    }
+    if (magicMode === 'free_shipping') {
+      const freeRs = Math.round(freeShipThresholdPaise / 100).toLocaleString('en-IN');
+      return `Customers see a Free Shipping progress bar (unlocked at ₹${freeRs}) in the Cart Drawer, plus any active manual coupons.`;
+    }
+    if (activeGoalCoupon) {
+      const discLabel =
+        activeGoalCoupon.discount_type === 'flat' && activeGoalCoupon.discount_paise
+          ? `₹${Math.round(activeGoalCoupon.discount_paise / 100).toLocaleString('en-IN')} OFF`
+          : `${activeGoalCoupon.discount_percent}% OFF`;
+      const minLabel = activeGoalCoupon.min_cart_paise
+        ? `at ₹${Math.round(activeGoalCoupon.min_cart_paise / 100).toLocaleString('en-IN')}`
+        : 'on any order';
+      const applyMode =
+        goalApplyStyle === 'sync_auto'
+          ? 'auto-applies when unlocked'
+          : 'requires clicking Apply once unlocked';
+      return `Customers see a progress bar tracking ${activeGoalCoupon.code} (${discLabel} ${minLabel}), which ${applyMode}.`;
+    }
+    return 'Coupon Goal is selected, but no active coupon is linked yet — pick an active coupon below.';
+  })();
+
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-5)' }}>
-        <h1 style={{ fontSize: '1.25rem', fontWeight: 600 }}>Coupons</h1>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-4)' }}>
+        <div>
+          <h1 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0 }}>Coupons &amp; Magic Cart Offers</h1>
+          <p className="text-xs text-muted" style={{ marginTop: 4 }}>
+            Single source of truth for all discounts and the Cart Drawer progress bar.
+          </p>
+        </div>
         <button
           className="btn btn-primary btn-sm"
           onClick={() => {
@@ -306,9 +442,118 @@ export default function AdminCoupons() {
             }
           }}
         >
-          {showForm ? 'Cancel' : '+ New'}
+          {showForm ? 'Cancel' : '+ New Coupon'}
         </button>
       </div>
+
+      {/* Live Storefront Summary */}
+      <div
+        className="card"
+        style={{
+          marginBottom: 'var(--space-5)',
+          padding: '12px 16px',
+          borderLeft: '3px solid var(--brand-blue, #2FA9F5)',
+          background: 'var(--bg-secondary)',
+        }}
+      >
+        <div style={{ fontSize: '0.6875rem', fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 4 }}>
+          Live Storefront Summary
+        </div>
+        <div style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--text-primary)', lineHeight: 1.45 }}>
+          {liveSummarySentence}
+        </div>
+      </div>
+
+      {/* Section A: Magic Cart Progress Bar (Top Control Card) */}
+      <div className="card" style={{ marginBottom: 'var(--space-6)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-3)', flexWrap: 'wrap', gap: 8 }}>
+          <div>
+            <h2 style={{ fontSize: '1rem', fontWeight: 700, margin: 0 }}>Section A: Magic Cart Progress Bar</h2>
+            <p className="text-xs text-muted" style={{ margin: '2px 0 0 0' }}>
+              Choose what the progress bar at the top of the Cart Drawer tracks.
+            </p>
+          </div>
+          {magicMsg && (
+            <span className="badge badge-paid">{magicMsg}</span>
+          )}
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 10, marginBottom: 'var(--space-4)' }}>
+          {[
+            { id: 'off' as const, title: '1. Off', desc: 'Hide progress bar; show manual coupons only' },
+            { id: 'free_shipping' as const, title: '2. Free Shipping', desc: `Track ₹${Math.round(freeShipThresholdPaise / 100)} free-shipping goal` },
+            { id: 'coupon_goal' as const, title: '3. Coupon Goal', desc: 'Link 1 active coupon to the progress bar' },
+          ].map((opt) => {
+            const active = magicMode === opt.id;
+            return (
+              <button
+                key={opt.id}
+                type="button"
+                onClick={() => setMagicMode(opt.id)}
+                style={{
+                  textAlign: 'left',
+                  padding: '10px 12px',
+                  borderRadius: 'var(--radius-sm)',
+                  border: active ? '1.5px solid var(--brand-blue, #2FA9F5)' : '1px solid var(--border-color)',
+                  background: active ? 'rgba(47, 169, 245, 0.08)' : 'var(--bg-input)',
+                  color: 'var(--text-primary)',
+                  cursor: 'pointer',
+                }}
+              >
+                <div style={{ fontSize: '0.8125rem', fontWeight: 700 }}>{opt.title}</div>
+                <div className="text-xs text-muted" style={{ marginTop: 2 }}>{opt.desc}</div>
+              </button>
+            );
+          })}
+        </div>
+
+        {magicMode === 'coupon_goal' && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12, marginBottom: 'var(--space-4)' }}>
+            <div className="input-group">
+              <label className="input-label">Progress Bar Coupon</label>
+              <select
+                className="input-field"
+                value={goalCouponId}
+                onChange={(e) => setGoalCouponId(e.target.value)}
+              >
+                <option value="">-- Select an active coupon --</option>
+                {coupons.filter((c) => c.is_active).map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.code} ({c.discount_type === 'flat' && c.discount_paise ? `₹${Math.round(c.discount_paise / 100)} OFF` : `${c.discount_percent}% OFF`}
+                    {c.min_cart_paise ? ` · Min ₹${Math.round(c.min_cart_paise / 100)}` : ''})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="input-group">
+              <label className="input-label">Unlock Behavior</label>
+              <select
+                className="input-field"
+                value={goalApplyStyle}
+                onChange={(e) => setGoalApplyStyle(e.target.value as 'sync_auto' | 'manual_with_progress')}
+              >
+                <option value="sync_auto">Auto-Apply when unlocked</option>
+                <option value="manual_with_progress">Customer clicks Apply manually</option>
+              </select>
+            </div>
+          </div>
+        )}
+
+        <button
+          type="button"
+          className={`btn btn-primary btn-sm ${savingMagic ? 'btn-loading' : ''}`}
+          disabled={savingMagic || (magicMode === 'coupon_goal' && !goalCouponId)}
+          onClick={() => saveMagicCartBar(magicMode, goalCouponId, goalApplyStyle)}
+          style={{ width: 'auto', minWidth: 180 }}
+        >
+          SAVE PROGRESS BAR
+        </button>
+      </div>
+
+      {/* Section B: All Coupons */}
+      <h2 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: 'var(--space-3)' }}>
+        Section B: All Coupons ({coupons.length})
+      </h2>
 
       {showForm && (
         <div className="card" style={{ marginBottom: 'var(--space-5)' }}>
@@ -324,18 +569,61 @@ export default function AdminCoupons() {
             />
           </div>
 
-          <div className="input-group" style={{ marginBottom: 'var(--space-3)' }}>
-            <label className="input-label">Discount %</label>
-            <input
-              className="input-field"
-              type="number"
-              placeholder="10"
-              min="1"
-              max="100"
-              value={draft.percent}
-              onChange={(e) => setDraft({ ...draft, percent: e.target.value })}
-            />
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-3)', marginBottom: 'var(--space-3)' }}>
+            <div className="input-group">
+              <label className="input-label">Discount Type</label>
+              <select
+                className="input-field"
+                value={draft.discountType}
+                onChange={(e) => setDraft({ ...draft, discountType: e.target.value as CouponDiscountType })}
+              >
+                <option value="percent">Percentage (% OFF)</option>
+                <option value="flat">Flat Amount (₹ OFF)</option>
+              </select>
+            </div>
+            {draft.discountType === 'flat' ? (
+              <div className="input-group">
+                <label className="input-label">Flat Discount (₹)</label>
+                <input
+                  className="input-field"
+                  type="number"
+                  placeholder="200"
+                  min="1"
+                  value={draft.flatRupees}
+                  onChange={(e) => setDraft({ ...draft, flatRupees: e.target.value })}
+                />
+              </div>
+            ) : (
+              <div className="input-group">
+                <label className="input-label">Discount %</label>
+                <input
+                  className="input-field"
+                  type="number"
+                  placeholder="10"
+                  min="1"
+                  max="100"
+                  value={draft.percent}
+                  onChange={(e) => setDraft({ ...draft, percent: e.target.value })}
+                />
+              </div>
+            )}
           </div>
+
+          <label
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 'var(--space-3)',
+              marginBottom: 'var(--space-3)',
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={draft.isActive}
+              onChange={(e) => setDraft({ ...draft, isActive: e.target.checked })}
+            />
+            <span style={{ fontWeight: 500 }}>Coupon is Active</span>
+          </label>
 
           {/* Advanced rules — all optional. Leave blank for "no
               constraint". Stored as paise / int / TIMESTAMPTZ. */}
@@ -560,7 +848,11 @@ export default function AdminCoupons() {
           <button
             className={`btn btn-primary ${saving ? 'btn-loading' : ''}`}
             onClick={handleSave}
-            disabled={saving || !draft.code.trim() || !draft.percent}
+            disabled={
+              saving ||
+              !draft.code.trim() ||
+              (draft.discountType === 'flat' ? !draft.flatRupees : !draft.percent)
+            }
           >
             {editingId ? 'SAVE CHANGES' : 'CREATE COUPON'}
           </button>
@@ -568,7 +860,16 @@ export default function AdminCoupons() {
       )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-        {coupons.map((coupon) => (
+        {coupons.map((coupon) => {
+          const isInProgressBar =
+            magicMode === 'coupon_goal' &&
+            (coupon.cart_mode === 'sync_auto' || coupon.cart_mode === 'manual_with_progress');
+          const discLabel =
+            coupon.discount_type === 'flat' && coupon.discount_paise
+              ? `₹${Math.round(coupon.discount_paise / 100).toLocaleString('en-IN')} off`
+              : `${coupon.discount_percent}% off`;
+
+          return (
           <div
             key={coupon.id}
             className="card"
@@ -582,7 +883,7 @@ export default function AdminCoupons() {
               <div>
                 <span style={{ fontWeight: 600, fontFamily: 'monospace', fontSize: '1rem' }}>{coupon.code}</span>
                 <span className="text-sm text-muted" style={{ marginLeft: 'var(--space-3)' }}>
-                  {coupon.discount_percent}% off
+                  {discLabel}
                 </span>
               </div>
               <button
@@ -594,12 +895,18 @@ export default function AdminCoupons() {
             </div>
 
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {isInProgressBar && (
+                <span className="badge badge-paid">LIVE IN PROGRESS BAR</span>
+              )}
               <span className="badge badge-pending">
-                {CART_MODE_LABELS[coupon.cart_mode ?? 'manual_only']}
+                {coupon.cart_mode === 'sync_auto' ? 'AUTO-APPLY' : 'MANUAL CODE'}
               </span>
               {coupon.min_cart_paise ? (
-                <span className="badge badge-confirmed">Min ₹{(coupon.min_cart_paise / 100).toLocaleString('en-IN')}</span>
+                <span className="badge badge-confirmed">MIN ₹{(coupon.min_cart_paise / 100).toLocaleString('en-IN')}</span>
               ) : null}
+              {coupon.stackable_with_promo && (
+                <span className="badge badge-confirmed">STACKABLE</span>
+              )}
               {coupon.new_users_only && (
                 <span className="badge badge-confirmed">First-order only</span>
               )}
@@ -631,7 +938,8 @@ export default function AdminCoupons() {
               </button>
             </div>
           </div>
-        ))}
+          );
+        })}
 
         {coupons.length === 0 && (
           <p className="text-muted" style={{ textAlign: 'center', padding: 'var(--space-8) 0' }}>

@@ -7,7 +7,7 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const QUOTE_SETTINGS_COLUMNS =
-  'free_shipping_threshold_paise, default_shipping_charge_paise, cod_enabled, cod_fee_paise, promo_banner_enabled, promo_goal_type, promo_goal_threshold_paise, promo_goal_item_count, promo_progress_template, promo_unlocked_text, promo_nudge_enabled, promo_nudge_title, promo_nudge_badge, promo_nudge_text, promo_reward_type, reward_percentage, reward_product_id, buy_x_quantity, get_y_quantity';
+  'free_shipping_threshold_paise, default_shipping_charge_paise, cod_enabled, cod_fee_paise, magic_cart_mode, promo_banner_enabled, promo_goal_type, promo_goal_threshold_paise, promo_goal_item_count, promo_progress_template, promo_unlocked_text, promo_nudge_enabled, promo_nudge_title, promo_nudge_badge, promo_nudge_text, promo_reward_type, reward_percentage, reward_product_id, buy_x_quantity, get_y_quantity';
 
 async function loadPublicSettings(supabase: ReturnType<typeof createAdminClient>) {
   const { data: settings } = await supabase
@@ -57,6 +57,7 @@ async function loadPublicSettings(supabase: ReturnType<typeof createAdminClient>
       default_shipping_charge_paise: settings?.default_shipping_charge_paise ?? 9900,
       cod_enabled: settings?.cod_enabled !== false,
       cod_fee_paise: settings?.cod_fee_paise ?? 5000,
+      magic_cart_mode: settings?.magic_cart_mode ?? (settings?.promo_banner_enabled === false ? 'off' : 'free_shipping'),
       promo_banner_enabled: settings?.promo_banner_enabled !== false,
       promo_goal_type: settings?.promo_goal_type || 'amount',
       promo_goal_threshold_paise: settings?.promo_goal_threshold_paise ?? settings?.free_shipping_threshold_paise ?? 99900,

@@ -19,7 +19,7 @@ export async function GET() {
     const { data, error } = await supabase
       .from('coupons')
       .select(
-        'id, code, discount_percent, min_cart_paise, max_discount_paise, starts_at, expires_at, new_users_only, cart_mode, stackable_with_promo',
+        'id, code, discount_type, discount_percent, discount_paise, min_cart_paise, max_discount_paise, starts_at, expires_at, new_users_only, cart_mode, stackable_with_promo',
       )
       .eq('is_active', true)
       .order('discount_percent', { ascending: false })
@@ -39,6 +39,8 @@ export async function GET() {
       .slice(0, 6)
       .map((c) => ({
         ...c,
+        discount_type: c.discount_type ?? 'percent',
+        discount_paise: c.discount_paise ?? null,
         min_order_paise: c.min_cart_paise ?? null,
         cart_mode: c.cart_mode ?? 'manual_only',
         stackable_with_promo: Boolean(c.stackable_with_promo),
