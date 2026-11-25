@@ -154,6 +154,7 @@ function CheckoutContent() {
   const [discountPaise, setDiscountPaise] = useState(0);
   const [couponMessage, setCouponMessage] = useState<string>('');
   const [couponOk, setCouponOk] = useState(false);
+  const [couponStackable, setCouponStackable] = useState(false);
   const [checkoutActiveCoupons, setCheckoutActiveCoupons] = useState<
     Array<{
       id: string;
@@ -330,9 +331,13 @@ function CheckoutContent() {
     );
   }, [effectiveSettings, preDiscountSubtotal, checkoutItems]);
 
-  const effectiveDiscountPaise = isManualCouponActive
-    ? Math.min(discountPaise, preDiscountSubtotal)
-    : Math.min(activeProgress.autoDiscountPaise, preDiscountSubtotal);
+  const effectiveAutoOfferPaise =
+    isManualCouponActive && !couponStackable ? 0 : activeProgress.autoDiscountPaise;
+
+  const effectiveDiscountPaise = Math.min(
+    preDiscountSubtotal,
+    (isManualCouponActive ? discountPaise : 0) + effectiveAutoOfferPaise,
+  );
 
   const subtotalForQuote = Math.max(0, preDiscountSubtotal - effectiveDiscountPaise);
 
@@ -374,10 +379,12 @@ function CheckoutContent() {
         if (data.success) {
           setDiscountPaise(Number(data.discount_paise) || 0);
           setCouponOk(true);
+          setCouponStackable(Boolean(data.stackable_with_promo));
           setCouponMessage('');
         } else {
           setDiscountPaise(0);
           setCouponOk(false);
+          setCouponStackable(false);
           setCouponMessage(data.error || 'Coupon could not be applied.');
         }
       } catch {
@@ -1193,7 +1200,7 @@ function CheckoutContent() {
                     Remove
                   </button>
                 </div>
-                {activeProgress.autoDiscountPaise > 0 && (
+                {activeProgress.autoDiscountPaise > 0 && !couponStackable && (
                   <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 6 }}>
                     ℹ️ Manual coupon is active (Auto-applied cart offers cannot be combined with coupon codes).
                   </div>

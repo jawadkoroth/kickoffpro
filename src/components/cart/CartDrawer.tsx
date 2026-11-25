@@ -309,9 +309,9 @@ export default function CartDrawer() {
     return promoProgress.autoDiscountPaise;
   }, [couponDiscountPaise, appliedCoupon, promoProgress.autoDiscountPaise]);
 
-  // Single unified progress bar (respects /admin/coupons Section A master mode)
+  // Single unified progress bar (driven by /admin/coupons/auto Magic Cart settings)
   const unifiedProgress = useMemo(() => {
-    if (items.length === 0 || shippingSettings.magic_cart_mode === 'off') {
+    if (items.length === 0) {
       return {
         visible: false,
         unlocked: false,
@@ -383,22 +383,14 @@ export default function CartDrawer() {
       };
     }
 
-    if (shippingSettings.magic_cart_mode === 'free_shipping') {
-      const freeThresh = shippingSettings.free_shipping_threshold_paise || 0;
-      if (freeThresh > 0) {
-        const shortfall = Math.max(0, freeThresh - totalPaise);
-        const unlocked = shortfall === 0;
-        const percent = Math.min(100, Math.round((totalPaise / freeThresh) * 100));
-        return {
-          visible: true,
-          unlocked,
-          percent,
-          message: unlocked
-            ? 'You unlocked FREE Standard Shipping!'
-            : `Add ${formatPaise(shortfall)} more to unlock FREE SHIPPING`,
-          iconType: 'free_shipping' as const,
-        };
-      }
+    if (!promoProgress.isBannerVisible) {
+      return {
+        visible: false,
+        unlocked: false,
+        percent: 0,
+        message: '',
+        iconType: 'free_shipping' as const,
+      };
     }
 
     if (FEATURE_FLAGS.CART_PACK_BAR) {

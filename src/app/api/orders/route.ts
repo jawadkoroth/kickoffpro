@@ -279,14 +279,10 @@ async function handlePOST(req: NextRequest) {
       }
     }
 
-    // 7. Server-authoritative shipping + COD fee.
-    // Mutual exclusivity & single source of truth: /admin/coupons owns all discounts.
-    // Legacy shipping_settings auto-offers only fire if magic_cart_mode is unset/legacy.
-    const magicMode = (shippingSettings as { magic_cart_mode?: string } | null)?.magic_cart_mode;
-    const allowLegacyShippingPromo =
-      magicMode !== 'off' && magicMode !== 'free_shipping' && magicMode !== 'coupon_goal';
-
-    if (allowLegacyShippingPromo && (!appliedCoupon || stackableWithPromo)) {
+    // 7. Server-authoritative shipping + COD fee + Magic Cart auto-offers.
+    // Mutual exclusivity: if a non-stackable manual coupon is applied, suppress
+    // the automated reward discount so double-dipping (e.g. 20% + 20%) never happens.
+    if (!appliedCoupon || stackableWithPromo) {
       const autoOffer = calcAutoOfferDiscount(
         shippingSettings,
         subtotal,
