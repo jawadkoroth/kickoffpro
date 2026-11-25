@@ -41,7 +41,10 @@ interface ActiveCoupon {
   code: string;
   discount_percent: number;
   min_cart_paise?: number | null;
+  min_order_paise?: number | null;
   max_discount_paise?: number | null;
+  cart_mode?: 'sync_auto' | 'manual_with_progress' | 'manual_only';
+  stackable_with_promo?: boolean;
 }
 
 export default function CartDrawer() {
@@ -59,8 +62,10 @@ export default function CartDrawer() {
     shippingSettings,
     promoProgress,
     appliedCoupon,
+    couponNotice,
     applyCoupon,
     clearCoupon,
+    clearCouponNotice,
   } = useCart();
 
   const [upsellProducts, setUpsellProducts] = useState<UpsellProduct[]>([]);
@@ -137,11 +142,112 @@ export default function CartDrawer() {
       .slice(0, 2);
   }, [upsellProducts, items]);
 
+  // Sync activeCoupons metadata with appliedCoupon and handle sync_auto mode
+  useEffect(() => {
+    if (!FEATURE_FLAGS.CART_COUPONS || activeCoupons.length === 0) return;
+
+    // 1. If a coupon is applied, verify its live min_cart_paise against totalPaise
+    if (appliedCoupon) {
+      const match = activeCoupons.find((c) => c.code === appliedCoupon.code);
+      if (match) {
+        const minReq = match.min_cart_paise ?? match.min_order_paise ?? 0;
+        if (totalPaise <= 0 || (minReq > 0 && totalPaise < minReq)) {
+          clearCoupon();
+          return;
+        }
+        // Keep metadata fresh in case admin updated min_cart or stackable_with_promo
+        if (
+          appliedCoupon.minCartPaise !== (match.min_cart_paise ?? null) ||
+          appliedCoupon.stackableWithPromo !== Boolean(match.stackable_with_promo)
+        ) {
+          const disc = Math.round((totalPaise * match.discount_percent) / 100);
+          const capped = match.max_discount_paise ? Math.min(disc, match.max_discount_paise) : disc;
+          applyCoupon({
+            code: match.code,
+            discountPaise: Math.min(capped, totalPaise),
+            discountPercent: match.discount_percent,
+            minCartPaise: match.min_cart_paise ?? null,
+            maxDiscountPaise: match.max_discount_paise ?? null,
+            stackableWithPromo: Boolean(match.stackable_with_promo),
+            cartMode: match.cart_mode ?? 'manual_only',
+            autoApplied: appliedCoupon.autoApplied,
+          });
+        }
+      }
+      return;
+    }
+
+    // 2. If no coupon is applied and there is a sync_auto coupon whose threshold is met, auto-apply it
+    const syncCoupon = activeCoupons.find((c) => c.cart_mode === 'sync_auto');
+    if (syncCoupon && totalPaise > 0) {
+      const minReq = syncCoupon.min_cart_paise ?? syncCoupon.min_order_paise ?? 0;
+      if (totalPaise >= minReq) {
+        const disc = Math.round((totalPaise * syncCoupon.discount_percent) / 100);
+        const capped = syncCoupon.max_discount_paise ? Math.min(disc, syncCoupon.max_discount_paise) : disc;
+        applyCoupon({
+          code: syncCoupon.code,
+          discountPaise: Math.min(capped, totalPaise),
+          discountPercent: syncCoupon.discount_percent,
+          minCartPaise: syncCoupon.min_cart_paise ?? null,
+          maxDiscountPaise: syncCoupon.max_discount_paise ?? null,
+          stackableWithPromo: Boolean(syncCoupon.stackable_with_promo),
+          cartMode: 'sync_auto',
+          autoApplied: true,
+        });
+      }
+    }
+  }, [activeCoupons, appliedCoupon, totalPaise, applyCoupon, clearCoupon]);
+
+  // Mutual exclusion: never double-dip Reward Discount + non-stackable Coupon
+  const effectiveAutoDiscountPaise = useMemo(() => {
+    if (couponDiscountPaise > 0 && !appliedCoupon?.stackableWithPromo) {
+      return 0;
+    }
+    return promoProgress.autoDiscountPaise;
+  }, [couponDiscountPaise, appliedCoupon, promoProgress.autoDiscountPaise]);
+
   // Single unified progress bar (Safeguard #2: never render two stacked progress bars)
   const unifiedProgress = useMemo(() => {
     const paidCount = items
       .filter((i) => !i.is_free_gift)
       .reduce((sum, i) => sum + i.quantity, 0);
+
+    // Check if an active coupon drives the progress bar (sync_auto or manual_with_progress)
+    const progressCoupon = FEATURE_FLAGS.CART_COUPONS
+      ? activeCoupons.find(
+          (c) =>
+            (c.cart_mode === 'sync_auto' || c.cart_mode === 'manual_with_progress') &&
+            (c.min_cart_paise ?? c.min_order_paise ?? 0) > 0,
+        )
+      : undefined;
+
+    if (progressCoupon && items.length > 0) {
+      const targetPaise = progressCoupon.min_cart_paise ?? progressCoupon.min_order_paise ?? 0;
+      const shortfallPaise = Math.max(0, targetPaise - totalPaise);
+      const percent = targetPaise > 0 ? Math.min(100, Math.round((totalPaise / targetPaise) * 100)) : 100;
+      const unlocked = shortfallPaise === 0;
+      const shortfallRupees = Math.ceil(shortfallPaise / 100).toLocaleString('en-IN');
+
+      let message = '';
+      if (!unlocked) {
+        message =
+          progressCoupon.cart_mode === 'sync_auto'
+            ? `Add ₹${shortfallRupees} more to auto-apply ${progressCoupon.code} (${progressCoupon.discount_percent}% OFF)`
+            : `Add ₹${shortfallRupees} more to unlock ${progressCoupon.code} (${progressCoupon.discount_percent}% OFF)`;
+      } else if (progressCoupon.cart_mode === 'sync_auto' || appliedCoupon?.code === progressCoupon.code) {
+        message = `${progressCoupon.code} (${progressCoupon.discount_percent}% OFF) applied!`;
+      } else {
+        message = `${progressCoupon.code} (${progressCoupon.discount_percent}% OFF) unlocked — click Apply below!`;
+      }
+
+      return {
+        visible: true,
+        unlocked,
+        percent,
+        message,
+        iconType: 'threshold_percentage' as const,
+      };
+    }
 
     if (FEATURE_FLAGS.CART_PACK_BAR) {
       // If admin configured a specialized auto-offer (percentage / BOGO), honour it cleanly
@@ -190,12 +296,15 @@ export default function CartDrawer() {
         : promoProgress.inProgressMessage,
       iconType: promoProgress.promoRewardType,
     };
-  }, [items, promoProgress]);
+  }, [items, promoProgress, activeCoupons, totalPaise, appliedCoupon?.code]);
 
   const handleApplyCouponChip = async (coupon: ActiveCoupon) => {
     setCouponError('');
-    if (coupon.min_cart_paise && totalPaise < coupon.min_cart_paise) {
-      setCouponError(`Add ${formatPaise(coupon.min_cart_paise - totalPaise)} more to use ${coupon.code}`);
+    clearCouponNotice();
+    const minReq = coupon.min_cart_paise ?? coupon.min_order_paise ?? 0;
+    if (minReq > 0 && totalPaise < minReq) {
+      const shortfallRupees = Math.ceil((minReq - totalPaise) / 100).toLocaleString('en-IN');
+      setCouponError(`Add ₹${shortfallRupees} more to unlock ${coupon.code} (${coupon.discount_percent}% OFF)`);
       return;
     }
     const disc = Math.round((totalPaise * coupon.discount_percent) / 100);
@@ -204,6 +313,11 @@ export default function CartDrawer() {
       code: coupon.code,
       discountPaise: Math.min(capped, totalPaise),
       discountPercent: coupon.discount_percent,
+      minCartPaise: coupon.min_cart_paise ?? null,
+      maxDiscountPaise: coupon.max_discount_paise ?? null,
+      stackableWithPromo: Boolean(coupon.stackable_with_promo),
+      cartMode: coupon.cart_mode ?? 'manual_only',
+      autoApplied: false,
     });
   };
 
@@ -566,50 +680,78 @@ export default function CartDrawer() {
                   </div>
                 )}
 
-                  {/* Click-to-Apply Coupons (inside scrollable body so footer stays compact) */}
-                  {FEATURE_FLAGS.CART_COUPONS && activeCoupons.length > 0 && (
+                  {/* Click-to-Apply Coupons (proactive eligibility + shortfall + auto-remove notice) */}
+                  {FEATURE_FLAGS.CART_COUPONS && (activeCoupons.length > 0 || couponNotice) && (
                     <div className={styles.couponSection} style={{ padding: '12px 20px 10px', margin: 0 }}>
-                      <div className={styles.couponHeading}>
-                        <Tag size={12} />
-                        <span>Available Offers</span>
-                      </div>
-                      <div className={styles.couponChips}>
-                        {activeCoupons.map((c) => {
-                          const isApplied = appliedCoupon?.code === c.code;
-                          return (
-                            <div
-                              key={c.id}
-                              className={`${styles.couponChip} ${
-                                isApplied ? styles.couponChipActive : ''
-                              }`}
-                            >
-                              <span>
-                                <strong>{c.code}</strong> ({c.discount_percent}% OFF)
-                              </span>
-                              {isApplied ? (
-                                <button
-                                  type="button"
-                                  className={styles.couponRemoveBtn}
-                                  onClick={() => {
-                                    clearCoupon();
-                                    setCouponError('');
-                                  }}
+                      {activeCoupons.length > 0 && (
+                        <>
+                          <div className={styles.couponHeading}>
+                            <Tag size={12} />
+                            <span>Available Offers</span>
+                          </div>
+                          <div className={styles.couponChips}>
+                            {activeCoupons.map((c) => {
+                              const isApplied = appliedCoupon?.code === c.code;
+                              const minReq = c.min_cart_paise ?? c.min_order_paise ?? 0;
+                              const shortfallPaise = Math.max(0, minReq - totalPaise);
+                              const isEligible = shortfallPaise === 0 && totalPaise > 0;
+                              const shortfallRupees = Math.ceil(shortfallPaise / 100).toLocaleString('en-IN');
+
+                              return (
+                                <div
+                                  key={c.id}
+                                  className={`${styles.couponChip} ${
+                                    isApplied
+                                      ? styles.couponChipActive
+                                      : !isEligible
+                                        ? styles.couponChipDisabled
+                                        : ''
+                                  }`}
+                                  style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 2 }}
                                 >
-                                  Remove
-                                </button>
-                              ) : (
-                                <button
-                                  type="button"
-                                  className={styles.couponApplyBtn}
-                                  onClick={() => handleApplyCouponChip(c)}
-                                >
-                                  Apply
-                                </button>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', justifyContent: 'space-between' }}>
+                                    <span>
+                                      <strong>{c.code}</strong> ({c.discount_percent}% OFF)
+                                    </span>
+                                    {isApplied ? (
+                                      <button
+                                        type="button"
+                                        className={styles.couponRemoveBtn}
+                                        onClick={() => {
+                                          clearCoupon();
+                                          clearCouponNotice();
+                                          setCouponError('');
+                                        }}
+                                      >
+                                        Remove
+                                      </button>
+                                    ) : (
+                                      <button
+                                        type="button"
+                                        className={styles.couponApplyBtn}
+                                        disabled={!isEligible}
+                                        onClick={() => handleApplyCouponChip(c)}
+                                      >
+                                        Apply
+                                      </button>
+                                    )}
+                                  </div>
+                                  {!isApplied && !isEligible && shortfallPaise > 0 && (
+                                    <span className={styles.couponShortfall}>
+                                      Add ₹{shortfallRupees} more to unlock
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </>
+                      )}
+                      {couponNotice && (
+                        <div className={styles.couponNotice} role="status">
+                          {couponNotice}
+                        </div>
+                      )}
                       {couponError && (
                         <p style={{ fontSize: '0.72rem', color: 'var(--error, #dc2626)', marginTop: 4 }}>
                           {couponError}
@@ -625,10 +767,12 @@ export default function CartDrawer() {
                   <div className={styles.subtotalRow}>
                     <span className={styles.subtotalLabel}>Subtotal</span>
                     <span className={styles.subtotalValue}>
-                      {couponDiscountPaise > 0 ? (
+                      {couponDiscountPaise + effectiveAutoDiscountPaise > 0 ? (
                         <>
                           <span className={styles.strikePrice}>{formatPaise(totalPaise)}</span>
-                          <span>{formatPaise(Math.max(0, totalPaise - couponDiscountPaise))}</span>
+                          <span>
+                            {formatPaise(Math.max(0, totalPaise - couponDiscountPaise - effectiveAutoDiscountPaise))}
+                          </span>
                         </>
                       ) : (
                         formatPaise(totalPaise)
@@ -645,7 +789,7 @@ export default function CartDrawer() {
                     </div>
                   )}
 
-                  {promoProgress.autoDiscountPaise > 0 && (
+                  {effectiveAutoDiscountPaise > 0 && (
                     <div className={styles.subtotalRow} style={{ color: 'var(--success, #16a34a)' }}>
                       <span className={styles.subtotalLabel} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         <span style={{ fontSize: '0.5625rem', padding: '2px 6px', background: 'rgba(22, 163, 74, 0.12)', color: 'var(--success, #16a34a)', borderRadius: 4, fontWeight: 700 }}>
@@ -654,7 +798,7 @@ export default function CartDrawer() {
                         Reward Discount
                       </span>
                       <span className={styles.subtotalValue} style={{ color: 'var(--success, #16a34a)', fontWeight: 700 }}>
-                        − {formatPaise(promoProgress.autoDiscountPaise)}
+                        − {formatPaise(effectiveAutoDiscountPaise)}
                       </span>
                     </div>
                   )}

@@ -656,6 +656,37 @@
   background: rgba(22, 163, 74, 0.08);
 }
 
+.couponChipDisabled {
+  opacity: 0.62;
+  background: var(--bg-tertiary, #f1f5f9);
+  border-color: var(--border-color);
+  color: var(--text-muted);
+}
+
+.couponApplyBtn:disabled {
+  color: var(--text-muted);
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.couponShortfall {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+  font-weight: 600;
+}
+
+.couponNotice {
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--warning, #b45309);
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  border-radius: var(--radius-sm);
+  padding: 6px 8px;
+  margin-top: 8px;
+}
+
 .couponApplyBtn {
   background: none;
   border: none;

@@ -154,6 +154,16 @@ function CheckoutContent() {
   const [discountPaise, setDiscountPaise] = useState(0);
   const [couponMessage, setCouponMessage] = useState<string>('');
   const [couponOk, setCouponOk] = useState(false);
+  const [checkoutActiveCoupons, setCheckoutActiveCoupons] = useState<
+    Array<{
+      id: string;
+      code: string;
+      discount_percent: number;
+      min_cart_paise?: number | null;
+      min_order_paise?: number | null;
+      cart_mode?: string;
+    }>
+  >([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<'online' | 'cod'>('online');
@@ -384,6 +394,42 @@ function CheckoutContent() {
     setCouponOk(false);
     setCouponMessage('');
   };
+
+  useEffect(() => {
+    fetch('/api/coupons/active')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data?.success && Array.isArray(data.coupons)) {
+          setCheckoutActiveCoupons(data.coupons);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const nextOfferNudge = useMemo(() => {
+    if (preDiscountSubtotal <= 0 || checkoutActiveCoupons.length === 0) return null;
+    const candidates = checkoutActiveCoupons.filter(
+      (c) => !couponOk || c.code !== couponCode,
+    );
+    if (candidates.length === 0) return null;
+
+    // Prefer an already-eligible coupon first, otherwise closest upcoming threshold
+    const eligible = candidates.find(
+      (c) => preDiscountSubtotal >= (c.min_cart_paise ?? c.min_order_paise ?? 0),
+    );
+    if (eligible) {
+      return { coupon: eligible, eligible: true, shortfallPaise: 0 };
+    }
+
+    const upcoming = [...candidates]
+      .map((c) => ({
+        coupon: c,
+        shortfallPaise: Math.max(0, (c.min_cart_paise ?? c.min_order_paise ?? 0) - preDiscountSubtotal),
+      }))
+      .sort((a, b) => a.shortfallPaise - b.shortfallPaise)[0];
+
+    return upcoming ? { ...upcoming, eligible: false } : null;
+  }, [checkoutActiveCoupons, preDiscountSubtotal, couponOk, couponCode]);
 
   useEffect(() => {
     if (preDiscountSubtotal <= 0) {
@@ -1144,6 +1190,59 @@ function CheckoutContent() {
             {couponCode && !couponOk && couponMessage && (
               <div className={styles.couponErrorText}>
                 <span>⚠️ {couponMessage}</span>
+              </div>
+            )}
+            {nextOfferNudge && (
+              <div
+                style={{
+                  marginTop: 8,
+                  padding: '8px 10px',
+                  borderRadius: 8,
+                  background: 'var(--bg-secondary, #f8fafc)',
+                  border: '1px dashed var(--border-color, #cbd5e1)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 8,
+                  fontSize: '0.75rem',
+                  color: 'var(--text-secondary)',
+                }}
+              >
+                {nextOfferNudge.eligible ? (
+                  <>
+                    <span>
+                      Offer unlocked: <strong>{nextOfferNudge.coupon.code}</strong> ({nextOfferNudge.coupon.discount_percent}% OFF)
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCouponInput(nextOfferNudge.coupon.code);
+                        setCouponCode(nextOfferNudge.coupon.code);
+                      }}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        padding: 0,
+                        fontWeight: 800,
+                        fontSize: '0.75rem',
+                        color: 'var(--brand-blue)',
+                        cursor: 'pointer',
+                        textTransform: 'uppercase',
+                      }}
+                    >
+                      Apply
+                    </button>
+                  </>
+                ) : (
+                  <span>
+                    Don&apos;t miss out: You&apos;re{' '}
+                    <strong>
+                      ₹{Math.ceil(nextOfferNudge.shortfallPaise / 100).toLocaleString('en-IN')}
+                    </strong>{' '}
+                    away from <strong>{nextOfferNudge.coupon.discount_percent}% OFF</strong> with{' '}
+                    <strong>{nextOfferNudge.coupon.code}</strong>
+                  </span>
+                )}
               </div>
             )}
           </div>

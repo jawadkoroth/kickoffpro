@@ -253,6 +253,7 @@ async function handlePOST(req: NextRequest) {
     //    a coupon's per_user_limit just tipped over by a stale tab.
     let appliedCoupon = '';
     let discount = 0;
+    let stackableWithPromo = false;
     if (coupon_code && coupon_code.trim()) {
       const evalResult = await evaluateCoupon(supabase, {
         code: coupon_code,
@@ -262,6 +263,7 @@ async function handlePOST(req: NextRequest) {
       if (evalResult.ok) {
         appliedCoupon = evalResult.coupon.code;
         discount = evalResult.discountPaise;
+        stackableWithPromo = Boolean(evalResult.coupon.stackable_with_promo);
       } else {
         logEvent('order.coupon_rejected', {
           code: coupon_code.toUpperCase().trim(),
@@ -273,12 +275,9 @@ async function handlePOST(req: NextRequest) {
     }
 
     // 7. Server-authoritative shipping + COD fee + auto-offers.
-    //    `calcShipping` is deterministic: given the same inputs, the
-    //    checkout UI quote and this final computation produce the
-    //    identical total.
-    // Mutual exclusivity: if no manual coupon code was applied, evaluate
-    // active automated cart drawer promotional rewards (e.g. % off, cheapest free, etc.)
-    if (!appliedCoupon) {
+    // Mutual exclusivity: if a non-stackable coupon is applied, never also apply
+    // the promotional Reward Discount (prevents 20% + 20% = 40% double-dipping).
+    if (!appliedCoupon || stackableWithPromo) {
       const autoOffer = calcAutoOfferDiscount(
         shippingSettings,
         subtotal,
@@ -290,9 +289,11 @@ async function handlePOST(req: NextRequest) {
         })),
       );
       if (autoOffer.hasUnlockedGoal && autoOffer.autoDiscountPaise > 0) {
-        discount = Math.min(autoOffer.autoDiscountPaise, subtotal);
-        appliedCoupon = `AUTO:${autoOffer.rewardBadge || 'OFFER'}`;
-      } else if (hasAppliedGift) {
+        discount = Math.min(discount + autoOffer.autoDiscountPaise, subtotal);
+        if (!appliedCoupon) {
+          appliedCoupon = `AUTO:${autoOffer.rewardBadge || 'OFFER'}`;
+        }
+      } else if (hasAppliedGift && !appliedCoupon) {
         appliedCoupon = 'PROMO:FREE_GIFT';
       }
     }

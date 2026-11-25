@@ -27,6 +27,14 @@ const ACCENTS: { id: string; label: string; swatch: string }[] = [
   { id: 'emerald', label: 'Emerald', swatch: '#0F4F3F' },
 ];
 
+type CouponCartMode = 'sync_auto' | 'manual_with_progress' | 'manual_only';
+
+const CART_MODE_LABELS: Record<CouponCartMode, string> = {
+  sync_auto: 'Sync with Magic Cart Automation',
+  manual_with_progress: 'Separate Manual Code + Progress Bar',
+  manual_only: 'Normal Manual Coupon',
+};
+
 interface Coupon {
   id: string;
   code: string;
@@ -42,6 +50,8 @@ interface Coupon {
   expires_at: string | null;
   per_user_limit: number | null;
   usage_limit: number | null;
+  cart_mode: CouponCartMode;
+  stackable_with_promo: boolean;
   created_at: string;
 }
 
@@ -60,6 +70,8 @@ interface DraftState {
   expiresAt: string;
   perUserLimit: string;
   usageLimit: string;
+  cartMode: CouponCartMode;
+  stackableWithPromo: boolean;
 }
 
 const EMPTY_DRAFT: DraftState = {
@@ -75,6 +87,8 @@ const EMPTY_DRAFT: DraftState = {
   expiresAt: '',
   perUserLimit: '',
   usageLimit: '',
+  cartMode: 'manual_only',
+  stackableWithPromo: false,
 };
 
 function toLocalInput(iso: string | null): string {
@@ -123,7 +137,7 @@ export default function AdminCoupons() {
     const { data } = await supabase
       .from('coupons')
       .select(
-        'id, code, discount_percent, is_active, new_users_only, show_on_homepage, homepage_text, homepage_accent, min_cart_paise, max_discount_paise, starts_at, expires_at, per_user_limit, usage_limit, created_at',
+        'id, code, discount_percent, is_active, new_users_only, show_on_homepage, homepage_text, homepage_accent, min_cart_paise, max_discount_paise, starts_at, expires_at, per_user_limit, usage_limit, cart_mode, stackable_with_promo, created_at',
       )
       .order('created_at', { ascending: false });
     setCoupons((data as Coupon[]) ?? []);
@@ -151,6 +165,8 @@ export default function AdminCoupons() {
       expiresAt: toLocalInput(c.expires_at),
       perUserLimit: c.per_user_limit ? String(c.per_user_limit) : '',
       usageLimit: c.usage_limit ? String(c.usage_limit) : '',
+      cartMode: c.cart_mode ?? 'manual_only',
+      stackableWithPromo: Boolean(c.stackable_with_promo),
     });
     setShowForm(true);
     setError('');
@@ -216,6 +232,8 @@ export default function AdminCoupons() {
       expires_at: expiresAtIso,
       per_user_limit: perUserLimit,
       usage_limit: usageLimit,
+      cart_mode: draft.cartMode,
+      stackable_with_promo: draft.stackableWithPromo,
     };
 
     const result = editingId
@@ -399,6 +417,44 @@ export default function AdminCoupons() {
             </div>
           </div>
 
+          <div className="input-group" style={{ marginTop: 'var(--space-2)' }}>
+            <label className="input-label">Cart Drawer Behavior Mode</label>
+            <select
+              className="input-field"
+              value={draft.cartMode}
+              onChange={(e) => setDraft({ ...draft, cartMode: e.target.value as CouponCartMode })}
+            >
+              <option value="sync_auto">
+                1. Sync with Magic Cart Automation (Auto-apply when eligible, replaces Reward Discount)
+              </option>
+              <option value="manual_with_progress">
+                2. Separate Manual Code + Progress Bar (Customer clicks Apply; bar shows pending amount)
+              </option>
+              <option value="manual_only">
+                3. Normal Manual Coupon (Standard visible coupon)
+              </option>
+            </select>
+          </div>
+
+          <label
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 'var(--space-3)',
+              padding: 'var(--space-2) 0',
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={draft.stackableWithPromo}
+              onChange={(e) => setDraft({ ...draft, stackableWithPromo: e.target.checked })}
+            />
+            <div>
+              <div style={{ fontWeight: 500 }}>Allow stacking with Cart Reward Discount</div>
+              <div className="text-xs text-muted">Keep unchecked to prevent double-dipping (e.g. 20% + 20% = 40% off).</div>
+            </div>
+          </label>
+
           <label
             style={{
               display: 'flex',
@@ -538,6 +594,12 @@ export default function AdminCoupons() {
             </div>
 
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              <span className="badge badge-pending">
+                {CART_MODE_LABELS[coupon.cart_mode ?? 'manual_only']}
+              </span>
+              {coupon.min_cart_paise ? (
+                <span className="badge badge-confirmed">Min ₹{(coupon.min_cart_paise / 100).toLocaleString('en-IN')}</span>
+              ) : null}
               {coupon.new_users_only && (
                 <span className="badge badge-confirmed">First-order only</span>
               )}

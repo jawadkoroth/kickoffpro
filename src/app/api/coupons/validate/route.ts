@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
             : 403,
         result.message,
         result.minCartPaise !== undefined
-          ? { minCartPaise: result.minCartPaise }
+          ? { minCartPaise: result.minCartPaise, shortfallPaise: result.shortfallPaise }
           : undefined,
       );
     }
@@ -82,6 +82,8 @@ export async function POST(req: NextRequest) {
       min_cart_paise: result.coupon.min_cart_paise ?? null,
       max_discount_paise: result.coupon.max_discount_paise ?? null,
       expires_at: result.coupon.expires_at ?? null,
+      cart_mode: result.coupon.cart_mode ?? 'manual_only',
+      stackable_with_promo: Boolean(result.coupon.stackable_with_promo),
     });
   } catch (err) {
     console.error('[COUPON_VALIDATE_ERROR]', err);

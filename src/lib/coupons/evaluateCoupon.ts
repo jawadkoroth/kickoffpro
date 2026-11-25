@@ -26,6 +26,8 @@ export type CouponRejectReason =
   | 'usage_limit'
   | 'auth_required';
 
+export type CouponCartMode = 'sync_auto' | 'manual_with_progress' | 'manual_only';
+
 export interface CouponRow {
   id: string;
   code: string;
@@ -38,6 +40,8 @@ export interface CouponRow {
   expires_at?: string | null;
   per_user_limit?: number | null;
   usage_limit?: number | null;
+  cart_mode?: CouponCartMode | null;
+  stackable_with_promo?: boolean | null;
 }
 
 export interface EvaluateInput {
@@ -68,10 +72,11 @@ export interface EvaluateRejected {
   reason: CouponRejectReason;
   message: string;
   /**
-   * `min_cart` rejection includes the threshold so the UI can
-   * render "spend ₹X more to unlock".
+   * `min_cart` rejection includes the threshold & shortfall so the UI
+   * can render "Add ₹550 more to unlock CODE (20% OFF)".
    */
   minCartPaise?: number;
+  shortfallPaise?: number;
 }
 
 const REJECT_COPY: Record<CouponRejectReason, string> = {
@@ -109,7 +114,7 @@ export async function evaluateCoupon(
   const { data, error } = await supabase
     .from('coupons')
     .select(
-      'id, code, discount_percent, is_active, new_users_only, min_cart_paise, max_discount_paise, starts_at, expires_at, per_user_limit, usage_limit',
+      'id, code, discount_percent, is_active, new_users_only, min_cart_paise, max_discount_paise, starts_at, expires_at, per_user_limit, usage_limit, cart_mode, stackable_with_promo',
     )
     .eq('code', code)
     .maybeSingle();
@@ -139,7 +144,15 @@ export async function evaluateCoupon(
     input.subtotalPaise !== null &&
     input.subtotalPaise < coupon.min_cart_paise
   ) {
-    return reject('min_cart', { minCartPaise: coupon.min_cart_paise });
+    const shortfallPaise = coupon.min_cart_paise - input.subtotalPaise;
+    const shortfallRupees = Math.ceil(shortfallPaise / 100).toLocaleString('en-IN');
+    return {
+      ok: false,
+      reason: 'min_cart',
+      message: `Add ₹${shortfallRupees} more to unlock ${coupon.code} (${coupon.discount_percent}% OFF)`,
+      minCartPaise: coupon.min_cart_paise,
+      shortfallPaise,
+    };
   }
 
   // new_users_only: a user_id with any non-cancelled order

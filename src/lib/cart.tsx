@@ -307,9 +307,29 @@ interface CartContextType {
   refreshShippingSettings: () => Promise<void>;
 
   /** Cart-level coupon state (synced with CartDrawer & Checkout) */
-  appliedCoupon: { code: string; discountPaise: number; discountPercent: number } | null;
-  applyCoupon: (coupon: { code: string; discountPaise: number; discountPercent: number }) => void;
+  appliedCoupon: {
+    code: string;
+    discountPaise: number;
+    discountPercent: number;
+    minCartPaise?: number | null;
+    maxDiscountPaise?: number | null;
+    stackableWithPromo?: boolean;
+    cartMode?: 'sync_auto' | 'manual_with_progress' | 'manual_only';
+    autoApplied?: boolean;
+  } | null;
+  couponNotice: string | null;
+  applyCoupon: (coupon: {
+    code: string;
+    discountPaise: number;
+    discountPercent: number;
+    minCartPaise?: number | null;
+    maxDiscountPaise?: number | null;
+    stackableWithPromo?: boolean;
+    cartMode?: 'sync_auto' | 'manual_with_progress' | 'manual_only';
+    autoApplied?: boolean;
+  }) => void;
   clearCoupon: () => void;
+  clearCouponNotice: () => void;
 }
 
 const CartContext = createContext<CartContextType | null>(null);
@@ -375,7 +395,13 @@ export function CartProvider({ children }: { children: ReactNode }) {
     code: string;
     discountPaise: number;
     discountPercent: number;
+    minCartPaise?: number | null;
+    maxDiscountPaise?: number | null;
+    stackableWithPromo?: boolean;
+    cartMode?: 'sync_auto' | 'manual_with_progress' | 'manual_only';
+    autoApplied?: boolean;
   } | null>(null);
+  const [couponNotice, setCouponNotice] = useState<string | null>(null);
 
   useEffect(() => {
     try {
@@ -390,8 +416,18 @@ export function CartProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const applyCoupon = useCallback(
-    (coupon: { code: string; discountPaise: number; discountPercent: number }) => {
+    (coupon: {
+      code: string;
+      discountPaise: number;
+      discountPercent: number;
+      minCartPaise?: number | null;
+      maxDiscountPaise?: number | null;
+      stackableWithPromo?: boolean;
+      cartMode?: 'sync_auto' | 'manual_with_progress' | 'manual_only';
+      autoApplied?: boolean;
+    }) => {
       setAppliedCoupon(coupon);
+      setCouponNotice(null);
       try {
         localStorage.setItem(COUPON_KEY, JSON.stringify(coupon));
       } catch {}
@@ -404,6 +440,10 @@ export function CartProvider({ children }: { children: ReactNode }) {
     try {
       localStorage.removeItem(COUPON_KEY);
     } catch {}
+  }, []);
+
+  const clearCouponNotice = useCallback(() => {
+    setCouponNotice(null);
   }, []);
 
   // Dynamic shipping & promotional settings sync
@@ -869,6 +909,21 @@ export function CartProvider({ children }: { children: ReactNode }) {
     [items],
   );
 
+  // Auto-remove applied coupon immediately if cart becomes ineligible (e.g. quantity decreased or item removed)
+  useEffect(() => {
+    if (!loaded || !appliedCoupon) return;
+    if (totalPaise <= 0) {
+      clearCoupon();
+      return;
+    }
+    if (appliedCoupon.minCartPaise && totalPaise < appliedCoupon.minCartPaise) {
+      const shortfallRupees = Math.ceil((appliedCoupon.minCartPaise - totalPaise) / 100).toLocaleString('en-IN');
+      const code = appliedCoupon.code;
+      clearCoupon();
+      setCouponNotice(`${code} removed — add ₹${shortfallRupees} more to re-apply`);
+    }
+  }, [loaded, totalPaise, appliedCoupon, clearCoupon]);
+
   const getTotal = useCallback(() => totalPaise, [totalPaise]);
 
   const promoProgress = useMemo(
@@ -899,8 +954,10 @@ export function CartProvider({ children }: { children: ReactNode }) {
       promoProgress,
       refreshShippingSettings,
       appliedCoupon,
+      couponNotice,
       applyCoupon,
       clearCoupon,
+      clearCouponNotice,
     }),
     [
       items,
@@ -924,8 +981,10 @@ export function CartProvider({ children }: { children: ReactNode }) {
       promoProgress,
       refreshShippingSettings,
       appliedCoupon,
+      couponNotice,
       applyCoupon,
       clearCoupon,
+      clearCouponNotice,
     ],
   );
 
