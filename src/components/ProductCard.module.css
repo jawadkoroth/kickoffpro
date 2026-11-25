@@ -28,6 +28,7 @@
 
 .imageWrap {
   position: relative;
+  isolation: isolate;
   width: 100%;
   aspect-ratio: 4 / 5;
   background: var(--bg-tertiary);
@@ -66,13 +67,13 @@
 .saleBadge {
   background: var(--warning);
   color: var(--brand-navy);
-  z-index: 2147483647 !important;
+  z-index: 5;
 }
 
 .newBadge {
   background: var(--brand-blue);
   color: #FFFFFF;
-  z-index: 2147483647 !important;
+  z-index: 5;
 }
 
 .outOfStockPill {
@@ -86,7 +87,7 @@
   padding: 4px 8px;
   border-radius: 4px;
   letter-spacing: 0.05em;
-  z-index: 2;
+  z-index: 5;
 }
 
 .body {

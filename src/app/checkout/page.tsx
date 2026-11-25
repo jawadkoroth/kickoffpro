@@ -1347,10 +1347,14 @@ function CheckoutContent() {
             <input className={`input-field ${errors.pincode ? 'input-error' : ''}`} placeholder="Pincode" value={pincode} onChange={e => setPincode(e.target.value.replace(/\D/g, '').slice(0, 6))} inputMode="numeric" maxLength={6} readOnly={selectedSavedId !== null} />
             {errors.pincode && <span className="input-error-text">{errors.pincode}</span>}
             {pincodeEta && (
-              <div className={styles.pincodeEtaBadge}>
-                <Truck size={14} />
-                <span>Estimated delivery by {pincodeEta.estimatedDateLabel} ({pincodeEta.windowLabel})</span>
-              </div>
+              pincodeEta.valid ? (
+                <div className={styles.pincodeEtaBadge}>
+                  <Truck size={14} />
+                  <span>Estimated delivery by {pincodeEta.estimatedDateLabel} ({pincodeEta.windowLabel})</span>
+                </div>
+              ) : (
+                <span className="input-error-text">{pincodeEta.error}</span>
+              )
             )}
           </div>
 

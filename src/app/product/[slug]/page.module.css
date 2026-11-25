@@ -358,14 +358,32 @@
 }
 
 .shippingStrip {
-  background-color: #ffffff;
-  border: 1px solid #2FA9F5;
-  border-radius: 8px;
-  padding: 10px 14px;
-  margin-bottom: 12px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md, 10px);
+  padding: 12px 14px;
+  margin-bottom: 14px;
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.shippingHeaderRow {
+  display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.shippingSubRow {
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.shippingDefaultText {
+  color: var(--text-secondary);
+  font-weight: 500;
 }
 
 .shippingItem {
@@ -534,9 +552,10 @@
 }
 
 .pincodeInput {
-  width: 190px;
+  width: 132px;
   padding: 6px 10px;
   font-size: 0.8125rem;
+  font-weight: 600;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-color);
   background: var(--bg-primary);
@@ -544,7 +563,13 @@
 }
 
 .pincodeResult {
-  font-size: 0.75rem;
+  font-size: 0.8rem;
   font-weight: 700;
   color: var(--success, #16a34a);
+}
+
+.pincodeError {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--error, #dc2626);
 }

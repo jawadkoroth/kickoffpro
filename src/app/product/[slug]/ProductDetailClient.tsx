@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import useEmblaCarousel from 'embla-carousel-react';
 import { useCart } from '@/lib/cart';
 import { FEATURE_FLAGS } from '@/lib/featureFlags';
-import { estimatePincodeDelivery } from '@/lib/shipping/pincodeEta';
+import { estimatePincodeDelivery, type PincodeEtaResult } from '@/lib/shipping/pincodeEta';
 import { formatPaise } from '@/lib/format';
 import { getPublicUrl } from '@/lib/media';
 import { trackViewContent, trackAddToCart } from '@/lib/tracking/client';
@@ -62,11 +62,33 @@ export default function ProductDetailClient({
   const [showSizeGuide, setShowSizeGuide] = useState(false);
   const [tryOnNotice, setTryOnNotice] = useState<string | null>(null);
   const [etaPincode, setEtaPincode] = useState('');
+  const [liveEta, setLiveEta] = useState<PincodeEtaResult | null>(null);
 
-  const pincodeEta = useMemo(
+  const localEta = useMemo(
     () => (FEATURE_FLAGS.PINCODE_ETA ? estimatePincodeDelivery(etaPincode) : null),
     [etaPincode],
   );
+
+  useEffect(() => {
+    if (!FEATURE_FLAGS.PINCODE_ETA || !localEta || !localEta.valid) {
+      setLiveEta(null);
+      return;
+    }
+    let cancelled = false;
+    fetch(`/api/shipping/eta?pincode=${encodeURIComponent(localEta.pincode)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!cancelled && data?.success && data?.eta?.valid) {
+          setLiveEta(data.eta);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [localEta]);
+
+  const pincodeEta = liveEta ?? localEta;
 
   const fabricSpecs = useMemo(() => {
     if (!FEATURE_FLAGS.FABRIC_SPECS) return [];
@@ -400,33 +422,41 @@ export default function ProductDetailClient({
               )}
             </div>
 
-            {/* Compact Shipping Strip */}
+            {/* Clean 2-Row Delivery Estimate Card */}
             <div className={styles.shippingStrip}>
-              <div className={styles.shippingItem}>
-                <Truck size={16} className={styles.shippingIcon} />
-                <span>
-                  {pincodeEta
-                    ? `Estimated delivery by ${pincodeEta.estimatedDateLabel}`
-                    : 'Delivery in 2–5 Business Days'}
-                </span>
-              </div>
-              {FEATURE_FLAGS.PINCODE_ETA && (
-                <div className={styles.pincodeRow}>
+              <div className={styles.shippingHeaderRow}>
+                <div className={styles.shippingItem}>
+                  <Truck size={16} className={styles.shippingIcon} />
+                  <span>Delivery Estimate</span>
+                </div>
+                {FEATURE_FLAGS.PINCODE_ETA && (
                   <input
                     type="text"
                     inputMode="numeric"
                     maxLength={6}
-                    placeholder="Enter 6-digit pincode for ETA"
+                    placeholder="Enter pincode"
                     value={etaPincode}
                     onChange={(e) => setEtaPincode(e.target.value.replace(/\D/g, '').slice(0, 6))}
                     className={styles.pincodeInput}
                     aria-label="Check delivery date by pincode"
                   />
-                  {pincodeEta && (
-                    <span className={styles.pincodeResult}>{pincodeEta.windowLabel}</span>
-                  )}
-                </div>
-              )}
+                )}
+              </div>
+              <div className={styles.shippingSubRow}>
+                {pincodeEta ? (
+                  pincodeEta.valid ? (
+                    <span className={styles.pincodeResult}>
+                      Estimated delivery by {pincodeEta.estimatedDateLabel} ({pincodeEta.windowLabel})
+                    </span>
+                  ) : (
+                    <span className={styles.pincodeError}>{pincodeEta.error}</span>
+                  )
+                ) : (
+                  <span className={styles.shippingDefaultText}>
+                    Dispatched from Kerala · Delivery in 2–5 business days
+                  </span>
+                )}
+              </div>
             </div>
 
             {/* Trust Badges */}

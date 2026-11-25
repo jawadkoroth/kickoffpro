@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -67,6 +67,21 @@ export default function CartDrawer() {
   const [upsellSizes, setUpsellSizes] = useState<Record<string, string>>({});
   const [activeCoupons, setActiveCoupons] = useState<ActiveCoupon[]>([]);
   const [couponError, setCouponError] = useState('');
+  const bodyRef = useRef<HTMLDivElement>(null);
+
+  // Always scroll drawer body to top whenever drawer opens
+  useEffect(() => {
+    if (!isDrawerOpen) return;
+    if (bodyRef.current) {
+      bodyRef.current.scrollTop = 0;
+    }
+    const raf = requestAnimationFrame(() => {
+      if (bodyRef.current) {
+        bodyRef.current.scrollTop = 0;
+      }
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [isDrawerOpen]);
 
   // Fetch cross-sells & active coupons lazily when drawer opens
   useEffect(() => {
@@ -109,7 +124,7 @@ export default function CartDrawer() {
     return Math.min(disc, totalPaise);
   }, [appliedCoupon, activeCoupons, totalPaise]);
 
-  // Visible cross-sell recommendations (not already in cart, with stock > 0)
+  // Visible cross-sell recommendations (not already in cart, with stock > 0, max 2 items)
   const visibleUpsells = useMemo(() => {
     if (!FEATURE_FLAGS.CART_UPSELLS) return [];
     const inCartIds = new Set(items.map((i) => i.product_id));
@@ -119,7 +134,7 @@ export default function CartDrawer() {
         if (!p.inventory || p.inventory.length === 0) return true;
         return p.inventory.some((inv) => inv.stock > 0);
       })
-      .slice(0, 3);
+      .slice(0, 2);
   }, [upsellProducts, items]);
 
   // Single unified progress bar (Safeguard #2: never render two stacked progress bars)
@@ -266,43 +281,6 @@ export default function CartDrawer() {
               </button>
             </div>
 
-            {/* Unified Promotional / Pack Progress Bar (single bar only) */}
-            {unifiedProgress.visible && (
-              <div className={styles.shippingBarContainer}>
-                <div className={styles.shippingText}>
-                  {unifiedProgress.unlocked ? (
-                    <>
-                      <CheckCircle2 size={16} className={styles.shippingUnlocked} />
-                      <span className={styles.shippingUnlocked}>
-                        {unifiedProgress.message}
-                      </span>
-                    </>
-                  ) : (
-                    <>
-                      {unifiedProgress.iconType === 'buy_x_get_specific_free' ? (
-                        <Gift size={16} className={styles.shippingHighlight} />
-                      ) : unifiedProgress.iconType === 'threshold_percentage' ? (
-                        <Tag size={16} className={styles.shippingHighlight} />
-                      ) : unifiedProgress.iconType === 'buy_x_get_cheapest_free' || unifiedProgress.iconType === 'pack' ? (
-                        <Zap size={16} className={styles.shippingHighlight} />
-                      ) : (
-                        <Truck size={16} className={styles.shippingHighlight} />
-                      )}
-                      <span>{unifiedProgress.message}</span>
-                    </>
-                  )}
-                </div>
-                <div className={styles.progressBarTrack}>
-                  <div
-                    className={`${styles.progressBarFill} ${
-                      unifiedProgress.unlocked ? styles.progressBarFillUnlocked : ''
-                    }`}
-                    style={{ width: `${unifiedProgress.percent}%` }}
-                  />
-                </div>
-              </div>
-            )}
-
             {/* Main Content: Items List or Empty State */}
             {items.length === 0 ? (
               <div className={styles.emptyState}>
@@ -324,7 +302,45 @@ export default function CartDrawer() {
               </div>
             ) : (
               <>
-                <div className={styles.itemsList}>
+                {/* Single Scrollable Body: Progress -> Cart Items -> Nudge -> Coupons -> Compact Upsells */}
+                <div ref={bodyRef} className={styles.drawerBody}>
+                  {unifiedProgress.visible && (
+                    <div className={styles.shippingBarContainer}>
+                      <div className={styles.shippingText}>
+                        {unifiedProgress.unlocked ? (
+                          <>
+                            <CheckCircle2 size={16} className={styles.shippingUnlocked} />
+                            <span className={styles.shippingUnlocked}>
+                              {unifiedProgress.message}
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            {unifiedProgress.iconType === 'buy_x_get_specific_free' ? (
+                              <Gift size={16} className={styles.shippingHighlight} />
+                            ) : unifiedProgress.iconType === 'threshold_percentage' ? (
+                              <Tag size={16} className={styles.shippingHighlight} />
+                            ) : unifiedProgress.iconType === 'buy_x_get_cheapest_free' || unifiedProgress.iconType === 'pack' ? (
+                              <Zap size={16} className={styles.shippingHighlight} />
+                            ) : (
+                              <Truck size={16} className={styles.shippingHighlight} />
+                            )}
+                            <span>{unifiedProgress.message}</span>
+                          </>
+                        )}
+                      </div>
+                      <div className={styles.progressBarTrack}>
+                        <div
+                          className={`${styles.progressBarFill} ${
+                            unifiedProgress.unlocked ? styles.progressBarFillUnlocked : ''
+                          }`}
+                          style={{ width: `${unifiedProgress.percent}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  <div className={styles.itemsList}>
                   {items.map((item) => {
                     const itemCover = getPublicUrl(item.image) || '/product-1.png';
                     const isMaxStockReached =
@@ -550,11 +566,9 @@ export default function CartDrawer() {
                   </div>
                 )}
 
-                {/* Footer / Summary / Checkout Action */}
-                <div className={styles.footer}>
-                  {/* Click-to-Apply Coupons */}
+                  {/* Click-to-Apply Coupons (inside scrollable body so footer stays compact) */}
                   {FEATURE_FLAGS.CART_COUPONS && activeCoupons.length > 0 && (
-                    <div className={styles.couponSection}>
+                    <div className={styles.couponSection} style={{ padding: '12px 20px 10px', margin: 0 }}>
                       <div className={styles.couponHeading}>
                         <Tag size={12} />
                         <span>Available Offers</span>
@@ -603,6 +617,10 @@ export default function CartDrawer() {
                       )}
                     </div>
                   )}
+                </div>
+
+                {/* Pinned Compact Footer: Subtotal + Checkout Action */}
+                <div className={styles.footer}>
 
                   <div className={styles.subtotalRow}>
                     <span className={styles.subtotalLabel}>Subtotal</span>
