@@ -9,39 +9,46 @@ import {
 } from '@/components/admin/DashboardCharts';
 import { ADMIN_ORDER_CREATED_EVENT } from '@/components/admin/AdminRealtimeProvider';
 import AdminWelcome from '@/components/admin/AdminWelcome';
+import DownloadReportControl from '@/components/admin/DownloadReportControl';
 
-/**
- * KickoffPro Admin — operations dashboard.
- *
- * Server-side aggregation only: this page fetches a single
- * `/api/admin/analytics` endpoint that returns every metric / list
- * in one bounded query. Filters narrow the date range; the chart,
- * cards and operational widgets all derive from the same payload
- * → no fan-out queries, no client-side scan over the orders table.
- *
- * Realtime: the global `AdminRealtimeProvider` dispatches a
- * `admin:order-created` window event whenever a new order arrives.
- * We listen here and softly refetch (debounced) so revenue / counts
- * / recent orders update without a full reload.
- */
-
-type Preset = 'today' | 'yesterday' | '7d' | 'month' | 'custom';
+type Preset = 'today' | 'yesterday' | '7d' | '30d' | 'month' | 'custom';
 
 interface Analytics {
   range: { from: string; to: string; daysInRange: number };
-  revenue: { total: number; prepaid: number; cod: number; trendPct: number };
+  revenue: {
+    gross: number;
+    discount: number;
+    shipping: number;
+    codFee: number;
+    total: number;
+    prepaid: number;
+    cod: number;
+    cancelled: number;
+    trendPct: number;
+  };
   orders: {
     total: number;
+    realized: number;
     pending: number;
     confirmed: number;
     shipped: number;
     delivered: number;
     cancelled: number;
-    paymentSplit: { online: number; cod: number };
+    paymentSplit: { online: number; cod: number; prepaidPct: number; codPct: number };
     stuck: number;
   };
   aov: number;
   repeatCustomers: number;
+  funnel: {
+    sessions: number;
+    reachedCheckout: number;
+    conversionRatePct: number;
+  };
+  discounts: {
+    totalDiscountPaise: number;
+    couponOrdersCount: number;
+    topCoupons: { code: string; orders: number; discountPaise: number; revenuePaise: number }[];
+  };
   trend: { day: string; revenue: number; orders: number }[];
   recentOrders: {
     id: string;
@@ -60,6 +67,12 @@ interface Analytics {
     qty: number;
     revenue: number;
   }[];
+  topSizes: {
+    size: string;
+    qty: number;
+    revenue: number;
+    sharePct: number;
+  }[];
   recentCustomers: {
     name: string;
     phone: string;
@@ -70,6 +83,7 @@ interface Analytics {
     name: string;
     size: string;
     stock: number;
+    low_stock_alert?: boolean;
   }[];
 }
 
@@ -97,6 +111,11 @@ function presetRange(preset: Preset, customFrom?: string, customTo?: string) {
     case '7d': {
       const f = new Date(now);
       f.setDate(f.getDate() - 6);
+      return { from: startOfDay(f), to: endOfDay(now) };
+    }
+    case '30d': {
+      const f = new Date(now);
+      f.setDate(f.getDate() - 29);
       return { from: startOfDay(f), to: endOfDay(now) };
     }
     case 'month': {
@@ -203,14 +222,20 @@ export default function AdminDashboard() {
         }}
       >
         <h1 style={{ fontSize: '1.25rem', fontWeight: 600 }}>Dashboard</h1>
-        <FilterPills
-          preset={preset}
-          onChange={(p) => setPreset(p)}
-          customFrom={customFrom}
-          customTo={customTo}
-          setCustomFrom={setCustomFrom}
-          setCustomTo={setCustomTo}
-        />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <FilterPills
+            preset={preset}
+            onChange={(p) => setPreset(p)}
+            customFrom={customFrom}
+            customTo={customTo}
+            setCustomFrom={setCustomFrom}
+            setCustomTo={setCustomTo}
+          />
+          <DownloadReportControl
+            defaultFrom={range.from.toISOString()}
+            defaultTo={range.to.toISOString()}
+          />
+        </div>
       </div>
 
       {error && (
@@ -237,12 +262,13 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* Metric cards */}
-      <div className="stats-grid" style={{ marginBottom: 'var(--space-5)' }}>
+      {/* Executive KPI Row */}
+      <div className="stats-grid" style={{ marginBottom: 'var(--space-4)' }}>
         <MetricCard
-          label="Revenue"
+          label="Net Revenue"
           value={loading || !data ? '—' : formatPrice(data.revenue.total)}
           accent="success"
+          subtext={data ? `Gross GMV: ${formatPrice(data.revenue.gross)}` : undefined}
           trend={
             data
               ? { pct: data.revenue.trendPct, label: 'vs prev period' }
@@ -251,23 +277,39 @@ export default function AdminDashboard() {
           loading={loading}
         />
         <MetricCard
-          label="Orders"
-          value={loading || !data ? '—' : String(data.orders.total)}
+          label="Discount Spend"
+          value={loading || !data ? '—' : formatPrice(data.revenue.discount)}
+          subtext={
+            data
+              ? `${data.discounts.couponOrdersCount} coupon order${data.discounts.couponOrdersCount === 1 ? '' : 's'}`
+              : undefined
+          }
           loading={loading}
         />
         <MetricCard
-          label="AOV"
+          label="AOV & Orders"
           value={loading || !data ? '—' : formatPrice(data.aov)}
+          subtext={
+            data
+              ? `${data.orders.realized} active / ${data.orders.total} total`
+              : undefined
+          }
           loading={loading}
         />
         <MetricCard
-          label="Repeat customers"
-          value={loading || !data ? '—' : String(data.repeatCustomers)}
+          label="Conversion Rate"
+          value={loading || !data ? '—' : `${data.funnel.conversionRatePct}%`}
+          accent="info"
+          subtext={
+            data
+              ? `${data.funnel.sessions} sessions · ${data.funnel.reachedCheckout} checkout`
+              : undefined
+          }
           loading={loading}
         />
       </div>
 
-      {/* Status row */}
+      {/* Status & COD/Prepaid Split Row */}
       <div className="stats-grid" style={{ marginBottom: 'var(--space-5)' }}>
         <MetricCard
           label="Pending"
@@ -282,14 +324,20 @@ export default function AdminDashboard() {
           loading={loading}
         />
         <MetricCard
-          label="Shipped"
-          value={data ? String(data.orders.shipped) : '—'}
+          label="Shipped / Delivered"
+          value={data ? `${data.orders.shipped} / ${data.orders.delivered}` : '—'}
+          accent="success"
           loading={loading}
         />
         <MetricCard
-          label="Delivered"
-          value={data ? String(data.orders.delivered) : '—'}
-          accent="success"
+          label="Cancelled / RTO"
+          value={data ? String(data.orders.cancelled) : '—'}
+          accent={data && data.orders.cancelled > 0 ? 'error' : undefined}
+          subtext={
+            data && data.revenue.cancelled > 0
+              ? `Lost: ${formatPrice(data.revenue.cancelled)}`
+              : undefined
+          }
           loading={loading}
         />
       </div>
@@ -309,7 +357,7 @@ export default function AdminDashboard() {
         <ChartCard title="Orders trend">
           {data ? <OrderTrendChart data={data.trend} /> : <ChartSkeleton />}
         </ChartCard>
-        <ChartCard title="Payment split">
+        <ChartCard title="Prepaid vs COD Split">
           {data ? (
             <div style={{ paddingTop: 8 }}>
               <PaymentSplitBar
@@ -325,8 +373,12 @@ export default function AdminDashboard() {
                   color: 'var(--text-muted)',
                 }}
               >
-                <span>Online revenue: {formatPrice(data.revenue.prepaid)}</span>
-                <span>COD revenue: {formatPrice(data.revenue.cod)}</span>
+                <span>
+                  Prepaid {data.orders.paymentSplit.prepaidPct}% ({data.orders.paymentSplit.online}): {formatPrice(data.revenue.prepaid)}
+                </span>
+                <span>
+                  COD {data.orders.paymentSplit.codPct}% ({data.orders.paymentSplit.cod}): {formatPrice(data.revenue.cod)}
+                </span>
               </div>
             </div>
           ) : (
@@ -470,7 +522,69 @@ export default function AdminDashboard() {
         </SectionCard>
 
         <SectionCard
-          title="Recent customers"
+          title="Top selling sizes"
+          empty={data && data.topSizes.length === 0 ? 'No size data yet' : null}
+        >
+          {data && data.topSizes.length > 0 && (
+            <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {data.topSizes.map((s) => (
+                <li
+                  key={s.size}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    fontSize: '0.8125rem',
+                    gap: 12,
+                  }}
+                >
+                  <span style={{ fontWeight: 600 }}>{s.size}</span>
+                  <span className="text-muted">×{s.qty} ({s.sharePct}%)</span>
+                  <span style={{ fontWeight: 600 }}>{formatPrice(s.revenue)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </SectionCard>
+      </div>
+
+      {/* Coupon Spend Impact + Recent customers */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+          gap: 'var(--space-3)',
+          marginBottom: 'var(--space-5)',
+        }}
+      >
+        <SectionCard
+          title="Coupon & Promo Spend"
+          empty={data && data.discounts.topCoupons.length === 0 ? 'No discounts used in range' : null}
+        >
+          {data && data.discounts.topCoupons.length > 0 && (
+            <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {data.discounts.topCoupons.map((c) => (
+                <li
+                  key={c.code}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    fontSize: '0.8125rem',
+                    gap: 12,
+                  }}
+                >
+                  <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{c.code}</span>
+                  <span className="text-muted">{c.orders} orders</span>
+                  <span style={{ fontWeight: 600, color: 'var(--warning)' }}>
+                    −{formatPrice(c.discountPaise)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </SectionCard>
+
+        <SectionCard
+          title={`Recent customers (${data?.repeatCustomers ?? 0} repeat)`}
           empty={data && data.recentCustomers.length === 0 ? 'No customers yet' : null}
         >
           {data && data.recentCustomers.length > 0 && (
@@ -575,6 +689,7 @@ function FilterPills({
     { id: 'today', label: 'Today' },
     { id: 'yesterday', label: 'Yesterday' },
     { id: '7d', label: '7d' },
+    { id: '30d', label: '30d' },
     { id: 'month', label: 'Month' },
     { id: 'custom', label: 'Custom' },
   ];
@@ -650,12 +765,14 @@ const dateInput: React.CSSProperties = {
 function MetricCard({
   label,
   value,
+  subtext,
   accent,
   trend,
   loading,
 }: {
   label: string;
   value: string;
+  subtext?: string;
   accent?: 'success' | 'warning' | 'info' | 'error';
   trend?: { pct: number; label: string };
   loading?: boolean;
@@ -675,6 +792,11 @@ function MetricCard({
         {loading ? <span className="animate-pulse" style={{ opacity: 0.5 }}>—</span> : value}
       </div>
       <div className="stat-label">{label}</div>
+      {subtext && !loading && (
+        <div style={{ marginTop: 3, fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+          {subtext}
+        </div>
+      )}
       {trend && (
         <div
           style={{

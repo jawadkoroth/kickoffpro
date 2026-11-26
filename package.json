@@ -15,9 +15,12 @@
     "@vercel/analytics": "^2.0.1",
     "@vercel/speed-insights": "^2.0.0",
     "clsx": "^2.1.1",
+    "docx": "^9.16.1",
     "embla-carousel-autoplay": "^8.6.0",
     "embla-carousel-react": "^8.6.0",
     "framer-motion": "^12.40.0",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.9",
     "lucide-react": "^1.17.0",
     "next": "16.2.4",
     "nodemailer": "^8.0.11",
@@ -28,6 +31,7 @@
     "tailwind-merge": "^3.6.0",
     "tsx": "^4.23.15",
     "web-push": "^3.6.7",
+    "xlsx": "^0.18.5",
     "zod": "^4.3.6"
   },
   "devDependencies": {

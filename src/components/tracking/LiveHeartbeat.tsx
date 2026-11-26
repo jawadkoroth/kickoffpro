@@ -27,6 +27,18 @@ export default function LiveHeartbeat() {
   const { totalItems, totalPaise } = useCart();
   const referrerRef = useRef<string | null>(null);
   const isSendingRef = useRef(false);
+  const pendingResendRef = useRef(false);
+  const latestPayloadRef = useRef({
+    path: pathname || '/',
+    productCount: totalItems || 0,
+    cartTotalPaise: totalPaise || 0,
+  });
+
+  latestPayloadRef.current = {
+    path: pathname || '/',
+    productCount: totalItems || 0,
+    cartTotalPaise: totalPaise || 0,
+  };
 
   useEffect(() => {
     if (typeof document !== 'undefined' && document.referrer) {
@@ -36,24 +48,27 @@ export default function LiveHeartbeat() {
 
   const sendHeartbeat = async () => {
     if (typeof window === 'undefined') return;
-    if (!pathname || pathname.startsWith('/admin') || pathname.startsWith('/api')) {
+    const snap = latestPayloadRef.current;
+    if (!snap.path || snap.path.startsWith('/admin') || snap.path.startsWith('/api')) {
       return;
     }
     const sessionId = getOrCreateSessionId();
     if (!sessionId) return;
 
-    if (isSendingRef.current) return;
+    if (isSendingRef.current) {
+      pendingResendRef.current = true;
+      return;
+    }
     isSendingRef.current = true;
+    pendingResendRef.current = false;
 
     const payload = {
       sessionId,
-      path: pathname,
+      path: snap.path,
       referrer: referrerRef.current,
-      productCount: totalItems || 0,
-      cartTotalPaise: totalPaise || 0,
+      productCount: snap.productCount,
+      cartTotalPaise: snap.cartTotalPaise,
     };
-
-    console.log('[Heartbeat sent]', payload);
 
     const postHeartbeat = (url: string) =>
       fetch(url, {
@@ -78,13 +93,15 @@ export default function LiveHeartbeat() {
       const json = await res.json().catch(() => null);
       if (!res.ok || !json?.success) {
         console.warn('[Heartbeat response warning]', res.status, json);
-      } else {
-        console.log('[Heartbeat acknowledged]', json);
       }
     } catch (err) {
       console.error('[Heartbeat network error]', err);
     } finally {
       isSendingRef.current = false;
+      if (pendingResendRef.current) {
+        pendingResendRef.current = false;
+        void sendHeartbeat();
+      }
     }
   };
 

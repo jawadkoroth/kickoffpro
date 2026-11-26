@@ -64,7 +64,7 @@ export async function GET(req: NextRequest) {
     // 1. Always fetch direct rows from visitor_sessions as baseline and fallback
     const { data: directSessionsData, error: directSessionsError } = await supabase
       .from('visitor_sessions')
-      .select('id, current_path, country, state, city, referrer, last_active_at, created_at')
+      .select('id, current_path, country, state, city, referrer, last_active_at, created_at, added_to_cart_at, reached_checkout_at')
       .order('last_active_at', { ascending: false })
       .limit(100);
 
@@ -105,6 +105,18 @@ export async function GET(req: NextRequest) {
       return nowMs - activeAt <= liveThresholdMs && s.current_path && s.current_path.startsWith('/checkout');
     }).length;
 
+    const fallbackFunnelAddedToCartToday = directSessions.filter((s) => {
+      const row = s as { added_to_cart_at?: string | null; last_active_at: string };
+      return row.added_to_cart_at ? new Date(row.added_to_cart_at).getTime() >= startOfTodayMs : false;
+    }).length;
+
+    const fallbackFunnelReachedCheckoutToday = directSessions.filter((s) => {
+      const row = s as { reached_checkout_at?: string | null; current_path?: string | null; last_active_at: string };
+      const reachedAt = row.reached_checkout_at ? new Date(row.reached_checkout_at).getTime() : 0;
+      const onCheckoutToday = Boolean(row.current_path?.startsWith('/checkout')) && new Date(row.last_active_at).getTime() >= startOfTodayMs;
+      return reachedAt >= startOfTodayMs || onCheckoutToday;
+    }).length;
+
     // 2. Fetch Postgres-native snapshot function
     let snapshot = {
       visitors_right_now: fallbackVisitorsRightNow,
@@ -114,6 +126,8 @@ export async function GET(req: NextRequest) {
       active_carts_count: 0,
       active_carts_total_paise: 0,
       checking_out_count: fallbackCheckingOut,
+      funnel_added_to_cart_today: fallbackFunnelAddedToCartToday,
+      funnel_reached_checkout_today: fallbackFunnelReachedCheckoutToday,
       orders_today_count: 0,
       orders_today_revenue_paise: 0,
     };
@@ -136,6 +150,17 @@ export async function GET(req: NextRequest) {
           active_carts_count: Number(snapshotData.active_carts_count) || 0,
           active_carts_total_paise: Number(snapshotData.active_carts_total_paise) || 0,
           checking_out_count: Math.max(Number(snapshotData.checking_out_count) || 0, fallbackCheckingOut),
+          funnel_added_to_cart_today: Math.max(
+            Number(snapshotData.funnel_added_to_cart_today) || 0,
+            fallbackFunnelAddedToCartToday,
+            Number(snapshotData.active_carts_count) || 0,
+          ),
+          funnel_reached_checkout_today: Math.max(
+            Number(snapshotData.funnel_reached_checkout_today) || 0,
+            fallbackFunnelReachedCheckoutToday,
+            fallbackCheckingOut,
+            Number(snapshotData.orders_today_count) || 0,
+          ),
           orders_today_count: Number(snapshotData.orders_today_count) || 0,
           orders_today_revenue_paise: Number(snapshotData.orders_today_revenue_paise) || 0,
         };
@@ -279,6 +304,15 @@ export async function GET(req: NextRequest) {
         active_carts_count: snapshot.active_carts_count,
         active_carts_total_paise: snapshot.active_carts_total_paise,
         checking_out_count: snapshot.checking_out_count,
+        funnel_added_to_cart_today: Math.max(
+          snapshot.funnel_added_to_cart_today,
+          snapshot.active_carts_count,
+        ),
+        funnel_reached_checkout_today: Math.max(
+          snapshot.funnel_reached_checkout_today,
+          snapshot.checking_out_count,
+          snapshot.orders_today_count,
+        ),
         orders_today_count: snapshot.orders_today_count,
         orders_today_revenue_paise: snapshot.orders_today_revenue_paise,
       },

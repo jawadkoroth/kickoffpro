@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo, useCallback, useRef, Suspense } from 'rea
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { ADMIN_ORDER_CREATED_EVENT } from '@/components/admin/AdminRealtimeProvider';
+import DownloadReportControl from '@/components/admin/DownloadReportControl';
 
 /**
  * Admin Orders list — server-driven filters, search, pagination,
@@ -227,17 +228,25 @@ function OrdersList() {
       <div
         style={{
           display: 'flex',
-          alignItems: 'baseline',
+          alignItems: 'center',
           justifyContent: 'space-between',
           marginBottom: 'var(--space-4)',
           gap: 'var(--space-2)',
           flexWrap: 'wrap',
         }}
       >
-        <h1 style={{ fontSize: '1.25rem', fontWeight: 600 }}>Orders</h1>
-        <span className="text-xs text-muted">
-          {loading ? 'Loading…' : `${total.toLocaleString('en-IN')} match${total === 1 ? '' : 'es'}`}
-        </span>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
+          <h1 style={{ fontSize: '1.25rem', fontWeight: 600 }}>Orders</h1>
+          <span className="text-xs text-muted">
+            {loading ? 'Loading…' : `${total.toLocaleString('en-IN')} match${total === 1 ? '' : 'es'}`}
+          </span>
+        </div>
+        <DownloadReportControl
+          defaultFrom={from}
+          defaultTo={to}
+          statusFilter={status}
+          paymentFilter={payment}
+        />
       </div>
 
       {/* Status pills */}

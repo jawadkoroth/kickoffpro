@@ -36,6 +36,8 @@ interface LiveAnalyticsResponse {
     active_carts_count: number;
     active_carts_total_paise: number;
     checking_out_count: number;
+    funnel_added_to_cart_today?: number;
+    funnel_reached_checkout_today?: number;
     orders_today_count: number;
     orders_today_revenue_paise: number;
   };
@@ -391,11 +393,15 @@ export default function LiveAnalyticsPage() {
           </div>
           <div className={styles.funnelStep}>
             <span className={styles.funnelStepLabel}>2. Added to Cart</span>
-            <span className={styles.funnelStepVal}>{loading ? '—' : behavior?.active_carts_count ?? 0}</span>
+            <span className={styles.funnelStepVal}>
+              {loading ? '—' : behavior?.funnel_added_to_cart_today ?? behavior?.active_carts_count ?? 0}
+            </span>
           </div>
           <div className={styles.funnelStep}>
             <span className={styles.funnelStepLabel}>3. Reached Checkout</span>
-            <span className={styles.funnelStepVal}>{loading ? '—' : behavior?.checking_out_count ?? 0}</span>
+            <span className={styles.funnelStepVal}>
+              {loading ? '—' : behavior?.funnel_reached_checkout_today ?? behavior?.checking_out_count ?? 0}
+            </span>
           </div>
           <div className={styles.funnelStep}>
             <span className={styles.funnelStepLabel}>4. Purchased Today</span>
