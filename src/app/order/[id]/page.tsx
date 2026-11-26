@@ -42,6 +42,7 @@ interface Order {
   tracking_id: string | null;
   tracking_url?: string | null;
   shipping_provider: string | null;
+  delivered_at?: string | null;
   created_at: string;
   updated_at: string;
   retry_count: number;
@@ -540,6 +541,8 @@ export default function OrderPage({ params }: { params: Promise<{ id: string }> 
           orderNumber={order.order_number}
           orderStatus={order.order_status}
           hasTracking={Boolean(order.tracking_id)}
+          deliveredAt={order.delivered_at}
+          updatedAt={order.updated_at}
           returnType={order.return_type}
           returnReason={order.return_reason}
           returnNotes={order.return_notes}

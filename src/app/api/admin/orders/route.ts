@@ -100,14 +100,15 @@ export async function GET(req: NextRequest) {
     .map((s) => s.trim().toLowerCase())
     .filter(Boolean);
   const stuckOnly = statuses.length === 1 && statuses[0] === 'stuck';
-  const realStatuses = stuckOnly
+  const refundPendingOnly = statuses.length === 1 && statuses[0] === 'refund_pending';
+  const realStatuses = stuckOnly || refundPendingOnly
     ? []
     : statuses.filter((s) => VALID_STATUSES.has(s));
 
   let query = admin
     .from('orders')
     .select(
-      'id, order_number, total_paise, order_status, payment_status, payment_method, customer, cancel_reason, cancelled_by, return_type, return_reason, return_status, return_requested_at, last_activity_at, shipping_provider, tracking_id, created_at',
+      'id, order_number, total_paise, order_status, payment_status, payment_method, customer, cancel_reason, cancelled_by, return_type, return_reason, return_status, return_requested_at, last_activity_at, shipping_provider, tracking_id, refund_status, refund_reference, refunded_at, created_at',
       { count: 'exact' },
     )
     .order('last_activity_at', { ascending: false })
@@ -120,6 +121,8 @@ export async function GET(req: NextRequest) {
       .eq('payment_status', 'pending')
       .eq('order_status', 'pending')
       .lt('created_at', thirtyMinAgo);
+  } else if (refundPendingOnly) {
+    query = query.eq('refund_status', 'pending');
   } else if (realStatuses.length === 1) {
     query = query.eq('order_status', realStatuses[0]);
   } else if (realStatuses.length > 1) {
@@ -186,6 +189,9 @@ export async function GET(req: NextRequest) {
       last_activity_at?: string | null;
       shipping_provider?: string | null;
       tracking_id?: string | null;
+      refund_status?: string | null;
+      refund_reference?: string | null;
+      refunded_at?: string | null;
       created_at: string;
     };
     return {
@@ -206,6 +212,9 @@ export async function GET(req: NextRequest) {
       last_activity_at: row.last_activity_at ?? row.created_at,
       shipping_provider: row.shipping_provider ?? null,
       tracking_id: row.tracking_id ?? null,
+      refund_status: row.refund_status ?? 'none',
+      refund_reference: row.refund_reference ?? null,
+      refunded_at: row.refunded_at ?? null,
       created_at: row.created_at,
     };
   });
@@ -307,12 +316,22 @@ export async function POST(req: NextRequest) {
 
   if (action === 'cancel' && data && data.length > 0) {
     const { notifyOrderCancelled } = await import('@/lib/notifications/orderNotifications');
+    const paidCancelledIds: string[] = [];
     for (const item of data) {
       const prev = previousMap.get(item.id);
       if (prev && prev.order_status !== 'cancelled' && prev.payment_status !== 'failed') {
         await admin.rpc('restore_order_stock', { p_order_id: item.id });
       }
+      if (prev && prev.payment_status === 'paid') {
+        paidCancelledIds.push(item.id);
+      }
       await notifyOrderCancelled(item.id, 'admin_action').catch(() => {});
+    }
+    if (paidCancelledIds.length > 0) {
+      await admin
+        .from('orders')
+        .update({ refund_status: 'pending' })
+        .in('id', paidCancelledIds);
     }
   }
 

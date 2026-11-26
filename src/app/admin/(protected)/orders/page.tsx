@@ -29,6 +29,9 @@ interface OrderRow {
   return_requested_at?: string | null;
   shipping_provider?: string | null;
   tracking_id?: string | null;
+  refund_status?: string | null;
+  refund_reference?: string | null;
+  refunded_at?: string | null;
   created_at: string;
 }
 
@@ -39,6 +42,7 @@ const STATUS_FILTERS = [
   { key: 'shipped', label: 'Shipped' },
   { key: 'delivered', label: 'Delivered' },
   { key: 'return_requested,returned', label: 'Returns' },
+  { key: 'refund_pending', label: 'Refund Pending' },
   { key: 'cancelled', label: 'Cancelled' },
   { key: 'stuck', label: '⚠ Stuck' },
 ] as const;
@@ -507,7 +511,23 @@ function OrdersList() {
                     <span style={{ fontWeight: 600, fontSize: '0.8125rem', fontFamily: 'monospace' }}>
                       {order.order_number}
                     </span>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                      {order.refund_status === 'pending' && (
+                        <span
+                          style={{
+                            padding: '2px 8px',
+                            borderRadius: 999,
+                            background: 'rgba(249, 115, 22, 0.2)',
+                            border: '1px solid rgba(249, 115, 22, 0.55)',
+                            color: '#FB923C',
+                            fontSize: '0.6875rem',
+                            fontWeight: 800,
+                            letterSpacing: '0.04em',
+                          }}
+                        >
+                          REFUND PENDING
+                        </span>
+                      )}
                       {isDelivered && (
                         <span
                           title="Delivered Order"

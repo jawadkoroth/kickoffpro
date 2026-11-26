@@ -300,6 +300,8 @@ export default async function OrderDetailPage({
         orderNumber={order.order_number}
         orderStatus={order.order_status}
         hasTracking={Boolean(order.tracking_id)}
+        deliveredAt={order.delivered_at}
+        updatedAt={order.updated_at}
         returnType={order.return_type}
         returnReason={order.return_reason}
         returnNotes={order.return_notes}

@@ -2,12 +2,15 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { getReturnWindowState } from '@/lib/orders/returnWindow';
 
 interface CustomerOrderActionsProps {
   orderId: string;
   orderNumber: string;
   orderStatus: string;
   hasTracking: boolean;
+  deliveredAt?: string | null;
+  updatedAt?: string | null;
   returnType?: string | null;
   returnReason?: string | null;
   returnNotes?: string | null;
@@ -52,6 +55,8 @@ export default function CustomerOrderActions({
   orderNumber,
   orderStatus,
   hasTracking,
+  deliveredAt,
+  updatedAt,
   returnType,
   returnReason,
   returnNotes,
@@ -84,7 +89,14 @@ export default function CustomerOrderActions({
   const canCancel =
     (normalizedStatus === 'pending' || normalizedStatus === 'confirmed') && !hasTracking;
 
-  const canReturn = normalizedStatus === 'delivered';
+  const returnWindow = getReturnWindowState({
+    order_status: normalizedStatus,
+    delivered_at: deliveredAt,
+    updated_at: updatedAt,
+  });
+
+  const canReturn = normalizedStatus === 'delivered' && returnWindow.eligible;
+  const returnWindowClosed = normalizedStatus === 'delivered' && returnWindow.expired;
   const isReturnActive =
     normalizedStatus === 'return_requested' ||
     normalizedStatus === 'returned' ||
@@ -171,7 +183,7 @@ export default function CustomerOrderActions({
     }
   }
 
-  if (!canCancel && !canReturn && !isReturnActive) {
+  if (!canCancel && !canReturn && !returnWindowClosed && !isReturnActive) {
     return null;
   }
 
@@ -266,7 +278,7 @@ export default function CustomerOrderActions({
         </div>
       )}
 
-      {/* Return / Exchange button after delivery */}
+      {/* Return / Exchange button after delivery (strict 7-day window) */}
       {canReturn && !justSubmittedReturn && (
         <div
           style={{
@@ -286,7 +298,10 @@ export default function CustomerOrderActions({
               Need a size exchange or return?
             </p>
             <p style={{ margin: '2px 0 0', fontSize: '0.75rem', color: '#64748B' }}>
-              Submit a quick request and our team will reach out to assist.
+              Available for 7 days from delivery
+              {returnWindow.expiresAtIso
+                ? ` (until ${new Date(returnWindow.expiresAtIso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}).`
+                : '.'}
             </p>
           </div>
           <button
@@ -308,6 +323,21 @@ export default function CustomerOrderActions({
           >
             Return / Exchange
           </button>
+        </div>
+      )}
+
+      {returnWindowClosed && !justSubmittedReturn && (
+        <div
+          style={{
+            background: '#F8FAFC',
+            border: '1px solid rgba(7, 27, 58, 0.08)',
+            borderRadius: '10px',
+            padding: '12px 16px',
+            fontSize: '0.78rem',
+            color: '#64748B',
+          }}
+        >
+          7-day return &amp; exchange window closed.
         </div>
       )}
 
@@ -342,7 +372,7 @@ export default function CustomerOrderActions({
               Cancel Order {orderNumber}
             </h3>
             <p style={{ margin: '0 0 14px', fontSize: '0.8rem', color: '#475569' }}>
-              Select a reason so we can stop dispatch immediately. Any prepaid amount will be refunded automatically.
+              Select a reason so we can stop dispatch immediately. Any prepaid amount will be reviewed and refunded within 5–7 business days.
             </p>
 
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>

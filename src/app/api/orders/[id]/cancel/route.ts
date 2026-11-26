@@ -65,8 +65,10 @@ export async function POST(
       ? rawReason.slice(0, 300)
       : 'Cancelled by customer before dispatch';
     const nowIso = new Date().toISOString();
+    const isPrepaidPaid = order.payment_status === 'paid';
 
-    // Atomic guard against concurrent shipment creation
+    // Atomic guard against concurrent shipment creation.
+    // Never auto-refunds Razorpay — prepaid cancellations flag refund_status = 'pending' for manual inspection/action.
     const { data: updated, error: updateErr } = await supabase
       .from('orders')
       .update({
@@ -74,6 +76,7 @@ export async function POST(
         cancel_reason: cancelReason,
         cancelled_by: 'customer',
         cancelled_at: nowIso,
+        refund_status: isPrepaidPaid ? 'pending' : 'none',
         updated_at: nowIso,
       })
       .eq('id', id)
@@ -101,8 +104,10 @@ export async function POST(
         idempotencyKey: `push.customer_cancel.${id}`,
         payload: {
           push: {
-            title: `Order Cancelled by Customer — ${order.order_number}`,
-            body: `Do not ship. Reason: ${cancelReason}`,
+            title: isPrepaidPaid
+              ? `Cancelled (Manual Refund Pending) — ${order.order_number}`
+              : `Order Cancelled by Customer — ${order.order_number}`,
+            body: `Do not ship. Reason: ${cancelReason}${isPrepaidPaid ? ' · Manual Razorpay refund required.' : ''}`,
             url: `/admin/orders/${id}`,
             tag: `cancel-${id}`,
           },
@@ -119,6 +124,7 @@ export async function POST(
         order_number: order.order_number,
         previous_status: order.order_status,
         reason: cancelReason,
+        refund_status: isPrepaidPaid ? 'pending' : 'none',
       },
       { source: 'api', entityType: 'order', entityId: id },
     );
@@ -127,6 +133,7 @@ export async function POST(
       order_status: 'cancelled',
       cancel_reason: cancelReason,
       cancelled_at: nowIso,
+      refund_status: isPrepaidPaid ? 'pending' : 'none',
     });
   } catch (err) {
     logEvent(

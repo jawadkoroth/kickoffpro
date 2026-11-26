@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { apiSuccess, apiError } from '@/lib/api-response';
 import { authorizeCustomerOrder } from '@/lib/orders/authorizeCustomerOrder';
+import { getReturnWindowState } from '@/lib/orders/returnWindow';
 import { enqueue, triggerImmediateQueueProcessing } from '@/lib/jobs/queue';
 import { logEvent } from '@/lib/log';
 
@@ -52,7 +53,7 @@ export async function POST(
     const supabase = createAdminClient();
     const { data: order, error: fetchErr } = await supabase
       .from('orders')
-      .select('id, order_number, user_id, order_status, customer')
+      .select('id, order_number, user_id, order_status, customer, delivered_at, updated_at')
       .eq('id', id)
       .maybeSingle();
 
@@ -74,6 +75,11 @@ export async function POST(
         400,
         'Returns and exchanges can only be requested after the order has been delivered.',
       );
+    }
+
+    const windowState = getReturnWindowState(order);
+    if (!windowState.eligible) {
+      return apiError(400, 'The 7-day return/exchange window for this order has closed.');
     }
 
     const nowIso = new Date().toISOString();

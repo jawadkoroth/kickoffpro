@@ -62,6 +62,9 @@ interface Order {
   return_status: string | null;
   return_requested_at: string | null;
   return_resolved_at: string | null;
+  refund_status: 'none' | 'pending' | 'completed';
+  refund_reference: string | null;
+  refunded_at: string | null;
   notes: string | null;
   created_at: string;
   updated_at: string;
@@ -125,6 +128,11 @@ export default function AdminOrderDetail({ params }: { params: Promise<{ id: str
   const [deliveryVerified, setDeliveryVerified] = useState(false);
   const [forceOverrideAutomated, setForceOverrideAutomated] = useState(false);
   const [deliveryNote, setDeliveryNote] = useState('');
+
+  // Return inspection + manual Razorpay refund state
+  const [returnInspectionChecked, setReturnInspectionChecked] = useState(false);
+  const [refundRefNote, setRefundRefNote] = useState('');
+  const [refundConfirmedCheck, setRefundConfirmedCheck] = useState(false);
 
   useEffect(() => {
     fetchOrder();
@@ -266,6 +274,7 @@ export default function AdminOrderDetail({ params }: { params: Promise<{ id: str
               cancel_reason: cancelReason,
               cancelled_by: 'admin',
               cancelled_at: new Date().toISOString(),
+              refund_status: currentOrder.payment_status === 'paid' ? 'pending' : 'none',
             })
             .eq('id', id)
             .in('order_status', ['pending', 'confirmed'])
@@ -356,7 +365,7 @@ export default function AdminOrderDetail({ params }: { params: Promise<{ id: str
     setActionLoading('');
   }
 
-  async function handleReturnStatus(nextStatus: string, markRefunded = false) {
+  async function handleReturnStatus(nextStatus: string, inspectionPassed = false) {
     if (actionLoading || !order) return;
     if (nextStatus === 'rejected' && !window.confirm('Close/reject this return request and revert status to Delivered?')) {
       return;
@@ -366,17 +375,46 @@ export default function AdminOrderDetail({ params }: { params: Promise<{ id: str
       const res = await fetch(`/api/admin/orders/${id}/return-status`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ return_status: nextStatus, mark_refunded: markRefunded }),
+        body: JSON.stringify({ return_status: nextStatus, inspection_passed: inspectionPassed }),
       });
       const json = await res.json();
       if (!res.ok || !json.success) {
         showToast(json.error || 'Failed to update return status', 'error');
       } else {
+        setReturnInspectionChecked(false);
         await fetchOrder();
         showToast(`Return status updated to ${nextStatus.replace('_', ' ')}`, 'success');
       }
     } catch {
       showToast('Failed to update return status', 'error');
+    } finally {
+      setActionLoading('');
+    }
+  }
+
+  async function handleManualRefund() {
+    if (actionLoading || !order) return;
+    setActionLoading('refund');
+    try {
+      const res = await fetch(`/api/admin/orders/${id}/refund`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          confirmed_by_admin: refundConfirmedCheck,
+          refund_reference: refundRefNote.trim() || undefined,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        showToast(json.error || 'Failed to record manual refund', 'error');
+      } else {
+        setRefundConfirmedCheck(false);
+        setRefundRefNote('');
+        await fetchOrder();
+        showToast('Marked refunded via Razorpay cleanly', 'success');
+      }
+    } catch {
+      showToast('Failed to record manual refund', 'error');
     } finally {
       setActionLoading('');
     }
@@ -488,50 +526,197 @@ export default function AdminOrderDetail({ params }: { params: Promise<{ id: str
           </div>
 
           {order.order_status === 'return_requested' && (
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {order.return_status === 'requested' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {order.return_status === 'requested' && (
+                  <button
+                    type="button"
+                    className={`btn btn-primary btn-sm ${actionLoading === 'return:approved' ? 'btn-loading' : ''}`}
+                    disabled={!!actionLoading}
+                    onClick={() => handleReturnStatus('approved')}
+                  >
+                    Approve Return
+                  </button>
+                )}
+                {(order.return_status === 'requested' || order.return_status === 'approved') && (
+                  <button
+                    type="button"
+                    className={`btn btn-secondary btn-sm ${actionLoading === 'return:pickup_scheduled' ? 'btn-loading' : ''}`}
+                    disabled={!!actionLoading}
+                    onClick={() => handleReturnStatus('pickup_scheduled')}
+                  >
+                    Mark Pickup Scheduled
+                  </button>
+                )}
+                {order.return_status === 'received' && (
+                  <button
+                    type="button"
+                    className={`btn btn-success btn-sm ${actionLoading === 'return:completed' ? 'btn-loading' : ''}`}
+                    disabled={!!actionLoading}
+                    onClick={() => handleReturnStatus('completed', true)}
+                  >
+                    {order.return_type === 'refund'
+                      ? 'Complete Return (Refund Flagged Pending)'
+                      : 'Complete Exchange'}
+                  </button>
+                )}
                 <button
                   type="button"
-                  className={`btn btn-primary btn-sm ${actionLoading === 'return:approved' ? 'btn-loading' : ''}`}
+                  className="btn btn-ghost btn-sm"
+                  style={{ color: 'var(--error)' }}
                   disabled={!!actionLoading}
-                  onClick={() => handleReturnStatus('approved')}
+                  onClick={() => handleReturnStatus('rejected')}
                 >
-                  Approve Return
+                  Reject / Close
                 </button>
-              )}
-              {(order.return_status === 'requested' || order.return_status === 'approved') && (
-                <button
-                  type="button"
-                  className={`btn btn-secondary btn-sm ${actionLoading === 'return:pickup_scheduled' ? 'btn-loading' : ''}`}
-                  disabled={!!actionLoading}
-                  onClick={() => handleReturnStatus('pickup_scheduled')}
+              </div>
+
+              {order.return_status !== 'received' && (
+                <div
+                  style={{
+                    background: 'rgba(0,0,0,0.2)',
+                    borderRadius: 'var(--radius-sm)',
+                    padding: '10px 12px',
+                    border: '1px solid rgba(250, 204, 21, 0.35)',
+                  }}
                 >
-                  Mark Pickup Scheduled
-                </button>
+                  <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: '0.8125rem', cursor: 'pointer', marginBottom: 8 }}>
+                    <input
+                      type="checkbox"
+                      checked={returnInspectionChecked}
+                      onChange={(e) => setReturnInspectionChecked(e.target.checked)}
+                    />
+                    <span>I confirm the returned product was received back in undamaged condition</span>
+                  </label>
+                  <button
+                    type="button"
+                    className={`btn btn-success btn-sm ${actionLoading === 'return:received' ? 'btn-loading' : ''}`}
+                    disabled={!!actionLoading || !returnInspectionChecked}
+                    onClick={() => handleReturnStatus('received', true)}
+                  >
+                    {order.return_type === 'refund' && order.payment_status === 'paid'
+                      ? 'Mark Received Undamaged & Flag Refund Pending'
+                      : 'Mark Item Received Undamaged'}
+                  </button>
+                </div>
               )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Manual Razorpay Refund Card (Cancelled Prepaid OR Verified Undamaged Return-Refund) */}
+      {(order.refund_status === 'pending' ||
+        order.refund_status === 'completed' ||
+        order.payment_status === 'refunded' ||
+        (order.payment_status === 'paid' &&
+          (isCancelled ||
+            (order.return_type === 'refund' &&
+              (order.order_status === 'return_requested' || order.order_status === 'returned'))))) && (
+        <div
+          className="card"
+          style={{
+            marginBottom: 'var(--space-4)',
+            background:
+              order.refund_status === 'completed' || order.payment_status === 'refunded'
+                ? 'rgba(34, 197, 94, 0.08)'
+                : 'rgba(249, 115, 22, 0.12)',
+            border:
+              order.refund_status === 'completed' || order.payment_status === 'refunded'
+                ? '1px solid rgba(34, 197, 94, 0.35)'
+                : '1px solid rgba(249, 115, 22, 0.45)',
+            borderLeft:
+              order.refund_status === 'completed' || order.payment_status === 'refunded'
+                ? '4px solid #22C55E'
+                : '4px solid #F97316',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 'var(--space-3)' }}>
+            <p
+              className="input-label"
+              style={{
+                margin: 0,
+                color:
+                  order.refund_status === 'completed' || order.payment_status === 'refunded'
+                    ? '#4ADE80'
+                    : '#FB923C',
+              }}
+            >
+              Manual Razorpay Refund
+            </p>
+            <span
+              style={{
+                padding: '3px 10px',
+                borderRadius: 999,
+                background:
+                  order.refund_status === 'completed' || order.payment_status === 'refunded'
+                    ? 'rgba(34, 197, 94, 0.2)'
+                    : 'rgba(249, 115, 22, 0.25)',
+                color:
+                  order.refund_status === 'completed' || order.payment_status === 'refunded'
+                    ? '#4ADE80'
+                    : '#FB923C',
+                fontSize: '0.6875rem',
+                fontWeight: 800,
+                textTransform: 'uppercase',
+              }}
+            >
+              {order.refund_status === 'completed' || order.payment_status === 'refunded'
+                ? 'REFUND COMPLETED'
+                : 'REFUND PENDING'}
+            </span>
+          </div>
+
+          <div style={{ fontSize: '0.8125rem', display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 'var(--space-3)' }}>
+            <div>
+              Paid Amount: <strong>{formatPrice(order.total_paise)}</strong> ({order.payment_status})
+            </div>
+            <div>
+              Razorpay Payment ID:{' '}
+              <strong style={{ fontFamily: 'monospace' }}>
+                {order.razorpay_payment_id || '—'}
+              </strong>
+            </div>
+          </div>
+
+          {order.refund_status === 'completed' || order.payment_status === 'refunded' ? (
+            <div style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
+              {order.refunded_at && (
+                <div>Refunded at: <strong>{formatDate(order.refunded_at)}</strong></div>
+              )}
+              {order.refund_reference && (
+                <div>Refund ID / Note: <strong style={{ fontFamily: 'monospace' }}>{order.refund_reference}</strong></div>
+              )}
+            </div>
+          ) : (order.order_status === 'return_requested' || order.order_status === 'returned') &&
+            order.return_status !== 'received' &&
+            order.return_status !== 'completed' ? (
+            <div className="text-xs" style={{ color: '#FCD34D' }}>
+              Inspect and confirm returned product as undamaged above before issuing manual Razorpay refund.
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <input
+                className="input-field"
+                placeholder="Razorpay Refund ID / Note (optional, e.g. rfnd_...)"
+                value={refundRefNote}
+                onChange={(e) => setRefundRefNote(e.target.value)}
+              />
+              <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: '0.8125rem', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={refundConfirmedCheck}
+                  onChange={(e) => setRefundConfirmedCheck(e.target.checked)}
+                />
+                <span>I have manually processed this refund in the Razorpay Dashboard</span>
+              </label>
               <button
                 type="button"
-                className={`btn btn-success btn-sm ${actionLoading === 'return:completed' ? 'btn-loading' : ''}`}
-                disabled={!!actionLoading}
-                onClick={() =>
-                  handleReturnStatus(
-                    'completed',
-                    order.return_type === 'refund' && order.payment_status === 'paid',
-                  )
-                }
+                className={`btn btn-primary btn-sm ${actionLoading === 'refund' ? 'btn-loading' : ''}`}
+                disabled={!!actionLoading || !refundConfirmedCheck}
+                onClick={handleManualRefund}
               >
-                {order.return_type === 'refund' && order.payment_status === 'paid'
-                  ? 'Complete Return & Mark Refunded'
-                  : 'Mark Return / Exchange Completed'}
-              </button>
-              <button
-                type="button"
-                className="btn btn-ghost btn-sm"
-                style={{ color: 'var(--error)' }}
-                disabled={!!actionLoading}
-                onClick={() => handleReturnStatus('rejected')}
-              >
-                Reject / Close
+                Mark Refunded via Razorpay
               </button>
             </div>
           )}
@@ -1155,6 +1340,15 @@ export default function AdminOrderDetail({ params }: { params: Promise<{ id: str
           )}
           {order.return_resolved_at && (
             <div>• Return Resolved ({order.return_status}): <strong>{formatDate(order.return_resolved_at)}</strong></div>
+          )}
+          {order.refund_status === 'pending' && (
+            <div style={{ color: '#FB923C' }}>• Manual Razorpay Refund Pending</div>
+          )}
+          {order.refunded_at && (
+            <div style={{ color: '#4ADE80' }}>
+              • Manual Refund Completed: <strong>{formatDate(order.refunded_at)}</strong>
+              {order.refund_reference ? ` (${order.refund_reference})` : ''}
+            </div>
           )}
         </div>
       </div>

@@ -36,6 +36,9 @@ async function gateAdmin() {
  * POST /api/admin/orders/[id]/return-status
  *
  * Updates the workflow state of a customer return/exchange request.
+ * Strictly manual-refund: NEVER calls Razorpay or flips payment_status='refunded' here.
+ * Moving to `'received'` requires explicit undamaged inspection confirmation, and flags
+ * prepaid refund returns with `refund_status = 'pending'` for manual Razorpay action.
  */
 export async function POST(
   req: NextRequest,
@@ -50,7 +53,7 @@ export async function POST(
 
     const body = (await req.json().catch(() => ({}))) as {
       return_status?: string;
-      mark_refunded?: boolean;
+      inspection_passed?: boolean;
     };
 
     const nextReturnStatus = (body.return_status || '').trim();
@@ -60,7 +63,7 @@ export async function POST(
 
     const { data: order, error: fetchErr } = await supabase
       .from('orders')
-      .select('id, order_number, order_status, payment_status, return_type')
+      .select('id, order_number, order_status, payment_status, return_type, return_status, refund_status')
       .eq('id', id)
       .maybeSingle();
 
@@ -72,21 +75,56 @@ export async function POST(
       return apiError(400, 'Order does not have an active return request.');
     }
 
+    if (nextReturnStatus === 'received' && body.inspection_passed !== true) {
+      return apiError(
+        400,
+        'Please confirm that the returned product was received back in undamaged condition.',
+      );
+    }
+
+    if (
+      nextReturnStatus === 'completed' &&
+      order.return_type === 'refund' &&
+      order.return_status !== 'received' &&
+      body.inspection_passed !== true
+    ) {
+      return apiError(
+        400,
+        'Confirm undamaged item receipt before completing a refund return.',
+      );
+    }
+
     const nowIso = new Date().toISOString();
     const update: Record<string, unknown> = {
       return_status: nextReturnStatus,
       updated_at: nowIso,
     };
 
-    if (nextReturnStatus === 'completed') {
+    if (nextReturnStatus === 'received') {
+      update.order_status = 'return_requested';
+      if (
+        order.return_type === 'refund' &&
+        order.payment_status === 'paid' &&
+        order.refund_status !== 'completed'
+      ) {
+        update.refund_status = 'pending';
+      }
+    } else if (nextReturnStatus === 'completed') {
       update.order_status = 'returned';
       update.return_resolved_at = nowIso;
-      if (body.mark_refunded && order.return_type === 'refund' && order.payment_status === 'paid') {
-        update.payment_status = 'refunded';
+      if (
+        order.return_type === 'refund' &&
+        order.payment_status === 'paid' &&
+        order.refund_status !== 'completed'
+      ) {
+        update.refund_status = 'pending';
       }
     } else if (nextReturnStatus === 'rejected') {
       update.order_status = 'delivered';
       update.return_resolved_at = nowIso;
+      if (order.refund_status === 'pending') {
+        update.refund_status = 'none';
+      }
     } else {
       update.order_status = 'return_requested';
     }
@@ -106,6 +144,7 @@ export async function POST(
         order_id: id,
         order_number: order.order_number,
         return_status: nextReturnStatus,
+        refund_status: update.refund_status ?? order.refund_status,
         admin_id: gate.userId,
       },
       { source: 'api', entityType: 'order', entityId: id },
@@ -114,6 +153,7 @@ export async function POST(
     return apiSuccess({
       order_status: update.order_status,
       return_status: nextReturnStatus,
+      refund_status: update.refund_status ?? order.refund_status,
     });
   } catch (err) {
     logEvent(
