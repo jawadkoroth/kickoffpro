@@ -73,15 +73,16 @@ export async function POST(
     }
 
     const isCancelled = order.order_status === 'cancelled';
+    const isRto = order.order_status === 'rto';
     const isVerifiedRefundReturn =
       (order.order_status === 'return_requested' || order.order_status === 'returned') &&
       order.return_type === 'refund' &&
       (order.return_status === 'received' || order.return_status === 'completed');
 
-    if (!isCancelled && !isVerifiedRefundReturn) {
+    if (!isCancelled && !isRto && !isVerifiedRefundReturn) {
       return apiError(
         400,
-        'Manual refund is allowed only for cancelled prepaid orders OR refund returns confirmed as received undamaged.',
+        'Manual refund is allowed only for cancelled/RTO prepaid orders OR refund returns confirmed as received undamaged.',
       );
     }
 

@@ -52,6 +52,7 @@ const VALID_STATUSES = new Set([
   'cancelled',
   'return_requested',
   'returned',
+  'rto',
 ]);
 
 const VALID_PAYMENT_METHODS = new Set(['online', 'cod']);
@@ -108,7 +109,7 @@ export async function GET(req: NextRequest) {
   let query = admin
     .from('orders')
     .select(
-      'id, order_number, total_paise, order_status, payment_status, payment_method, customer, cancel_reason, cancelled_by, return_type, return_reason, return_status, return_requested_at, last_activity_at, shipping_provider, tracking_id, refund_status, refund_reference, refunded_at, created_at',
+      'id, order_number, total_paise, order_status, payment_status, payment_method, customer, cancel_reason, cancelled_by, return_type, return_reason, return_status, return_requested_at, last_activity_at, shipping_provider, tracking_id, refund_status, refund_reference, refunded_at, rto_at, rto_reason, cod_paid_at, created_at',
       { count: 'exact' },
     )
     .order('last_activity_at', { ascending: false })
@@ -192,6 +193,9 @@ export async function GET(req: NextRequest) {
       refund_status?: string | null;
       refund_reference?: string | null;
       refunded_at?: string | null;
+      rto_at?: string | null;
+      rto_reason?: string | null;
+      cod_paid_at?: string | null;
       created_at: string;
     };
     return {
@@ -215,6 +219,9 @@ export async function GET(req: NextRequest) {
       refund_status: row.refund_status ?? 'none',
       refund_reference: row.refund_reference ?? null,
       refunded_at: row.refunded_at ?? null,
+      rto_at: row.rto_at ?? null,
+      rto_reason: row.rto_reason ?? null,
+      cod_paid_at: row.cod_paid_at ?? null,
       created_at: row.created_at,
     };
   });

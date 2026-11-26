@@ -9,11 +9,12 @@ import { useCart } from '@/lib/cart';
 import { FEATURE_FLAGS } from '@/lib/featureFlags';
 import { getPublicUrl } from '@/lib/media';
 import { trackPurchase, clearCheckoutEventId } from '@/lib/tracking/client';
-import CustomerOrderActions from '@/components/orders/CustomerOrderActions';
+import CustomerOrderActions, { type StoredReturnItemView } from '@/components/orders/CustomerOrderActions';
 import { formatCourierDisplayName, resolveTrackingUrl } from '@/lib/shipping/couriers';
 import styles from './page.module.css';
 
 interface OrderLine {
+  id?: string;
   product_id: string;
   product_name: string;
   size: string;
@@ -21,6 +22,7 @@ interface OrderLine {
   unit_price_paise: number;
   subtotal_paise: number;
   image_url: string | null;
+  available_sizes?: string[];
 }
 
 interface Order {
@@ -32,6 +34,7 @@ interface Order {
   subtotal_paise?: number | null;
   total_paise: number;
   discount_paise: number;
+  coupon_code?: string | null;
   shipping_paise?: number | null;
   cod_fee_paise?: number | null;
   payment_method: string;
@@ -50,8 +53,12 @@ interface Order {
   return_type?: string | null;
   return_reason?: string | null;
   return_notes?: string | null;
+  return_items?: StoredReturnItemView[] | null;
+  estimated_refund_paise?: number | null;
   return_status?: string | null;
   return_requested_at?: string | null;
+  rto_at?: string | null;
+  rto_reason?: string | null;
   tracking_event_id?: string | null;
 }
 
@@ -275,12 +282,16 @@ export default function OrderPage({ params }: { params: Promise<{ id: string }> 
   }
 
   const isCancelled = order.order_status === 'cancelled';
+  const isRto = order.order_status === 'rto';
   const isReturnActive =
     order.order_status === 'return_requested' || order.order_status === 'returned';
   const isSuccess =
     !isCancelled &&
+    !isRto &&
     !isReturnActive &&
     (order.payment_status === 'paid' || order.payment_method === 'cod');
+  const hasOfferApplied =
+    (order.discount_paise ?? 0) > 0 || Boolean(order.coupon_code && order.coupon_code.trim());
   const isFailedPayment = order.payment_method === 'online' && order.payment_status === 'failed' && order.order_status !== 'cancelled';
   const isPendingPayment = order.payment_method === 'online' && order.payment_status === 'pending' && order.order_status !== 'cancelled';
   const canRetry = (isPendingPayment || isFailedPayment) && order.retry_count < 3;
@@ -331,6 +342,16 @@ export default function OrderPage({ params }: { params: Promise<{ id: string }> 
               </h1>
               <p className={styles.heroSubtitle}>
                 Your return is getting processed. Our team will get in contact with you shortly.
+              </p>
+            </>
+          )}
+
+          {isRto && (
+            <>
+              <div className={styles.cancelledIcon}>↩</div>
+              <h1 className={styles.heroTitle}>Returned to Origin</h1>
+              <p className={styles.heroSubtitle}>
+                {order.rto_reason || 'This shipment could not be delivered and has returned to our warehouse.'}
               </p>
             </>
           )}
@@ -408,7 +429,7 @@ export default function OrderPage({ params }: { params: Promise<{ id: string }> 
         )}
 
         {/* TIMELINE */}
-        {!isCancelled && (
+        {!isCancelled && !isRto && (
           <section className={styles.timelineSection}>
             <p className={styles.sectionTitle}>Order Timeline</p>
             <div className={styles.timelineGrid}>
@@ -534,24 +555,6 @@ export default function OrderPage({ params }: { params: Promise<{ id: string }> 
             </span>
           </div>
         </section>
-
-        {/* CANCEL / RETURN CONTROLS */}
-        <CustomerOrderActions
-          orderId={order.id}
-          orderNumber={order.order_number}
-          orderStatus={order.order_status}
-          hasTracking={Boolean(order.tracking_id)}
-          deliveredAt={order.delivered_at}
-          updatedAt={order.updated_at}
-          returnType={order.return_type}
-          returnReason={order.return_reason}
-          returnNotes={order.return_notes}
-          returnStatus={order.return_status}
-          returnRequestedAt={order.return_requested_at}
-          guestEmail={guestAuth.email}
-          guestPhone={guestAuth.phone}
-          onUpdated={fetchOrder}
-        />
 
         {/* TRACKING */}
         {order.tracking_id && (
@@ -683,6 +686,40 @@ export default function OrderPage({ params }: { params: Promise<{ id: string }> 
             Track My Order
           </Link>
         </div>
+
+        {/* Low-emphasis Cancel / Return / Exchange footer at the very bottom */}
+        <CustomerOrderActions
+          orderId={order.id}
+          orderNumber={order.order_number}
+          orderStatus={order.order_status}
+          hasTracking={Boolean(order.tracking_id)}
+          deliveredAt={order.delivered_at}
+          updatedAt={order.updated_at}
+          items={(order.items ?? []).map((it, idx) => ({
+            id: it.id || `${it.product_id}-${idx}`,
+            product_id: it.product_id,
+            product_name: it.product_name,
+            size: it.size,
+            quantity: it.quantity,
+            unit_price_paise: it.unit_price_paise,
+            subtotal_paise: it.subtotal_paise,
+            available_sizes: it.available_sizes,
+          }))}
+          hasOfferApplied={hasOfferApplied}
+          totalPaise={order.total_paise}
+          shippingPaise={order.shipping_paise}
+          codFeePaise={order.cod_fee_paise}
+          returnType={order.return_type}
+          returnReason={order.return_reason}
+          returnNotes={order.return_notes}
+          returnItems={order.return_items}
+          estimatedRefundPaise={order.estimated_refund_paise}
+          returnStatus={order.return_status}
+          returnRequestedAt={order.return_requested_at}
+          guestEmail={guestAuth.email}
+          guestPhone={guestAuth.phone}
+          onUpdated={fetchOrder}
+        />
       </div>
     </div>
   );

@@ -3,7 +3,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { getPublicUrl } from '@/lib/media';
-import CustomerOrderActions from '@/components/orders/CustomerOrderActions';
+import CustomerOrderActions, { type StoredReturnItemView } from '@/components/orders/CustomerOrderActions';
 import { formatCourierDisplayName, resolveTrackingUrl } from '@/lib/shipping/couriers';
 import styles from '../orders.module.css';
 
@@ -61,8 +61,12 @@ type OrderDetail = {
   return_type: string | null;
   return_reason: string | null;
   return_notes: string | null;
+  return_items: StoredReturnItemView[] | null;
+  estimated_refund_paise: number | null;
   return_status: string | null;
   return_requested_at: string | null;
+  rto_at: string | null;
+  rto_reason: string | null;
 };
 
 const ALLOWED_STATUSES = [
@@ -73,6 +77,7 @@ const ALLOWED_STATUSES = [
   'cancelled',
   'return_requested',
   'returned',
+  'rto',
 ] as const;
 type OrderStatus = (typeof ALLOWED_STATUSES)[number];
 
@@ -95,6 +100,7 @@ export function getHumanOrderStatus(status: string): string {
     cancelled: 'Cancelled',
     return_requested: 'Return Processing',
     returned: 'Returned',
+    rto: 'Returned to Origin',
   };
   return map[status.toLowerCase()] || status;
 }
@@ -135,6 +141,7 @@ const STEP_INDEX: Record<OrderStatus, number> = {
   cancelled: -1,
   return_requested: 3,
   returned: 3,
+  rto: -1,
 };
 
 export default async function OrderDetailPage({
@@ -162,7 +169,8 @@ export default async function OrderDetailPage({
       coupon_code, payment_method, payment_status, order_status,
       customer, shipping_address, cancel_reason, created_at, updated_at,
       tracking_id, tracking_url, shipping_provider, shipped_at, delivered_at,
-      return_type, return_reason, return_notes, return_status, return_requested_at
+      return_type, return_reason, return_notes, return_items, estimated_refund_paise,
+      return_status, return_requested_at, rto_at, rto_reason
       `,
     )
     .eq('id', id)
@@ -189,8 +197,40 @@ export default async function OrderDetailPage({
 
   const lines = (itemRows ?? []) as OrderLine[];
 
+  const productIds = Array.from(new Set(lines.map((l) => l.product_id).filter(Boolean)));
+  const sizeMap = new Map<string, string[]>();
+  if (productIds.length > 0) {
+    const { data: prodRows } = await supabase
+      .from('products')
+      .select('id, sizes, inventory')
+      .in('id', productIds);
+    for (const p of prodRows ?? []) {
+      const row = p as {
+        id: string;
+        sizes?: string[] | null;
+        inventory?: Array<{ size: string; stock: number }> | null;
+      };
+      const avail =
+        row.inventory && row.inventory.length > 0
+          ? row.inventory.filter((inv) => inv.stock > 0).map((inv) => inv.size)
+          : row.sizes && row.sizes.length > 0
+            ? row.sizes
+            : ['S', 'M', 'L', 'XL', 'XXL'];
+      sizeMap.set(row.id, avail.length > 0 ? avail : ['S', 'M', 'L', 'XL', 'XXL']);
+    }
+  }
+
+  const linesWithSizes = lines.map((l) => ({
+    ...l,
+    available_sizes: sizeMap.get(l.product_id) ?? ['S', 'M', 'L', 'XL', 'XXL'],
+  }));
+
+  const hasOfferApplied =
+    (order.discount_paise ?? 0) > 0 || Boolean(order.coupon_code && order.coupon_code.trim());
+
   const status = safeStatus(order.order_status);
   const isCancelled = status === 'cancelled';
+  const isRto = status === 'rto';
   const isPaid = order.payment_status === 'paid';
 
   // Build the stepper steps. `done` = strictly past steps; `current`
@@ -236,13 +276,20 @@ export default async function OrderDetailPage({
         </div>
       </header>
 
-      {/* Stepper or cancelled banner */}
+      {/* Stepper or cancelled/RTO banner */}
       {isCancelled ? (
         <section className={styles.cancelledBanner}>
           <p className={styles.cancelledLabel}>Order cancelled</p>
           {order.cancel_reason && (
             <p className={styles.cancelledReason}>{order.cancel_reason}</p>
           )}
+        </section>
+      ) : isRto ? (
+        <section className={styles.cancelledBanner}>
+          <p className={styles.cancelledLabel}>Parcel Returned to Origin (RTO)</p>
+          <p className={styles.cancelledReason}>
+            {order.rto_reason || 'This shipment could not be delivered and returned to our warehouse.'}
+          </p>
         </section>
       ) : (
         <section className={styles.section}>
@@ -293,21 +340,6 @@ export default async function OrderDetailPage({
           </div>
         </section>
       )}
-
-      {/* Customer Self-Serve Cancel / Return / Exchange Actions */}
-      <CustomerOrderActions
-        orderId={order.id}
-        orderNumber={order.order_number}
-        orderStatus={order.order_status}
-        hasTracking={Boolean(order.tracking_id)}
-        deliveredAt={order.delivered_at}
-        updatedAt={order.updated_at}
-        returnType={order.return_type}
-        returnReason={order.return_reason}
-        returnNotes={order.return_notes}
-        returnStatus={order.return_status}
-        returnRequestedAt={order.return_requested_at}
-      />
 
       {/* Tracking info */}
       {order.tracking_id && (
@@ -422,6 +454,28 @@ export default async function OrderDetailPage({
           {order.shipping_address.pincode}
         </p>
       </section>
+
+      {/* Low-emphasis Cancel / Return / Exchange controls at the bottom */}
+      <CustomerOrderActions
+        orderId={order.id}
+        orderNumber={order.order_number}
+        orderStatus={order.order_status}
+        hasTracking={Boolean(order.tracking_id)}
+        deliveredAt={order.delivered_at}
+        updatedAt={order.updated_at}
+        items={linesWithSizes}
+        hasOfferApplied={hasOfferApplied}
+        totalPaise={order.total_paise}
+        shippingPaise={order.shipping_paise}
+        codFeePaise={order.cod_fee_paise}
+        returnType={order.return_type}
+        returnReason={order.return_reason}
+        returnNotes={order.return_notes}
+        returnItems={order.return_items}
+        estimatedRefundPaise={order.estimated_refund_paise}
+        returnStatus={order.return_status}
+        returnRequestedAt={order.return_requested_at}
+      />
     </div>
   );
 }

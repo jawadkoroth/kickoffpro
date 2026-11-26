@@ -307,6 +307,12 @@
   border-color: #FCD34D;
 }
 
+.badge_rto {
+  background: rgba(249, 115, 22, 0.14);
+  color: #C2410C;
+  border-color: rgba(249, 115, 22, 0.35);
+}
+
 .badge_paid {
   background: rgba(34, 197, 94, 0.08);
   color: #22C55E;

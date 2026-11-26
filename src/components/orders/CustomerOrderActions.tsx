@@ -1,8 +1,30 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { getReturnWindowState } from '@/lib/orders/returnWindow';
+
+export interface CustomerOrderLine {
+  id: string;
+  product_id: string;
+  product_name: string;
+  size: string;
+  quantity: number;
+  unit_price_paise: number;
+  subtotal_paise: number;
+  available_sizes?: string[];
+}
+
+export interface StoredReturnItemView {
+  order_item_id: string;
+  product_id: string;
+  title: string;
+  current_size: string;
+  quantity: number;
+  unit_price_paise: number;
+  subtotal_paise: number;
+  requested_size?: string | null;
+}
 
 interface CustomerOrderActionsProps {
   orderId: string;
@@ -11,9 +33,16 @@ interface CustomerOrderActionsProps {
   hasTracking: boolean;
   deliveredAt?: string | null;
   updatedAt?: string | null;
+  items?: CustomerOrderLine[];
+  hasOfferApplied?: boolean;
+  totalPaise?: number;
+  shippingPaise?: number | null;
+  codFeePaise?: number | null;
   returnType?: string | null;
   returnReason?: string | null;
   returnNotes?: string | null;
+  returnItems?: StoredReturnItemView[] | null;
+  estimatedRefundPaise?: number | null;
   returnStatus?: string | null;
   returnRequestedAt?: string | null;
   guestEmail?: string | null;
@@ -38,6 +67,10 @@ const RETURN_REASONS = [
   'Other',
 ];
 
+function formatPrice(paise: number): string {
+  return '₹' + Math.round(paise / 100).toLocaleString('en-IN');
+}
+
 function formatReturnStatus(status?: string | null): string {
   const map: Record<string, string> = {
     requested: 'Processing Request',
@@ -57,9 +90,16 @@ export default function CustomerOrderActions({
   hasTracking,
   deliveredAt,
   updatedAt,
+  items = [],
+  hasOfferApplied = false,
+  totalPaise = 0,
+  shippingPaise = 0,
+  codFeePaise = 0,
   returnType,
   returnReason,
   returnNotes,
+  returnItems,
+  estimatedRefundPaise,
   returnStatus,
   returnRequestedAt,
   guestEmail,
@@ -78,14 +118,43 @@ export default function CustomerOrderActions({
   const [chosenReturnType, setChosenReturnType] = useState<'exchange' | 'refund'>('exchange');
   const [chosenReturnReason, setChosenReturnReason] = useState(RETURN_REASONS[0]);
   const [returnNoteText, setReturnNoteText] = useState('');
+  const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(() =>
+    items.length === 1 ? new Set([items[0].id]) : new Set(),
+  );
+  const [exchangeSizeMap, setExchangeSizeMap] = useState<Record<string, string>>({});
   const [returnBusy, setReturnBusy] = useState(false);
   const [returnError, setReturnError] = useState('');
   const [justSubmittedReturn, setJustSubmittedReturn] = useState(false);
 
+  // Sync default item selection & prefill new sizes when items prop or modal opens
+  useEffect(() => {
+    if (items.length === 0) return;
+    setSelectedItemIds((prev) => {
+      if (chosenReturnType === 'refund' && hasOfferApplied) {
+        return new Set(items.map((it) => it.id));
+      }
+      if (items.length === 1) {
+        return new Set([items[0].id]);
+      }
+      return prev;
+    });
+    setExchangeSizeMap((prev) => {
+      const next = { ...prev };
+      for (const it of items) {
+        if (!next[it.id]) {
+          const sizes = it.available_sizes?.length
+            ? it.available_sizes
+            : ['S', 'M', 'L', 'XL', 'XXL'];
+          const alternate = sizes.find((s) => s !== it.size) || sizes[0];
+          next[it.id] = alternate;
+        }
+      }
+      return next;
+    });
+  }, [items, chosenReturnType, hasOfferApplied]);
+
   const normalizedStatus = orderStatus.toLowerCase();
 
-  // D2C rule: self-serve cancel is ONLY shown after order placement & before dispatch.
-  // Once shipped (or tracking created), delivered, cancelled, or in return flow, do NOT render it.
   const canCancel =
     (normalizedStatus === 'pending' || normalizedStatus === 'confirmed') && !hasTracking;
 
@@ -109,6 +178,31 @@ export default function CustomerOrderActions({
       router.refresh();
     }
   }
+
+  function toggleItem(itemId: string) {
+    if (chosenReturnType === 'refund' && hasOfferApplied) return; // Locked to full order
+    setSelectedItemIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(itemId)) {
+        if (items.length > 1) next.delete(itemId);
+      } else {
+        next.add(itemId);
+      }
+      return next;
+    });
+  }
+
+  const effectiveSelectedItems =
+    chosenReturnType === 'refund' && hasOfferApplied
+      ? items
+      : items.filter((it) => selectedItemIds.has(it.id));
+
+  const computedEstimatedRefundPaise =
+    chosenReturnType === 'refund'
+      ? effectiveSelectedItems.length === items.length && totalPaise > 0
+        ? Math.max(0, totalPaise - (shippingPaise ?? 0) - (codFeePaise ?? 0))
+        : effectiveSelectedItems.reduce((sum, it) => sum + it.subtotal_paise, 0)
+      : 0;
 
   async function handleCancelSubmit() {
     if (cancelBusy) return;
@@ -149,6 +243,18 @@ export default function CustomerOrderActions({
 
   async function handleReturnSubmit() {
     if (returnBusy) return;
+    if (effectiveSelectedItems.length === 0) {
+      setReturnError('Please select at least one item.');
+      return;
+    }
+    if (chosenReturnType === 'exchange') {
+      for (const it of effectiveSelectedItems) {
+        if (!exchangeSizeMap[it.id]) {
+          setReturnError(`Please choose a new size for ${it.product_name}.`);
+          return;
+        }
+      }
+    }
     if (chosenReturnReason === 'Other' && !returnNoteText.trim()) {
       setReturnError('Please share a brief reason in the notes box.');
       return;
@@ -157,6 +263,11 @@ export default function CustomerOrderActions({
     setReturnBusy(true);
     setReturnError('');
     try {
+      const payloadItems = effectiveSelectedItems.map((it) => ({
+        order_item_id: it.id,
+        requested_size: chosenReturnType === 'exchange' ? exchangeSizeMap[it.id] : null,
+      }));
+
       const res = await fetch(`/api/orders/${orderId}/return`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -164,6 +275,7 @@ export default function CustomerOrderActions({
           return_type: chosenReturnType,
           return_reason: chosenReturnReason,
           return_notes: returnNoteText.trim() || undefined,
+          return_items: payloadItems,
           email: guestEmail || undefined,
           phone: guestPhone || undefined,
         }),
@@ -188,7 +300,7 @@ export default function CustomerOrderActions({
   }
 
   return (
-    <div style={{ marginBottom: '16px' }}>
+    <div style={{ marginTop: '20px', marginBottom: '8px' }}>
       {/* Return in-progress status banner */}
       {isReturnActive && (
         <div
@@ -218,11 +330,11 @@ export default function CustomerOrderActions({
               {formatReturnStatus(returnStatus)}
             </span>
           </div>
-          <p style={{ margin: '0 0 6px', fontSize: '0.875rem', fontWeight: 600, lineHeight: 1.5 }}>
+          <p style={{ margin: '0 0 8px', fontSize: '0.875rem', fontWeight: 600, lineHeight: 1.5 }}>
             Your return is getting processed. Our team will get in contact with you shortly.
           </p>
           {(returnReason || justSubmittedReturn) && (
-            <p style={{ margin: 0, fontSize: '0.8rem', color: '#854D0E' }}>
+            <p style={{ margin: '0 0 6px', fontSize: '0.8rem', color: '#854D0E' }}>
               Reason: <strong>{returnReason || chosenReturnReason}</strong>
               {returnNotes ? ` — ${returnNotes}` : ''}
               {returnRequestedAt
@@ -230,17 +342,30 @@ export default function CustomerOrderActions({
                 : ''}
             </p>
           )}
+          {Array.isArray(returnItems) && returnItems.length > 0 && (
+            <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid rgba(161, 98, 7, 0.2)', fontSize: '0.78rem' }}>
+              {returnItems.map((ri) => (
+                <div key={ri.order_item_id}>
+                  • {ri.title} (Qty {ri.quantity}) — Size {ri.current_size}
+                  {ri.requested_size ? ` → ${ri.requested_size}` : ''}
+                </div>
+              ))}
+              {typeof estimatedRefundPaise === 'number' && estimatedRefundPaise > 0 && (
+                <div style={{ marginTop: '4px', fontWeight: 700 }}>
+                  Estimated Refund: {formatPrice(estimatedRefundPaise)}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
-      {/* Cancel button before dispatch */}
+      {/* Subtle, low-emphasis Cancel link/footer (placed at very bottom of page) */}
       {canCancel && (
         <div
           style={{
-            background: '#FFFFFF',
-            border: '1px solid rgba(7, 27, 58, 0.08)',
-            borderRadius: '12px',
-            padding: '16px 18px',
+            padding: '12px 4px',
+            borderTop: '1px solid rgba(7, 27, 58, 0.08)',
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
@@ -248,14 +373,9 @@ export default function CustomerOrderActions({
             flexWrap: 'wrap',
           }}
         >
-          <div>
-            <p style={{ margin: 0, fontSize: '0.85rem', fontWeight: 700, color: '#071B3A' }}>
-              Need to cancel this order?
-            </p>
-            <p style={{ margin: '2px 0 0', fontSize: '0.75rem', color: '#64748B' }}>
-              Available only until your order is dispatched.
-            </p>
-          </div>
+          <span style={{ fontSize: '0.75rem', color: '#64748B' }}>
+            Changed your mind before dispatch?
+          </span>
           <button
             type="button"
             onClick={() => {
@@ -263,13 +383,13 @@ export default function CustomerOrderActions({
               setShowCancelModal(true);
             }}
             style={{
-              padding: '9px 16px',
-              borderRadius: '8px',
-              background: '#FEF2F2',
-              border: '1px solid #FCA5A5',
-              color: '#B91C1C',
-              fontSize: '0.8rem',
-              fontWeight: 700,
+              padding: '6px 12px',
+              borderRadius: '6px',
+              background: 'transparent',
+              border: '1px solid rgba(7, 27, 58, 0.14)',
+              color: '#64748B',
+              fontSize: '0.75rem',
+              fontWeight: 600,
               cursor: 'pointer',
             }}
           >
@@ -278,14 +398,12 @@ export default function CustomerOrderActions({
         </div>
       )}
 
-      {/* Return / Exchange button after delivery (strict 7-day window) */}
+      {/* Subtle, low-emphasis Return / Exchange footer (strict 7-day window) */}
       {canReturn && !justSubmittedReturn && (
         <div
           style={{
-            background: '#FFFFFF',
-            border: '1px solid rgba(7, 27, 58, 0.08)',
-            borderRadius: '12px',
-            padding: '16px 18px',
+            padding: '12px 4px',
+            borderTop: '1px solid rgba(7, 27, 58, 0.08)',
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
@@ -293,17 +411,13 @@ export default function CustomerOrderActions({
             flexWrap: 'wrap',
           }}
         >
-          <div>
-            <p style={{ margin: 0, fontSize: '0.85rem', fontWeight: 700, color: '#071B3A' }}>
-              Need a size exchange or return?
-            </p>
-            <p style={{ margin: '2px 0 0', fontSize: '0.75rem', color: '#64748B' }}>
-              Available for 7 days from delivery
-              {returnWindow.expiresAtIso
-                ? ` (until ${new Date(returnWindow.expiresAtIso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}).`
-                : '.'}
-            </p>
-          </div>
+          <span style={{ fontSize: '0.75rem', color: '#64748B' }}>
+            Size issue or defect? Eligible until{' '}
+            {returnWindow.expiresAtIso
+              ? new Date(returnWindow.expiresAtIso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
+              : '7 days from delivery'}
+            .
+          </span>
           <button
             type="button"
             onClick={() => {
@@ -311,17 +425,17 @@ export default function CustomerOrderActions({
               setShowReturnModal(true);
             }}
             style={{
-              padding: '9px 18px',
-              borderRadius: '8px',
-              background: '#071B3A',
-              border: 'none',
-              color: '#FFFFFF',
-              fontSize: '0.8rem',
-              fontWeight: 700,
+              padding: '6px 14px',
+              borderRadius: '6px',
+              background: '#F8FAFC',
+              border: '1px solid rgba(7, 27, 58, 0.16)',
+              color: '#334155',
+              fontSize: '0.75rem',
+              fontWeight: 600,
               cursor: 'pointer',
             }}
           >
-            Return / Exchange
+            Request Return / Exchange
           </button>
         </div>
       )}
@@ -329,12 +443,10 @@ export default function CustomerOrderActions({
       {returnWindowClosed && !justSubmittedReturn && (
         <div
           style={{
-            background: '#F8FAFC',
-            border: '1px solid rgba(7, 27, 58, 0.08)',
-            borderRadius: '10px',
-            padding: '12px 16px',
-            fontSize: '0.78rem',
-            color: '#64748B',
+            padding: '10px 4px',
+            borderTop: '1px solid rgba(7, 27, 58, 0.06)',
+            fontSize: '0.75rem',
+            color: '#94A3B8',
           }}
         >
           7-day return &amp; exchange window closed.
@@ -478,34 +590,37 @@ export default function CustomerOrderActions({
             justifyContent: 'center',
             zIndex: 1000,
             padding: '16px',
+            overflowY: 'auto',
           }}
         >
           <div
             style={{
-              maxWidth: '460px',
+              maxWidth: '500px',
               width: '100%',
               background: '#FFFFFF',
               borderRadius: '14px',
               padding: '22px',
               boxShadow: '0 20px 50px rgba(0, 0, 0, 0.25)',
               color: '#071B3A',
+              maxHeight: '90vh',
+              overflowY: 'auto',
             }}
           >
             <h3 style={{ margin: '0 0 4px', fontSize: '1.05rem', fontWeight: 800 }}>
               Return or Exchange {orderNumber}
             </h3>
             <p style={{ margin: '0 0 14px', fontSize: '0.8rem', color: '#475569' }}>
-              Choose what you prefer and tell us why — our team will contact you to complete the pickup.
+              Choose your option, select item(s), and tell us why — our team will contact you shortly.
             </p>
 
-            {/* Exchange vs Refund */}
+            {/* 1. Exchange vs Refund */}
             <p style={{ margin: '0 0 6px', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', color: '#475569' }}>
               1. What would you like?
             </p>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '14px' }}>
               {[
                 { id: 'exchange' as const, title: 'Exchange', desc: 'Swap size or replacement' },
-                { id: 'refund' as const, title: 'Refund', desc: 'Return item for refund' },
+                { id: 'refund' as const, title: 'Refund', desc: 'Return item(s) for refund' },
               ].map((opt) => {
                 const active = chosenReturnType === opt.id;
                 return (
@@ -533,9 +648,126 @@ export default function CustomerOrderActions({
               })}
             </div>
 
-            {/* Reason Chips */}
+            {/* Offer Protection Notice */}
+            {chosenReturnType === 'refund' && hasOfferApplied && (
+              <div
+                style={{
+                  background: '#FFFBEB',
+                  border: '1px solid #FDE68A',
+                  color: '#92400E',
+                  borderRadius: '8px',
+                  padding: '10px 12px',
+                  fontSize: '0.78rem',
+                  marginBottom: '12px',
+                  lineHeight: 1.45,
+                }}
+              >
+                Because a promotional offer/coupon was applied to this order, refunds are only available for the full order. You can still exchange individual item sizes!
+              </div>
+            )}
+
+            {/* 2. Item-Level Selection (+ New Size Picker for Exchange) */}
+            {items.length > 0 && (
+              <div style={{ marginBottom: '14px' }}>
+                <p style={{ margin: '0 0 6px', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', color: '#475569' }}>
+                  {chosenReturnType === 'exchange'
+                    ? '2. Select item(s) & new size'
+                    : hasOfferApplied
+                      ? '2. Full order items included in refund'
+                      : '2. Select item(s) to refund'}
+                </p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {items.map((it) => {
+                    const lockedFull = chosenReturnType === 'refund' && hasOfferApplied;
+                    const checked = lockedFull || selectedItemIds.has(it.id);
+                    const sizes = it.available_sizes?.length
+                      ? it.available_sizes
+                      : ['S', 'M', 'L', 'XL', 'XXL'];
+                    return (
+                      <div
+                        key={it.id}
+                        style={{
+                          padding: '10px 12px',
+                          borderRadius: '10px',
+                          border: `1px solid ${checked ? '#0284C7' : '#E2E8F0'}`,
+                          background: checked ? '#F8FAFC' : '#FFFFFF',
+                        }}
+                      >
+                        <label style={{ display: 'flex', gap: '10px', alignItems: 'center', cursor: lockedFull ? 'default' : 'pointer' }}>
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            disabled={lockedFull}
+                            onChange={() => toggleItem(it.id)}
+                          />
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: '0.84rem', fontWeight: 700, color: '#071B3A' }}>
+                              {it.product_name}
+                            </div>
+                            <div style={{ fontSize: '0.74rem', color: '#64748B' }}>
+                              Current Size: <strong>{it.size}</strong> · Qty {it.quantity} · {formatPrice(it.subtotal_paise)}
+                            </div>
+                          </div>
+                        </label>
+
+                        {checked && chosenReturnType === 'exchange' && (
+                          <div style={{ marginTop: '8px', paddingLeft: '24px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: '0.74rem', fontWeight: 600, color: '#475569' }}>
+                              New Size:
+                            </span>
+                            <select
+                              aria-label={`New size for ${it.product_name}`}
+                              value={exchangeSizeMap[it.id] || ''}
+                              onChange={(e) =>
+                                setExchangeSizeMap((prev) => ({ ...prev, [it.id]: e.target.value }))
+                              }
+                              style={{
+                                padding: '5px 10px',
+                                borderRadius: '6px',
+                                border: '1px solid #CBD5E1',
+                                fontSize: '0.78rem',
+                                fontWeight: 700,
+                                background: '#FFFFFF',
+                                color: '#071B3A',
+                              }}
+                            >
+                              {sizes.map((sz) => (
+                                <option key={sz} value={sz}>
+                                  {sz === it.size ? `${sz} (Current Size)` : sz}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {chosenReturnType === 'refund' && effectiveSelectedItems.length > 0 && (
+                  <div
+                    style={{
+                      marginTop: '8px',
+                      padding: '8px 12px',
+                      borderRadius: '8px',
+                      background: '#F0F9FF',
+                      fontSize: '0.8rem',
+                      fontWeight: 700,
+                      color: '#0369A1',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                    }}
+                  >
+                    <span>Estimated Refund Amount</span>
+                    <span>{formatPrice(computedEstimatedRefundPaise)}</span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* 3. Reason Chips */}
             <p style={{ margin: '0 0 6px', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', color: '#475569' }}>
-              2. Reason for return
+              3. Reason for return
             </p>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
               {RETURN_REASONS.map((r) => {
@@ -563,11 +795,11 @@ export default function CustomerOrderActions({
             </div>
 
             <textarea
-              rows={3}
+              rows={2}
               placeholder={
                 chosenReturnReason === 'Other'
-                  ? 'Please describe the issue or size needed...'
-                  : 'Optional note (e.g. preferred exchange size)...'
+                  ? 'Please describe the issue...'
+                  : 'Optional note for our support team...'
               }
               value={returnNoteText}
               onChange={(e) => setReturnNoteText(e.target.value)}
@@ -621,7 +853,7 @@ export default function CustomerOrderActions({
                   opacity: returnBusy ? 0.7 : 1,
                 }}
               >
-                {returnBusy ? 'Submitting...' : 'Submit Return Request'}
+                {returnBusy ? 'Submitting...' : 'Submit Request'}
               </button>
             </div>
           </div>

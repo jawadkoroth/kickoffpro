@@ -41,6 +41,11 @@ export interface BusinessReportPayload {
     codFeeRupees: number;
     netTotalRupees: number;
     itemsSummary: string;
+    totalQty?: number;
+    courierPartner?: string;
+    trackingId?: string;
+    returnRtoStatus?: string;
+    refundStatusRef?: string;
   }>;
   skuBreakdown: Array<{
     productName: string;
@@ -400,6 +405,171 @@ export async function downloadBusinessReport(
                 ]),
               ),
             ],
+          }),
+        ],
+      },
+    ],
+  });
+
+  const blob = await Packer.toBlob(doc);
+  triggerBlobDownload(blob, `${baseName}.docx`);
+}
+
+/**
+ * Dedicated Orders Operational & Fulfillment Report (used on `/admin/orders`)
+ * with complete shipment, tracking, return/RTO, and refund columns across CSV/XLSX/PDF/DOCX.
+ */
+export async function downloadOrdersReport(
+  data: BusinessReportPayload,
+  format: ReportFormat,
+): Promise<void> {
+  const tag = `${formatDateTag(data.summary.from)}_to_${formatDateTag(data.summary.to)}`;
+  const baseName = `kickoffpro-orders-report-${tag}`;
+
+  const headers = [
+    'Order #',
+    'Date (IST)',
+    'Customer Name',
+    'Phone',
+    'Email',
+    'City/Pincode',
+    'Items & Sizes',
+    'Qty',
+    'Payment Method',
+    'Payment Status',
+    'Coupon / Discount (Rs)',
+    'Shipping (Rs)',
+    'Total (Rs)',
+    'Order Status',
+    'Courier Partner',
+    'Tracking ID',
+    'Return / RTO Status',
+    'Refund Status / Reference',
+  ];
+
+  const rows = data.orders.map((o) => [
+    o.orderNumber,
+    o.date,
+    o.customerName,
+    o.customerPhone,
+    o.customerEmail,
+    o.location,
+    o.itemsSummary,
+    String(o.totalQty ?? 1),
+    o.paymentMethod,
+    o.paymentStatus,
+    o.couponCode ? `${o.couponCode} (Rs ${o.discountRupees.toFixed(2)})` : `Rs ${o.discountRupees.toFixed(2)}`,
+    o.shippingRupees.toFixed(2),
+    o.netTotalRupees.toFixed(2),
+    o.orderStatus,
+    o.courierPartner || '-',
+    o.trackingId || '-',
+    o.returnRtoStatus || 'None',
+    o.refundStatusRef || 'None',
+  ]);
+
+  if (format === 'csv') {
+    const lines: string[] = [];
+    lines.push(headers.map(escapeCsvCell).join(','));
+    for (const r of rows) {
+      lines.push(r.map(escapeCsvCell).join(','));
+    }
+    const blob = new Blob(['\uFEFF' + lines.join('\r\n')], {
+      type: 'text/csv;charset=utf-8;',
+    });
+    triggerBlobDownload(blob, `${baseName}.csv`);
+    return;
+  }
+
+  if (format === 'xlsx') {
+    const XLSX = await import('xlsx');
+    const wb = XLSX.utils.book_new();
+    const sheetData = data.orders.map((o) => ({
+      'Order #': o.orderNumber,
+      'Date (IST)': o.date,
+      'Customer Name': o.customerName,
+      Phone: o.customerPhone,
+      Email: o.customerEmail,
+      'City/Pincode': o.location,
+      'Items & Sizes': o.itemsSummary,
+      Qty: o.totalQty ?? 1,
+      'Payment Method': o.paymentMethod,
+      'Payment Status': o.paymentStatus,
+      Coupon: o.couponCode || '-',
+      'Discount (Rs)': o.discountRupees,
+      'Shipping (Rs)': o.shippingRupees,
+      'Total (Rs)': o.netTotalRupees,
+      'Order Status': o.orderStatus,
+      'Courier Partner': o.courierPartner || '-',
+      'Tracking ID': o.trackingId || '-',
+      'Return / RTO Status': o.returnRtoStatus || 'None',
+      'Refund Status / Reference': o.refundStatusRef || 'None',
+    }));
+    const ws = XLSX.utils.json_to_sheet(sheetData);
+    XLSX.utils.book_append_sheet(wb, ws, 'Orders Fulfillment');
+    const buffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    triggerBlobDownload(
+      new Blob([buffer], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      }),
+      `${baseName}.xlsx`,
+    );
+    return;
+  }
+
+  if (format === 'pdf') {
+    const { jsPDF } = await import('jspdf');
+    const { default: autoTable } = await import('jspdf-autotable');
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+    doc.setFontSize(14);
+    doc.text('Orders Operational & Fulfillment Report', 28, 36);
+    doc.setFontSize(9);
+    doc.setTextColor(100);
+    doc.text(
+      `Period: ${formatDateTag(data.summary.from)} to ${formatDateTag(data.summary.to)}   |   Orders: ${data.orders.length}`,
+      28,
+      52,
+    );
+    autoTable(doc, {
+      startY: 64,
+      head: [headers],
+      body: rows,
+      styles: { fontSize: 6.5, cellPadding: 2.5 },
+      headStyles: { fillColor: [15, 23, 42] },
+      margin: { left: 20, right: 20 },
+    });
+    doc.save(`${baseName}.pdf`);
+    return;
+  }
+
+  // Word (.docx)
+  const { Document, Packer, Paragraph, Table, TableRow, TableCell, TextRun, HeadingLevel, WidthType } =
+    await import('docx');
+  const makeRow = (cells: string[], bold = false) =>
+    new TableRow({
+      children: cells.map(
+        (text) =>
+          new TableCell({
+            children: [new Paragraph({ children: [new TextRun({ text, bold, size: 16 })] })],
+          }),
+      ),
+    });
+
+  const doc = new Document({
+    sections: [
+      {
+        children: [
+          new Paragraph({
+            text: 'Orders Operational & Fulfillment Report',
+            heading: HeadingLevel.HEADING_1,
+          }),
+          new Paragraph({
+            text: `Period: ${formatDateTag(data.summary.from)} to ${formatDateTag(data.summary.to)} | Orders: ${data.orders.length}`,
+          }),
+          new Paragraph({ text: '' }),
+          new Table({
+            width: { size: 100, type: WidthType.PERCENTAGE },
+            rows: [makeRow(headers, true), ...rows.map((r) => makeRow(r))],
           }),
         ],
       },

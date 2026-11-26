@@ -32,6 +32,9 @@ interface OrderRow {
   refund_status?: string | null;
   refund_reference?: string | null;
   refunded_at?: string | null;
+  rto_at?: string | null;
+  rto_reason?: string | null;
+  cod_paid_at?: string | null;
   created_at: string;
 }
 
@@ -43,6 +46,7 @@ const STATUS_FILTERS = [
   { key: 'delivered', label: 'Delivered' },
   { key: 'return_requested,returned', label: 'Returns' },
   { key: 'refund_pending', label: 'Refund Pending' },
+  { key: 'rto', label: 'RTO' },
   { key: 'cancelled', label: 'Cancelled' },
   { key: 'stuck', label: '⚠ Stuck' },
 ] as const;
@@ -254,6 +258,7 @@ function OrdersList() {
           </span>
         </div>
         <DownloadReportControl
+          reportType="orders"
           defaultFrom={from}
           defaultTo={to}
           statusFilter={status}
@@ -444,6 +449,7 @@ function OrdersList() {
           {rows.map((order) => {
             const checked = selected.has(order.id);
             const isCancelled = order.order_status === 'cancelled';
+            const isRto = order.order_status === 'rto';
             const isReturn =
               order.order_status === 'return_requested' ||
               order.order_status === 'returned';
@@ -463,17 +469,20 @@ function OrdersList() {
               tileStyle.background = 'rgba(239, 68, 68, 0.11)';
               tileStyle.border = '1px solid rgba(239, 68, 68, 0.42)';
               tileStyle.borderLeft = '4px solid #EF4444';
+            } else if (isRto) {
+              tileStyle.background = 'rgba(249, 115, 22, 0.11)';
+              tileStyle.border = '1px solid rgba(249, 115, 22, 0.42)';
+              tileStyle.borderLeft = '4px solid #F97316';
             } else if (isReturn) {
               tileStyle.background = 'rgba(250, 204, 21, 0.14)';
               tileStyle.border = '1px solid rgba(250, 204, 21, 0.48)';
               tileStyle.borderLeft = '4px solid #FACC15';
-            } else if (isShipped) {
+            } else if (isShipped || isDelivered) {
+              // Both Shipped and Delivered share calm light-green tint ("no action required"),
+              // with Delivered further distinguished by the Gold Star badge.
               tileStyle.background = 'rgba(34, 197, 94, 0.10)';
               tileStyle.border = '1px solid rgba(34, 197, 94, 0.36)';
               tileStyle.borderLeft = '4px solid #22C55E';
-            } else if (isDelivered) {
-              tileStyle.border = '1px solid rgba(212, 175, 55, 0.45)';
-              tileStyle.background = 'rgba(212, 175, 55, 0.04)';
             }
 
             const statusLabel =
@@ -481,7 +490,9 @@ function OrdersList() {
                 ? 'RETURN REQUEST'
                 : order.order_status === 'returned'
                   ? 'RETURNED'
-                  : order.order_status;
+                  : order.order_status === 'rto'
+                    ? 'RTO'
+                    : order.order_status;
 
             return (
               <div
@@ -573,9 +584,14 @@ function OrdersList() {
                       {order.cancelled_by === 'customer' ? 'Cancelled by customer' : 'Cancelled'}: {order.cancel_reason}
                     </div>
                   )}
-                  {isShipped && order.tracking_id && (
+                  {isRto && (
+                    <div style={{ fontSize: '0.75rem', color: '#FB923C', fontWeight: 600 }}>
+                      RTO (Returned to Origin){order.rto_reason ? `: ${order.rto_reason}` : ''}
+                    </div>
+                  )}
+                  {(isShipped || isDelivered) && order.tracking_id && (
                     <div style={{ fontSize: '0.75rem', color: '#22C55E', fontWeight: 500 }}>
-                      Shipped via {order.shipping_provider || 'Courier'} · {order.tracking_id}
+                      {isDelivered ? 'Delivered' : 'Shipped'} via {order.shipping_provider || 'Courier'} · {order.tracking_id}
                     </div>
                   )}
                   <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>

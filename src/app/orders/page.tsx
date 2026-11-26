@@ -25,6 +25,7 @@ const ALLOWED_STATUSES = [
   'cancelled',
   'return_requested',
   'returned',
+  'rto',
 ] as const;
 type OrderStatus = (typeof ALLOWED_STATUSES)[number];
 
@@ -44,6 +45,7 @@ export function getHumanOrderStatus(status: string): string {
     cancelled: 'Cancelled',
     return_requested: 'Return Processing',
     returned: 'Returned',
+    rto: 'Returned to Origin',
   };
   return map[status.toLowerCase()] || status;
 }
@@ -137,6 +139,8 @@ export default async function OrdersPage() {
               etaLabel = 'Return is getting processed — team will contact you';
             } else if (order.order_status === 'returned') {
               etaLabel = 'Return completed';
+            } else if (order.order_status === 'rto') {
+              etaLabel = 'Returned undelivered (RTO)';
             } else if (order.order_status === 'cancelled') {
               etaLabel = 'Cancelled';
             } else if (order.order_status === 'shipped') {

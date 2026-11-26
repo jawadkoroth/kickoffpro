@@ -82,6 +82,7 @@ export interface OrderEmailData {
   tracking_url?: string | null;
   shipment_mode?: 'automated' | 'manual' | null;
   delivered_at?: string | null;
+  rto_reason?: string | null;
   items?: Array<{
     name: string;
     size: string;
@@ -96,7 +97,8 @@ export type OrderStatusForEmail =
   | 'confirmed'
   | 'shipped'
   | 'delivered'
-  | 'cancelled';
+  | 'cancelled'
+  | 'rto';
 
 /* ------------------------------------------------------------------ */
 /* Extensible Nodemailer SMTP transports                              */
@@ -193,6 +195,7 @@ interface RenderOpts {
   tracking_url?: string | null;
   shipment_mode?: 'automated' | 'manual' | null;
   delivered_at?: string | null;
+  rto_reason?: string | null;
   items?: Array<{
     name: string;
     size: string;
@@ -787,13 +790,22 @@ export async function sendOrderStatusEmail(
     cancelled: {
       eyebrow: 'Cancelled',
       heading: 'Your order has been cancelled',
-      intro: `Order ${order.order_number} has been cancelled. Any captured amount will be refunded by your bank within 5–7 business days.`,
+      intro: `Order ${order.order_number} has been cancelled. Any captured amount will be reviewed and refunded manually within 5–7 business days.`,
+    },
+    rto: {
+      eyebrow: 'Returned to Origin (RTO)',
+      heading: 'Your parcel was returned to us',
+      intro: `Order ${order.order_number} could not be delivered${order.rto_reason ? ` (${order.rto_reason})` : ''} and has returned to our warehouse.`,
+      outro:
+        order.payment_method === 'online'
+          ? 'Because this was a prepaid order, our team will review and issue your refund within 5–7 business days. Reply to this email anytime if you would like help placing a fresh order.'
+          : 'You have not been charged since this was a Cash on Delivery order. Feel free to reply to this email or place a fresh order anytime.',
     },
   };
 
   const preset = presets[status];
   const trackingCard =
-    (status === 'shipped' || status === 'delivered') && trackingId
+    (status === 'shipped' || status === 'delivered' || status === 'rto') && trackingId
       ? {
           courier: courierName,
           trackingId,
@@ -813,7 +825,7 @@ export async function sendOrderStatusEmail(
     item: itemForEmail(order),
     items: order.items,
     summary: commonSummary(order),
-    address: status === 'cancelled' ? undefined : addressLines(order.shipping_address),
+    address: status === 'cancelled' || status === 'rto' ? undefined : addressLines(order.shipping_address),
     tracking: trackingCard,
     outro: preset.outro,
     cta: primaryCta,

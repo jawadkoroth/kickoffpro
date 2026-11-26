@@ -62,9 +62,24 @@ interface Order {
   return_status: string | null;
   return_requested_at: string | null;
   return_resolved_at: string | null;
+  return_items?: Array<{
+    order_item_id: string;
+    product_id: string;
+    title: string;
+    current_size: string;
+    quantity: number;
+    unit_price_paise: number;
+    subtotal_paise: number;
+    requested_size?: string | null;
+  }> | null;
+  estimated_refund_paise: number | null;
   refund_status: 'none' | 'pending' | 'completed';
   refund_reference: string | null;
   refunded_at: string | null;
+  rto_at: string | null;
+  rto_reason: string | null;
+  rto_notified_at: string | null;
+  cod_paid_at: string | null;
   notes: string | null;
   created_at: string;
   updated_at: string;
@@ -129,10 +144,13 @@ export default function AdminOrderDetail({ params }: { params: Promise<{ id: str
   const [forceOverrideAutomated, setForceOverrideAutomated] = useState(false);
   const [deliveryNote, setDeliveryNote] = useState('');
 
-  // Return inspection + manual Razorpay refund state
+  // Return inspection + manual Razorpay refund + RTO state
   const [returnInspectionChecked, setReturnInspectionChecked] = useState(false);
   const [refundRefNote, setRefundRefNote] = useState('');
   const [refundConfirmedCheck, setRefundConfirmedCheck] = useState(false);
+  const [showRtoModal, setShowRtoModal] = useState(false);
+  const [rtoReason, setRtoReason] = useState('Customer unavailable / Address not found');
+  const [rtoConfirmCheck, setRtoConfirmCheck] = useState(false);
 
   useEffect(() => {
     fetchOrder();
@@ -238,9 +256,10 @@ export default function AdminOrderDetail({ params }: { params: Promise<{ id: str
           setActionLoading('');
           return;
         }
+        const nowIso = new Date().toISOString();
         await supabase
           .from('orders')
-          .update({ payment_status: 'paid', updated_at: new Date().toISOString() })
+          .update({ payment_status: 'paid', cod_paid_at: nowIso, updated_at: nowIso })
           .eq('id', id)
           .eq('payment_method', 'cod')
           .eq('order_status', 'delivered');
@@ -420,6 +439,35 @@ export default function AdminOrderDetail({ params }: { params: Promise<{ id: str
     }
   }
 
+  async function handleMarkRto() {
+    if (actionLoading || !order) return;
+    setActionLoading('rto');
+    try {
+      const res = await fetch(`/api/admin/orders/${id}/rto`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          confirmed_by_admin: rtoConfirmCheck,
+          rto_reason: rtoReason.trim() || undefined,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        showToast(json.error || 'Failed to mark order as RTO', 'error');
+      } else {
+        setShowRtoModal(false);
+        setRtoConfirmCheck(false);
+        await fetchOrder();
+        await fetchShipmentData();
+        showToast('Order marked as RTO & customer notified', 'success');
+      }
+    } catch {
+      showToast('Failed to mark order as RTO', 'error');
+    } finally {
+      setActionLoading('');
+    }
+  }
+
   if (loading) return <div className="animate-pulse text-muted" style={{ textAlign: 'center', padding: 'var(--space-8)' }}>Loading...</div>;
   if (!order) return <div className="text-muted" style={{ textAlign: 'center', padding: 'var(--space-8)' }}>Order not found</div>;
 
@@ -440,10 +488,14 @@ export default function AdminOrderDetail({ params }: { params: Promise<{ id: str
           <h1 style={{ fontSize: '1.125rem', fontWeight: 600, fontFamily: 'monospace' }}>{order.order_number}</h1>
           <p className="text-xs text-muted">{formatDate(order.created_at)}</p>
         </div>
-        <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+        <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
           <span className={`badge badge-${order.order_status}`}>{order.order_status}</span>
           <span className={`badge ${order.payment_status === 'paid' ? 'badge-paid' : 'badge-pending'}`}>
-            {order.payment_method === 'cod' ? 'COD' : order.payment_status}
+            {order.payment_method === 'cod'
+              ? order.payment_status === 'paid'
+                ? 'COD COLLECTED & PAID'
+                : 'COD Pending'
+              : order.payment_status}
           </span>
         </div>
       </div>
@@ -494,111 +546,128 @@ export default function AdminOrderDetail({ params }: { params: Promise<{ id: str
             )}
           </div>
 
-          {/* Direct Customer Contact Block */}
+          {/* Item-Level Selection & Exact Exchange Sizes / Calculated Refund */}
+          {Array.isArray(order.return_items) && order.return_items.length > 0 && (
+            <div
+              style={{
+                background: '#0F172A',
+                borderRadius: 'var(--radius-sm)',
+                padding: '10px 12px',
+                marginBottom: 'var(--space-3)',
+                border: '1px solid rgba(255,255,255,0.12)',
+                color: '#F8FAFC',
+                fontSize: '0.8125rem',
+              }}
+            >
+              <div style={{ fontWeight: 700, marginBottom: 6, color: '#FDE047' }}>
+                Selected Return Items ({order.return_items.length})
+              </div>
+              {order.return_items.map((ri) => (
+                <div
+                  key={ri.order_item_id}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    gap: 8,
+                    padding: '4px 0',
+                    borderTop: '1px solid rgba(255,255,255,0.08)',
+                  }}
+                >
+                  <span>
+                    {ri.title} (Qty {ri.quantity}) —{' '}
+                    {order.return_type === 'exchange' && ri.requested_size ? (
+                      <strong style={{ color: '#93C5FD' }}>
+                        Size {ri.current_size} → {ri.requested_size}
+                      </strong>
+                    ) : (
+                      <span>Size {ri.current_size}</span>
+                    )}
+                  </span>
+                  <span style={{ fontWeight: 600 }}>{formatPrice(ri.subtotal_paise)}</span>
+                </div>
+              ))}
+              {order.return_type === 'refund' && typeof order.estimated_refund_paise === 'number' && (
+                <div
+                  style={{
+                    marginTop: 6,
+                    paddingTop: 6,
+                    borderTop: '1px solid rgba(255,255,255,0.16)',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    fontWeight: 700,
+                    color: '#4ADE80',
+                  }}
+                >
+                  <span>Calculated Refund Amount (Selected Items)</span>
+                  <span>{formatPrice(order.estimated_refund_paise)}</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Direct Customer Contact Block (High Contrast) */}
           <div
             style={{
-              background: 'rgba(0,0,0,0.22)',
+              background: '#0F172A',
               borderRadius: 'var(--radius-sm)',
               padding: '10px 12px',
               marginBottom: 'var(--space-3)',
+              border: '1px solid rgba(255,255,255,0.14)',
+              color: '#F8FAFC',
               fontSize: '0.8125rem',
             }}
           >
-            <div style={{ fontWeight: 700, marginBottom: 4 }}>Contact Customer Directly</div>
-            <div>
-              {order.customer.name} ·{' '}
-              <a href={`tel:${order.customer.phone}`} style={{ color: '#FACC15', fontWeight: 700, textDecoration: 'underline' }}>
+            <div style={{ fontWeight: 700, marginBottom: 4, color: '#FFFFFF' }}>Contact Customer Directly</div>
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+              <span>{order.customer.name}</span>
+              <a href={`tel:${order.customer.phone}`} style={{ color: '#93C5FD', fontWeight: 700, textDecoration: 'underline' }}>
                 📞 {order.customer.phone}
               </a>
               {order.customer.email && (
-                <>
-                  {' '}·{' '}
-                  <a href={`mailto:${order.customer.email}`} style={{ color: '#FACC15', textDecoration: 'underline' }}>
-                    ✉ {order.customer.email}
-                  </a>
-                </>
+                <a href={`mailto:${order.customer.email}`} style={{ color: '#FDE68A', fontWeight: 600, textDecoration: 'underline' }}>
+                  ✉ {order.customer.email}
+                </a>
               )}
             </div>
-            <div className="text-xs text-muted" style={{ marginTop: 4 }}>
+            <div style={{ marginTop: 4, fontSize: '0.75rem', color: '#CBD5E1' }}>
               Pickup Address: {order.shipping_address.line1}
               {order.shipping_address.line2 ? `, ${order.shipping_address.line2}` : ''}, {order.shipping_address.city}, {order.shipping_address.state} {order.shipping_address.pincode}
             </div>
           </div>
 
           {order.order_status === 'return_requested' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                {order.return_status === 'requested' && (
-                  <button
-                    type="button"
-                    className={`btn btn-primary btn-sm ${actionLoading === 'return:approved' ? 'btn-loading' : ''}`}
-                    disabled={!!actionLoading}
-                    onClick={() => handleReturnStatus('approved')}
-                  >
-                    Approve Return
-                  </button>
-                )}
-                {(order.return_status === 'requested' || order.return_status === 'approved') && (
-                  <button
-                    type="button"
-                    className={`btn btn-secondary btn-sm ${actionLoading === 'return:pickup_scheduled' ? 'btn-loading' : ''}`}
-                    disabled={!!actionLoading}
-                    onClick={() => handleReturnStatus('pickup_scheduled')}
-                  >
-                    Mark Pickup Scheduled
-                  </button>
-                )}
-                {order.return_status === 'received' && (
-                  <button
-                    type="button"
-                    className={`btn btn-success btn-sm ${actionLoading === 'return:completed' ? 'btn-loading' : ''}`}
-                    disabled={!!actionLoading}
-                    onClick={() => handleReturnStatus('completed', true)}
-                  >
-                    {order.return_type === 'refund'
-                      ? 'Complete Return (Refund Flagged Pending)'
-                      : 'Complete Exchange'}
-                  </button>
-                )}
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {order.return_status === 'requested' && (
                 <button
                   type="button"
-                  className="btn btn-ghost btn-sm"
-                  style={{ color: 'var(--error)' }}
+                  className={`btn btn-primary btn-sm ${actionLoading === 'return:approved' ? 'btn-loading' : ''}`}
                   disabled={!!actionLoading}
-                  onClick={() => handleReturnStatus('rejected')}
+                  onClick={() => handleReturnStatus('approved')}
                 >
-                  Reject / Close
+                  Approve Return
                 </button>
-              </div>
-
-              {order.return_status !== 'received' && (
-                <div
-                  style={{
-                    background: 'rgba(0,0,0,0.2)',
-                    borderRadius: 'var(--radius-sm)',
-                    padding: '10px 12px',
-                    border: '1px solid rgba(250, 204, 21, 0.35)',
-                  }}
+              )}
+              {(order.return_status === 'requested' || order.return_status === 'approved') && (
+                <button
+                  type="button"
+                  className={`btn btn-secondary btn-sm ${actionLoading === 'return:pickup_scheduled' ? 'btn-loading' : ''}`}
+                  disabled={!!actionLoading}
+                  onClick={() => handleReturnStatus('pickup_scheduled')}
                 >
-                  <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: '0.8125rem', cursor: 'pointer', marginBottom: 8 }}>
-                    <input
-                      type="checkbox"
-                      checked={returnInspectionChecked}
-                      onChange={(e) => setReturnInspectionChecked(e.target.checked)}
-                    />
-                    <span>I confirm the returned product was received back in undamaged condition</span>
-                  </label>
-                  <button
-                    type="button"
-                    className={`btn btn-success btn-sm ${actionLoading === 'return:received' ? 'btn-loading' : ''}`}
-                    disabled={!!actionLoading || !returnInspectionChecked}
-                    onClick={() => handleReturnStatus('received', true)}
-                  >
-                    {order.return_type === 'refund' && order.payment_status === 'paid'
-                      ? 'Mark Received Undamaged & Flag Refund Pending'
-                      : 'Mark Item Received Undamaged'}
-                  </button>
-                </div>
+                  Mark Pickup Scheduled
+                </button>
+              )}
+              {order.return_status === 'received' && (
+                <button
+                  type="button"
+                  className={`btn btn-success btn-sm ${actionLoading === 'return:completed' ? 'btn-loading' : ''}`}
+                  disabled={!!actionLoading}
+                  onClick={() => handleReturnStatus('completed', true)}
+                >
+                  {order.return_type === 'refund'
+                    ? 'Complete Return (Refund Flagged Pending)'
+                    : 'Complete Exchange'}
+                </button>
               )}
             </div>
           )}
@@ -611,6 +680,7 @@ export default function AdminOrderDetail({ params }: { params: Promise<{ id: str
         order.payment_status === 'refunded' ||
         (order.payment_status === 'paid' &&
           (isCancelled ||
+            order.order_status === 'rto' ||
             (order.return_type === 'refund' &&
               (order.order_status === 'return_requested' || order.order_status === 'returned'))))) && (
         <div
@@ -723,6 +793,28 @@ export default function AdminOrderDetail({ params }: { params: Promise<{ id: str
         </div>
       )}
 
+      {/* Prominent RTO Banner (Orange-Red) */}
+      {order.order_status === 'rto' && (
+        <div
+          className="card"
+          style={{
+            marginBottom: 'var(--space-4)',
+            background: 'rgba(249, 115, 22, 0.12)',
+            border: '1px solid rgba(249, 115, 22, 0.45)',
+            borderLeft: '4px solid #F97316',
+          }}
+        >
+          <p className="input-label" style={{ color: '#FB923C', margin: '0 0 4px' }}>
+            RETURNED TO ORIGIN (RTO)
+          </p>
+          {order.rto_reason && <p className="text-sm" style={{ margin: 0 }}>{order.rto_reason}</p>}
+          <p className="text-xs text-muted" style={{ margin: '6px 0 0' }}>
+            {order.rto_at ? `Marked RTO: ${formatDate(order.rto_at)}` : ''}
+            {order.rto_notified_at ? ` · Customer RTO Email Sent (${formatDate(order.rto_notified_at)})` : ''}
+          </p>
+        </div>
+      )}
+
       {/* Prominent Cancelled Order Banner (Light Red) */}
       {isCancelled && (
         <div
@@ -831,6 +923,28 @@ export default function AdminOrderDetail({ params }: { params: Promise<{ id: str
           <span>Total</span>
           <span>{formatPrice(order.total_paise)}</span>
         </div>
+        {isCOD && order.payment_status === 'paid' && (
+          <div
+            style={{
+              marginTop: 'var(--space-3)',
+              padding: '8px 10px',
+              borderRadius: 'var(--radius-sm)',
+              background: 'rgba(34, 197, 94, 0.12)',
+              border: '1px solid rgba(34, 197, 94, 0.35)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              fontSize: '0.78rem',
+              color: '#4ADE80',
+              fontWeight: 700,
+            }}
+          >
+            <span>✓ COD COLLECTED &amp; PAID</span>
+            {order.cod_paid_at && (
+              <span style={{ fontWeight: 500, color: '#BBF7D0' }}>{formatDate(order.cod_paid_at)}</span>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Shipment Detail Panel */}
@@ -1283,36 +1397,6 @@ export default function AdminOrderDetail({ params }: { params: Promise<{ id: str
               </div>
             </div>
           )}
-
-          {/* Strict safety guard: Admin Cancel is ONLY allowed before dispatch (pending / confirmed) */}
-          {(isPending || isConfirmed) && (
-            !showCancelForm ? (
-              <button className="btn btn-ghost" onClick={() => setShowCancelForm(true)} style={{ color: 'var(--error)' }}>
-                Cancel Order
-              </button>
-            ) : (
-              <div className="card">
-                <p className="input-label" style={{ marginBottom: 'var(--space-3)' }}>Cancel Reason</p>
-                <input
-                  className="input-field"
-                  placeholder="Enter reason..."
-                  value={cancelReason}
-                  onChange={e => setCancelReason(e.target.value)}
-                />
-                <div style={{ display: 'flex', gap: 'var(--space-3)', marginTop: 'var(--space-3)' }}>
-                  <button className="btn btn-ghost btn-sm" onClick={() => setShowCancelForm(false)}>Back</button>
-                  <button
-                    className={`btn btn-danger btn-sm ${actionLoading === 'cancel' ? 'btn-loading' : ''}`}
-                    onClick={() => handleAction('cancel')}
-                    disabled={!cancelReason.trim() || !!actionLoading}
-                    style={{ flex: 1 }}
-                  >
-                    CANCEL ORDER
-                  </button>
-                </div>
-              </div>
-            )
-          )}
         </div>
       )}
 
@@ -1326,6 +1410,15 @@ export default function AdminOrderDetail({ params }: { params: Promise<{ id: str
           )}
           {order.delivered_at && (
             <div>• Delivered: <strong>{formatDate(order.delivered_at)}</strong></div>
+          )}
+          {isCOD && order.cod_paid_at && (
+            <div style={{ color: '#4ADE80' }}>• COD Collected &amp; Paid: <strong>{formatDate(order.cod_paid_at)}</strong></div>
+          )}
+          {order.rto_at && (
+            <div style={{ color: '#FB923C' }}>
+              • Returned to Origin (RTO): <strong>{formatDate(order.rto_at)}</strong>
+              {order.rto_reason ? ` — ${order.rto_reason}` : ''}
+            </div>
           )}
           {order.cancelled_at && (
             <div style={{ color: '#F87171' }}>
@@ -1355,6 +1448,212 @@ export default function AdminOrderDetail({ params }: { params: Promise<{ id: str
 
       {/* Admin Notes — Premium Internal Thread */}
       <AdminNotes orderId={id} />
+
+      {/* Isolated Sensitive / Danger Actions Section (Bottom of page to prevent accidental clicks) */}
+      {(isPending ||
+        isConfirmed ||
+        order.order_status === 'shipped' ||
+        order.order_status === 'return_requested') && (
+        <div
+          className="card"
+          style={{
+            marginTop: 'var(--space-5)',
+            background: 'rgba(239, 68, 68, 0.04)',
+            border: '1px solid rgba(239, 68, 68, 0.25)',
+          }}
+        >
+          <p className="input-label" style={{ color: '#F87171', marginBottom: 4 }}>
+            Sensitive / Danger Actions
+          </p>
+          <p className="text-xs text-muted" style={{ marginBottom: 'var(--space-3)' }}>
+            Separated here to prevent accidental clicks. Each action updates inventory or customer order state cleanly.
+          </p>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+            {order.order_status === 'return_requested' && order.return_status !== 'received' && (
+              <div
+                style={{
+                  background: 'rgba(0,0,0,0.2)',
+                  borderRadius: 'var(--radius-sm)',
+                  padding: '10px 12px',
+                  border: '1px solid rgba(250, 204, 21, 0.3)',
+                }}
+              >
+                <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: '0.8125rem', cursor: 'pointer', marginBottom: 8 }}>
+                  <input
+                    type="checkbox"
+                    checked={returnInspectionChecked}
+                    onChange={(e) => setReturnInspectionChecked(e.target.checked)}
+                  />
+                  <span>I confirm the returned product was received back in undamaged condition</span>
+                </label>
+                <button
+                  type="button"
+                  className={`btn btn-success btn-sm ${actionLoading === 'return:received' ? 'btn-loading' : ''}`}
+                  disabled={!!actionLoading || !returnInspectionChecked}
+                  onClick={() => handleReturnStatus('received', true)}
+                >
+                  {order.return_type === 'refund' && order.payment_status === 'paid'
+                    ? 'Mark Received Undamaged & Flag Refund Pending'
+                    : 'Mark Item Received Undamaged'}
+                </button>
+              </div>
+            )}
+
+            {order.order_status === 'return_requested' && (
+              <div>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  style={{ color: 'var(--error)', border: '1px solid rgba(239,68,68,0.35)' }}
+                  disabled={!!actionLoading}
+                  onClick={() => handleReturnStatus('rejected')}
+                >
+                  Reject / Close Return Request
+                </button>
+              </div>
+            )}
+
+            {order.order_status === 'shipped' && (
+              <div>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  style={{ color: '#FB923C', border: '1px solid rgba(249,115,22,0.4)' }}
+                  disabled={!!actionLoading}
+                  onClick={() => {
+                    setRtoConfirmCheck(false);
+                    setShowRtoModal(true);
+                  }}
+                >
+                  Mark as RTO (Return to Origin)...
+                </button>
+              </div>
+            )}
+
+            {(isPending || isConfirmed) && (
+              !showCancelForm ? (
+                <div>
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => setShowCancelForm(true)}
+                    style={{ color: 'var(--error)', border: '1px solid rgba(239,68,68,0.35)' }}
+                  >
+                    Cancel Order
+                  </button>
+                </div>
+              ) : (
+                <div className="card" style={{ borderColor: 'rgba(239,68,68,0.4)' }}>
+                  <p className="input-label" style={{ marginBottom: 'var(--space-3)' }}>Cancel Reason</p>
+                  <input
+                    className="input-field"
+                    placeholder="Enter reason..."
+                    value={cancelReason}
+                    onChange={e => setCancelReason(e.target.value)}
+                  />
+                  <div style={{ display: 'flex', gap: 'var(--space-3)', marginTop: 'var(--space-3)' }}>
+                    <button className="btn btn-ghost btn-sm" onClick={() => setShowCancelForm(false)}>Back</button>
+                    <button
+                      className={`btn btn-danger btn-sm ${actionLoading === 'cancel' ? 'btn-loading' : ''}`}
+                      onClick={() => handleAction('cancel')}
+                      disabled={!cancelReason.trim() || !!actionLoading}
+                      style={{ flex: 1 }}
+                    >
+                      CANCEL ORDER
+                    </button>
+                  </div>
+                </div>
+              )
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* RTO Confirmation Modal */}
+      {showRtoModal && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.75)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: 16,
+          }}
+        >
+          <div className="card" style={{ maxWidth: 460, width: '100%', padding: 'var(--space-5)' }}>
+            <p className="input-label" style={{ color: '#FB923C', marginBottom: 6 }}>
+              Mark Order as RTO (Return to Origin)
+            </p>
+            <p className="text-sm" style={{ marginBottom: 'var(--space-3)' }}>
+              This marks <strong>{order.order_number}</strong> as returned undelivered, restores stock, sends the RTO customer email
+              {order.payment_status === 'paid' ? ', and flags a manual Razorpay refund as pending.' : '.'}
+            </p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 'var(--space-3)' }}>
+              {[
+                'Customer unavailable / Address not found',
+                'Customer refused delivery',
+                'Customer unreachable on phone',
+              ].map((preset) => (
+                <button
+                  key={preset}
+                  type="button"
+                  onClick={() => setRtoReason(preset)}
+                  style={{
+                    padding: '4px 10px',
+                    borderRadius: 999,
+                    border: `1px solid ${rtoReason === preset ? '#FB923C' : 'var(--border-color)'}`,
+                    background: rtoReason === preset ? 'rgba(249,115,22,0.16)' : 'var(--bg-input)',
+                    color: rtoReason === preset ? '#FB923C' : 'var(--text-secondary)',
+                    fontSize: '0.72rem',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {preset}
+                </button>
+              ))}
+            </div>
+            <input
+              className="input-field"
+              value={rtoReason}
+              onChange={(e) => setRtoReason(e.target.value)}
+              placeholder="RTO reason..."
+              style={{ marginBottom: 'var(--space-3)' }}
+            />
+            <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: '0.8125rem', marginBottom: 'var(--space-4)', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={rtoConfirmCheck}
+                onChange={(e) => setRtoConfirmCheck(e.target.checked)}
+              />
+              <span>Confirm this shipment returned undelivered (RTO) and notify customer</span>
+            </label>
+            <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={() => setShowRtoModal(false)}
+                disabled={!!actionLoading}
+              >
+                Back
+              </button>
+              <button
+                type="button"
+                className={`btn btn-danger btn-sm ${actionLoading === 'rto' ? 'btn-loading' : ''}`}
+                style={{ flex: 1 }}
+                disabled={!!actionLoading || !rtoConfirmCheck}
+                onClick={handleMarkRto}
+              >
+                CONFIRM RTO &amp; NOTIFY CUSTOMER
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

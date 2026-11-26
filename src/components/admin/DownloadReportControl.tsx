@@ -3,11 +3,13 @@
 import { useState, useEffect } from 'react';
 import {
   downloadBusinessReport,
+  downloadOrdersReport,
   type BusinessReportPayload,
   type ReportFormat,
 } from '@/lib/admin/reportExporter';
 
 interface DownloadReportControlProps {
+  reportType?: 'dashboard' | 'orders';
   defaultFrom?: string;
   defaultTo?: string;
   statusFilter?: string;
@@ -22,6 +24,7 @@ function isoDateOnly(d: Date): string {
 }
 
 export default function DownloadReportControl({
+  reportType = 'dashboard',
   defaultFrom,
   defaultTo,
   statusFilter,
@@ -53,6 +56,7 @@ export default function DownloadReportControl({
     setDownloading(format);
     try {
       const params = new URLSearchParams();
+      params.set('type', reportType);
       if (fromDate) params.set('from', fromDate);
       if (toDate) params.set('to', toDate);
       if (statusFilter && statusFilter !== 'stuck') params.set('status', statusFilter);
@@ -65,7 +69,11 @@ export default function DownloadReportControl({
       if (!res.ok || !json?.success) {
         throw new Error(json?.error || 'Failed to generate report');
       }
-      await downloadBusinessReport(json as BusinessReportPayload, format);
+      if (reportType === 'orders') {
+        await downloadOrdersReport(json as BusinessReportPayload, format);
+      } else {
+        await downloadBusinessReport(json as BusinessReportPayload, format);
+      }
       setOpen(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Export failed');
@@ -105,7 +113,9 @@ export default function DownloadReportControl({
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-            <strong style={{ fontSize: '0.85rem' }}>Export Business Report</strong>
+            <strong style={{ fontSize: '0.85rem' }}>
+              {reportType === 'orders' ? 'Export Orders Report' : 'Export Business Report'}
+            </strong>
             <button
               type="button"
               onClick={() => setOpen(false)}

@@ -450,6 +450,12 @@ img {
   color: #D97706;
 }
 
+.badge-rto {
+  background: rgba(249, 115, 22, 0.2);
+  color: #FB923C;
+  border: 1px solid rgba(249, 115, 22, 0.45);
+}
+
 .badge-paid {
   background: rgba(76, 175, 80, 0.15);
   color: var(--success);

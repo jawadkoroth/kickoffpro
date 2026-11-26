@@ -24,6 +24,7 @@ const SUPPORTED_STATUSES = new Set<OrderStatusForEmail>([
   'shipped',
   'delivered',
   'cancelled',
+  'rto',
 ]);
 
 /**
@@ -65,7 +66,7 @@ export async function dispatchOrderNotification(opts: {
   const { data: order, error: fetchErr } = await supabase
     .from('orders')
     .select(
-      'id, order_number, customer, shipping_address, subtotal_paise, discount_paise, shipping_paise, cod_fee_paise, total_paise, payment_method, order_status, tracking_id, shipping_provider, tracking_url, shipment_mode, shipped_notified_at, delivered_at, delivered_notified_at',
+      'id, order_number, customer, shipping_address, subtotal_paise, discount_paise, shipping_paise, cod_fee_paise, total_paise, payment_method, order_status, tracking_id, shipping_provider, tracking_url, shipment_mode, shipped_notified_at, delivered_at, delivered_notified_at, rto_reason, rto_notified_at',
     )
     .eq('id', orderId)
     .maybeSingle();
@@ -127,6 +128,19 @@ export async function dispatchOrderNotification(opts: {
     }
   }
 
+  if (effectiveStatus === 'rto') {
+    const { data: claimed } = await supabase
+      .from('orders')
+      .update({ rto_notified_at: nowIso })
+      .eq('id', order.id)
+      .is('rto_notified_at', null)
+      .select('id');
+
+    if (!claimed || claimed.length === 0) {
+      return { ok: true, enqueued: false, skipped: 'already_notified_rto' };
+    }
+  }
+
   const { data: itemRows } = await supabase
     .from('order_items')
     .select('product_name, size, quantity, unit_price_paise, subtotal_paise, image_url')
@@ -181,6 +195,7 @@ export async function dispatchOrderNotification(opts: {
     tracking_url: trackingUrl,
     shipment_mode: order.shipment_mode as 'automated' | 'manual' | null,
     delivered_at: order.delivered_at ?? null,
+    rto_reason: order.rto_reason ?? null,
   };
 
   const jobId = await enqueue(
@@ -225,4 +240,8 @@ export function notifyOrderDelivered(orderId: string, source: OrderNotificationS
 
 export function notifyOrderCancelled(orderId: string, source: OrderNotificationSource = 'admin_action') {
   return dispatchOrderNotification({ orderId, targetStatus: 'cancelled', source });
+}
+
+export function notifyOrderRto(orderId: string, source: OrderNotificationSource = 'admin_action') {
+  return dispatchOrderNotification({ orderId, targetStatus: 'rto', source });
 }

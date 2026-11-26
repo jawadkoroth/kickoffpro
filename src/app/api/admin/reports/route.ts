@@ -35,6 +35,13 @@ interface ReportOrderRow {
     pincode?: string;
     line1?: string;
   } | null;
+  shipping_provider?: string | null;
+  tracking_id?: string | null;
+  return_type?: string | null;
+  return_status?: string | null;
+  rto_reason?: string | null;
+  refund_status?: string | null;
+  refund_reference?: string | null;
   created_at: string;
 }
 
@@ -103,20 +110,41 @@ export async function GET(req: NextRequest) {
 
   const statusFilter = url.searchParams.get('status')?.trim().toLowerCase() || '';
   const paymentFilter = url.searchParams.get('payment')?.trim().toLowerCase() || '';
+  const reportType = url.searchParams.get('type')?.trim().toLowerCase() === 'orders' ? 'orders' : 'dashboard';
 
   const supabase = createAdminClient();
   let query = supabase
     .from('orders')
     .select(
-      'id, order_number, product_id, size, quantity, subtotal_paise, discount_paise, shipping_paise, cod_fee_paise, total_paise, coupon_code, payment_method, payment_status, order_status, customer, shipping_address, created_at',
+      'id, order_number, product_id, size, quantity, subtotal_paise, discount_paise, shipping_paise, cod_fee_paise, total_paise, coupon_code, payment_method, payment_status, order_status, customer, shipping_address, shipping_provider, tracking_id, return_type, return_status, rto_reason, refund_status, refund_reference, created_at',
     )
     .gte('created_at', fromDate.toISOString())
     .lte('created_at', toDate.toISOString())
     .order('created_at', { ascending: false })
     .limit(5000);
 
-  if (statusFilter && ['pending', 'confirmed', 'shipped', 'delivered', 'cancelled'].includes(statusFilter)) {
-    query = query.eq('order_status', statusFilter);
+  if (statusFilter === 'refund_pending') {
+    query = query.eq('refund_status', 'pending');
+  } else if (statusFilter) {
+    const allowed = new Set([
+      'pending',
+      'confirmed',
+      'shipped',
+      'delivered',
+      'cancelled',
+      'return_requested',
+      'returned',
+      'rto',
+    ]);
+    const list = statusFilter
+      .split(',')
+      .map((s) => s.trim())
+      .filter((s) => allowed.has(s));
+    if (list.length === 1) {
+      query = query.eq('order_status', list[0]);
+    } else if (list.length > 1) {
+      query = query.in('order_status', list);
+    }
   }
   if (paymentFilter && ['online', 'cod'].includes(paymentFilter)) {
     query = query.eq('payment_method', paymentFilter);
@@ -221,10 +249,12 @@ export async function GET(req: NextRequest) {
     }
 
     let itemsSummary = '';
+    let totalQty = 0;
     if (orderItems.length > 0) {
       itemsSummary = orderItems
         .map((li) => `${li.product_name} (${li.size}) x${li.quantity}`)
         .join('; ');
+      totalQty = orderItems.reduce((sum, li) => sum + (li.quantity ?? 1), 0);
       if (realized) {
         for (const li of orderItems) {
           const key = `${li.product_name}::${li.size}`;
@@ -243,6 +273,7 @@ export async function GET(req: NextRequest) {
       const pName = legacyNames.get(o.product_id) ?? 'Product';
       const sz = o.size || 'M';
       const q = o.quantity ?? 1;
+      totalQty = q;
       itemsSummary = `${pName} (${sz}) x${q}`;
       if (realized) {
         const key = `${pName}::${sz}`;
@@ -257,6 +288,20 @@ export async function GET(req: NextRequest) {
         skuMap.set(key, cur);
       }
     }
+
+    const returnRtoStatus =
+      o.order_status === 'rto'
+        ? `RTO${o.rto_reason ? `: ${o.rto_reason}` : ''}`
+        : o.return_type
+          ? `${o.return_type.toUpperCase()} (${o.return_status || 'requested'})`
+          : 'None';
+
+    const refundStatusRef =
+      o.refund_status && o.refund_status !== 'none'
+        ? `${o.refund_status.toUpperCase()}${o.refund_reference ? ` (${o.refund_reference})` : ''}`
+        : o.payment_status === 'refunded'
+          ? 'COMPLETED'
+          : 'None';
 
     return {
       orderNumber: o.order_number,
@@ -277,6 +322,11 @@ export async function GET(req: NextRequest) {
       codFeeRupees: paiseToRupeesNum(codFee),
       netTotalRupees: paiseToRupeesNum(net),
       itemsSummary,
+      totalQty,
+      courierPartner: o.shipping_provider || '',
+      trackingId: o.tracking_id || '',
+      returnRtoStatus,
+      refundStatusRef,
     };
   });
 
@@ -292,6 +342,7 @@ export async function GET(req: NextRequest) {
   const aovPaise = realizedOrders > 0 ? Math.round(netRevenuePaise / realizedOrders) : 0;
 
   return apiSuccess({
+    reportType,
     summary: {
       generatedAt: now.toISOString(),
       from: fromDate.toISOString(),
