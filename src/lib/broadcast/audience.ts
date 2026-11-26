@@ -1,61 +1,43 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
+import { createAdminClient } from '@/lib/supabase/admin';
 
-export type AudienceMode = 'all' | 'newsletter' | 'customers';
+export type AudienceMode = 'all' | 'newsletter' | 'customers' | 'opted_in_buyers';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-export interface AudienceResolutionResult {
-  emails: string[];
-  count: number;
-  mode: AudienceMode;
-}
-
-export interface AudienceCountsSummary {
-  all: number;
-  newsletter: number;
-  customers: number;
+function normalizeEmail(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  const cleaned = raw.trim().toLowerCase();
+  if (!cleaned || !EMAIL_RE.test(cleaned)) return null;
+  return cleaned;
 }
 
 /**
- * Normalizes email address to lower-case trimmed string.
+ * Fetch all suppressed email addresses (marketing_suppressions + unsubscribed newsletter rows).
  */
-function normalizeEmail(email: unknown): string | null {
-  if (typeof email !== 'string') return null;
-  const clean = email.trim().toLowerCase();
-  if (!clean || clean.length > 320 || !EMAIL_RE.test(clean)) return null;
-  return clean;
-}
-
-/**
- * Fetch all suppressed / unsubscribed emails across both suppression sources:
- * 1. `marketing_suppressions` table
- * 2. `newsletter_subscribers` where `unsubscribed_at IS NOT NULL`
- */
-async function getSuppressedEmailsSet(supabase: SupabaseClient): Promise<Set<string>> {
+export async function getSuppressedEmailsSet(
+  supabase = createAdminClient(),
+): Promise<Set<string>> {
   const suppressed = new Set<string>();
 
-  // 1. Marketing suppressions table
-  const { data: suppRows } = await supabase
-    .from('marketing_suppressions')
-    .select('email');
+  const [{ data: suppRows }, { data: unsubRows }] = await Promise.all([
+    supabase.from('marketing_suppressions').select('email'),
+    supabase
+      .from('newsletter_subscribers')
+      .select('email')
+      .not('unsubscribed_at', 'is', null),
+  ]);
 
   if (suppRows) {
     for (const row of suppRows) {
-      const email = normalizeEmail(row.email);
-      if (email) suppressed.add(email);
+      const e = normalizeEmail(row.email);
+      if (e) suppressed.add(e);
     }
   }
 
-  // 2. Unsubscribed newsletter subscribers
-  const { data: unsubRows } = await supabase
-    .from('newsletter_subscribers')
-    .select('email')
-    .not('unsubscribed_at', 'is', null);
-
   if (unsubRows) {
     for (const row of unsubRows) {
-      const email = normalizeEmail(row.email);
-      if (email) suppressed.add(email);
+      const e = normalizeEmail(row.email);
+      if (e) suppressed.add(e);
     }
   }
 
@@ -63,110 +45,118 @@ async function getSuppressedEmailsSet(supabase: SupabaseClient): Promise<Set<str
 }
 
 /**
- * Resolve active newsletter subscriber emails.
+ * Active newsletter subscriber emails, already filtered against marketing suppressions.
  */
-async function getNewsletterEmails(supabase: SupabaseClient): Promise<string[]> {
-  const { data: rows } = await supabase
+export async function getNewsletterEmails(
+  supabase = createAdminClient(),
+  suppressedSet?: Set<string>,
+): Promise<string[]> {
+  const suppressed = suppressedSet ?? (await getSuppressedEmailsSet(supabase));
+  const { data } = await supabase
     .from('newsletter_subscribers')
     .select('email')
     .is('unsubscribed_at', null);
 
-  const emails: string[] = [];
-  if (rows) {
-    for (const r of rows) {
-      const clean = normalizeEmail(r.email);
-      if (clean) emails.push(clean);
+  const unique = new Set<string>();
+  for (const row of data ?? []) {
+    const email = normalizeEmail(row.email);
+    if (email && !suppressed.has(email)) {
+      unique.add(email);
     }
   }
-  return emails;
+
+  return Array.from(unique);
 }
 
 /**
- * Resolve past customer emails from orders and user profiles.
+ * Past buyer emails from non-cancelled / non-failed orders,
+ * optionally restricted to checkout marketing opt-in (`accepts_marketing = true`).
  */
-async function getCustomerEmails(supabase: SupabaseClient): Promise<string[]> {
-  const emails: string[] = [];
+export async function getCustomerEmails(
+  supabase = createAdminClient(),
+  opts?: { optedInOnly?: boolean; suppressedSet?: Set<string> },
+): Promise<string[]> {
+  const suppressed = opts?.suppressedSet ?? (await getSuppressedEmailsSet(supabase));
 
-  // From orders JSONB `customer`
-  const { data: orderRows } = await supabase
+  let query = supabase
     .from('orders')
-    .select('customer');
+    .select('customer, order_status, payment_status, accepts_marketing')
+    .neq('order_status', 'cancelled')
+    .neq('payment_status', 'failed');
 
-  if (orderRows) {
-    for (const r of orderRows) {
-      const cust = r.customer as { email?: string } | null;
-      const clean = normalizeEmail(cust?.email);
-      if (clean) emails.push(clean);
+  if (opts?.optedInOnly) {
+    query = query.eq('accepts_marketing', true);
+  }
+
+  const { data } = await query;
+  const unique = new Set<string>();
+
+  for (const row of data ?? []) {
+    const customer = row.customer as { email?: string } | null;
+    const email = normalizeEmail(customer?.email);
+    if (email && !suppressed.has(email)) {
+      unique.add(email);
     }
   }
 
-  // From user profiles
-  const { data: profileRows } = await supabase
-    .from('profiles')
-    .select('email');
-
-  if (profileRows) {
-    for (const r of profileRows) {
-      const clean = normalizeEmail(r.email);
-      if (clean) emails.push(clean);
-    }
-  }
-
-  return emails;
+  return Array.from(unique);
 }
 
 /**
- * Resolve deduplicated, suppression-filtered recipient emails for a selected audience mode.
+ * Resolve the deduplicated recipient list for a broadcast audience mode.
  */
-export async function resolveAudience(
-  supabase: SupabaseClient,
-  mode: AudienceMode,
-): Promise<AudienceResolutionResult> {
-  const suppressedSet = await getSuppressedEmailsSet(supabase);
-  const candidates: string[] = [];
+export async function resolveAudience(mode: AudienceMode): Promise<string[]> {
+  const supabase = createAdminClient();
+  const suppressed = await getSuppressedEmailsSet(supabase);
 
-  if (mode === 'newsletter' || mode === 'all') {
-    const nl = await getNewsletterEmails(supabase);
-    candidates.push(...nl);
+  if (mode === 'newsletter') {
+    return getNewsletterEmails(supabase, suppressed);
   }
 
-  if (mode === 'customers' || mode === 'all') {
-    const cust = await getCustomerEmails(supabase);
-    candidates.push(...cust);
+  if (mode === 'customers') {
+    return getCustomerEmails(supabase, { optedInOnly: false, suppressedSet: suppressed });
   }
 
-  // Deduplicate and filter out suppressions
-  const uniqueEmails = new Set<string>();
-  for (const email of candidates) {
-    if (!suppressedSet.has(email)) {
-      uniqueEmails.add(email);
-    }
+  if (mode === 'opted_in_buyers') {
+    return getCustomerEmails(supabase, { optedInOnly: true, suppressedSet: suppressed });
   }
 
-  const finalEmails = Array.from(uniqueEmails);
-
-  return {
-    emails: finalEmails,
-    count: finalEmails.length,
-    mode,
-  };
-}
-
-/**
- * Compute counts for all audience modes for live preview in the admin UI.
- */
-export async function getAudienceCounts(
-  supabase: SupabaseClient,
-): Promise<AudienceCountsSummary> {
-  const [nlResult, custResult, allResult] = await Promise.all([
-    resolveAudience(supabase, 'newsletter'),
-    resolveAudience(supabase, 'customers'),
-    resolveAudience(supabase, 'all'),
+  // 'all': Union of active newsletter subscribers and past buyers
+  const [newsletter, customers] = await Promise.all([
+    getNewsletterEmails(supabase, suppressed),
+    getCustomerEmails(supabase, { optedInOnly: false, suppressedSet: suppressed }),
   ]);
 
+  const combined = new Set<string>([...newsletter, ...customers]);
+  return Array.from(combined).sort();
+}
+
+/**
+ * Return exact deduplicated recipient counts per audience segment plus suppression count.
+ */
+export async function getAudienceCounts(): Promise<{
+  all: number;
+  newsletter: number;
+  customers: number;
+  opted_in_buyers: number;
+  suppressed: number;
+}> {
+  const supabase = createAdminClient();
+  const suppressed = await getSuppressedEmailsSet(supabase);
+
+  const [newsletter, customers, optedInBuyers] = await Promise.all([
+    getNewsletterEmails(supabase, suppressed),
+    getCustomerEmails(supabase, { optedInOnly: false, suppressedSet: suppressed }),
+    getCustomerEmails(supabase, { optedInOnly: true, suppressedSet: suppressed }),
+  ]);
+
+  const combined = new Set<string>([...newsletter, ...customers]);
+
   return {
-    newsletter: nlResult.count,
-    customers: custResult.count,
-    all: allResult.count,
+    all: combined.size,
+    newsletter: newsletter.length,
+    customers: customers.length,
+    opted_in_buyers: optedInBuyers.length,
+    suppressed: suppressed.size,
   };
 }

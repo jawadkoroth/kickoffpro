@@ -76,6 +76,12 @@ export interface OrderEmailData {
    * identically before and after B4 because the legacy fields above
    * mirror items[0].
    */
+  /** Shipping & tracking metadata populated for shipped / delivered emails. */
+  tracking_id?: string | null;
+  shipping_provider?: string | null;
+  tracking_url?: string | null;
+  shipment_mode?: 'automated' | 'manual' | null;
+  delivered_at?: string | null;
   items?: Array<{
     name: string;
     size: string;
@@ -181,6 +187,12 @@ interface RenderOpts {
    * `subtotal_paise` per line drives the trailing line-total column.
    * Single-line orders may omit this entirely.
    */
+  /** Shipping & tracking metadata populated for shipped / delivered emails. */
+  tracking_id?: string | null;
+  shipping_provider?: string | null;
+  tracking_url?: string | null;
+  shipment_mode?: 'automated' | 'manual' | null;
+  delivered_at?: string | null;
   items?: Array<{
     name: string;
     size: string;
@@ -192,13 +204,19 @@ interface RenderOpts {
   summary: { label: string; value: string }[];
   /** Address block (string lines) rendered in its own subtle card. */
   address?: string[];
+  /** Optional shipment tracking details card rendered for shipped/delivered notifications. */
+  tracking?: {
+    courier: string;
+    trackingId: string;
+    trackingUrl?: string | null;
+  };
   /** Closing paragraph text, e.g. retry guidance. */
   outro?: string;
   cta?: { label: string; href: string };
 }
 
 function renderEmail(opts: RenderOpts): string {
-  const { heading, intro, eyebrow, item, items, summary, address, outro, cta } = opts;
+  const { heading, intro, eyebrow, item, items, summary, address, tracking, outro, cta } = opts;
 
   const itemBlock = item ? renderItemBlock(item) : '';
   // Additional-lines table: rendered only when the order has >= 2
@@ -249,6 +267,28 @@ function renderEmail(opts: RenderOpts): string {
     ? `<p style="margin:0 0 8px;color:#C9A86A;font-size:11px;letter-spacing:0.16em;text-transform:uppercase;font-weight:600;">${escapeHtml(eyebrow)}</p>`
     : '';
 
+  const trackingBlock = tracking
+    ? `
+        <div style="background:#101012;border:1px solid rgba(201,168,106,0.3);border-radius:10px;padding:16px 18px;margin-top:14px;">
+          <p style="margin:0 0 8px;color:#C9A86A;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;font-weight:600;">Shipment tracking</p>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+            <tr>
+              <td style="padding:4px 0;color:#9A9A9A;font-size:13px;">Courier Partner</td>
+              <td style="padding:4px 0;color:#F5F5F5;font-size:13px;font-weight:600;text-align:right;">${escapeHtml(tracking.courier)}</td>
+            </tr>
+            <tr>
+              <td style="padding:4px 0;color:#9A9A9A;font-size:13px;">Tracking ID</td>
+              <td style="padding:4px 0;color:#F5F5F5;font-size:13px;font-family:monospace;font-weight:600;text-align:right;">${escapeHtml(tracking.trackingId)}</td>
+            </tr>
+          </table>
+          ${
+            tracking.trackingUrl
+              ? `<p style="margin:10px 0 0;font-size:12px;"><a href="${escapeAttr(tracking.trackingUrl)}" style="color:#C9A86A;text-decoration:underline;">Open courier tracking portal →</a></p>`
+              : ''
+          }
+        </div>`
+    : '';
+
   return `
 <!DOCTYPE html>
 <html>
@@ -289,6 +329,8 @@ function renderEmail(opts: RenderOpts): string {
                 </div>
 
                 ${addressBlock}
+
+                ${trackingBlock}
 
                 ${ctaBlock}
 
@@ -713,6 +755,10 @@ export async function sendOrderStatusEmail(
   order: OrderEmailData,
   status: OrderStatusForEmail,
 ): Promise<void> {
+  const courierName = (order.shipping_provider || '').trim() || 'our courier partner';
+  const trackingId = (order.tracking_id || '').trim();
+  const trackingUrl = (order.tracking_url || '').trim() || null;
+
   const presets: Record<
     OrderStatusForEmail,
     { eyebrow: string; heading: string; intro: string; outro?: string }
@@ -725,8 +771,12 @@ export async function sendOrderStatusEmail(
     shipped: {
       eyebrow: 'Shipped',
       heading: 'Your order is on its way',
-      intro: `Order ${order.order_number} has been handed over to our courier.`,
-      outro: 'You can track its progress from the order page.',
+      intro: trackingId
+        ? `Order ${order.order_number} has been dispatched via ${courierName} (Tracking ID: ${trackingId}).`
+        : `Order ${order.order_number} has been handed over to ${courierName}.`,
+      outro: trackingUrl
+        ? 'Use the tracking link above to follow live parcel updates, or view your order anytime.'
+        : 'You can track its progress from the order page.',
     },
     delivered: {
       eyebrow: 'Delivered',
@@ -742,6 +792,19 @@ export async function sendOrderStatusEmail(
   };
 
   const preset = presets[status];
+  const trackingCard =
+    (status === 'shipped' || status === 'delivered') && trackingId
+      ? {
+          courier: courierName,
+          trackingId,
+          trackingUrl,
+        }
+      : undefined;
+
+  const primaryCta =
+    status === 'shipped' && trackingUrl
+      ? { label: 'Track Shipment', href: trackingUrl }
+      : { label: 'View order', href: viewOrderHref(order.id, order.customer.email) };
 
   const html = renderEmail({
     eyebrow: preset.eyebrow,
@@ -751,8 +814,9 @@ export async function sendOrderStatusEmail(
     items: order.items,
     summary: commonSummary(order),
     address: status === 'cancelled' ? undefined : addressLines(order.shipping_address),
+    tracking: trackingCard,
     outro: preset.outro,
-    cta: { label: 'View order', href: viewOrderHref(order.id, order.customer.email) },
+    cta: primaryCta,
   });
 
   await dispatch({

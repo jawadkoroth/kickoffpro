@@ -10,6 +10,11 @@ import { ProviderResponsePanel } from '@/components/ProviderResponsePanel';
 import AdminNotes from '@/components/admin/AdminNotes';
 import type { CanonicalShipmentStatus } from '@/lib/shipping/state';
 import type { ParsedProviderError } from '@/lib/shipping/types';
+import {
+  MANUAL_COURIER_PRESETS,
+  formatCourierDisplayName,
+  resolveTrackingUrl,
+} from '@/lib/shipping/couriers';
 
 interface OrderLine {
   id: string;
@@ -39,8 +44,15 @@ interface Order {
   customer: { name: string; phone: string; email?: string };
   shipping_address: { line1: string; line2?: string; city: string; state: string; pincode: string };
   tracking_id: string | null;
+  tracking_url: string | null;
   label_url: string | null;
   shipping_provider: string | null;
+  shipment_mode: 'automated' | 'manual' | null;
+  shipped_at: string | null;
+  shipped_notified_at: string | null;
+  delivered_at: string | null;
+  delivered_notified_at: string | null;
+  delivery_note: string | null;
   cancel_reason: string | null;
   notes: string | null;
   created_at: string;
@@ -89,6 +101,22 @@ export default function AdminOrderDetail({ params }: { params: Promise<{ id: str
     shipment: Order['shipment'];
     history: Order['shipment_history'];
   }>({ shipment: null, history: [] });
+
+  // Dual fulfillment state (Option A: Automated courier vs Option B: Manual / India Post)
+  const [fulfillMode, setFulfillMode] = useState<'automated' | 'manual'>('automated');
+  const [manualCourier, setManualCourier] = useState('india_post');
+  const [customCourierName, setCustomCourierName] = useState('');
+  const [manualTrackingId, setManualTrackingId] = useState('');
+  const [manualTrackingUrl, setManualTrackingUrl] = useState(
+    'https://www.indiapost.gov.in/_layouts/15/dop.portal.tracking/trackconsignment.aspx',
+  );
+  const [manualUrlTouched, setManualUrlTouched] = useState(false);
+
+  // Explicit delivery verification modal state
+  const [showDeliverModal, setShowDeliverModal] = useState(false);
+  const [deliveryVerified, setDeliveryVerified] = useState(false);
+  const [forceOverrideAutomated, setForceOverrideAutomated] = useState(false);
+  const [deliveryNote, setDeliveryNote] = useState('');
 
   useEffect(() => {
     fetchOrder();
@@ -140,20 +168,28 @@ export default function AdminOrderDetail({ params }: { params: Promise<{ id: str
       // Fall back to legacy shipment data from orders table
       const { data: order } = await supabase
         .from('orders')
-        .select('tracking_id, label_url, shipping_provider, order_status, updated_at')
+        .select('tracking_id, label_url, shipping_provider, order_status, updated_at, shipped_at, delivered_at')
         .eq('id', id)
         .single();
 
       if (order && order.tracking_id) {
-        // Create a legacy shipment object for display
+        const legacyStatus: CanonicalShipmentStatus =
+          order.order_status === 'delivered'
+            ? 'delivered'
+            : order.order_status === 'cancelled'
+              ? 'cancelled'
+              : order.order_status === 'shipped'
+                ? 'in_transit'
+                : 'pending';
+        // Create a legacy / manual shipment object for display
         const legacyShipment = {
-          id: `legacy-${id}`,
+          id: `manual-${id}`,
           tracking_id: order.tracking_id,
           provider_name: order.shipping_provider,
-          status: order.order_status === 'shipped' ? 'shipment_created' as const : 'pending' as const,
+          status: legacyStatus,
           label_url: order.label_url,
-          created_at: order.updated_at,
-          last_provider_event_at: order.updated_at,
+          created_at: order.shipped_at || order.updated_at,
+          last_provider_event_at: order.delivered_at || order.shipped_at || order.updated_at,
           environment: null,
           failure_reason: null,
           parsed_error: null,
@@ -223,28 +259,67 @@ export default function AdminOrderDetail({ params }: { params: Promise<{ id: str
       }
 
       if (action === 'ship') {
-        const res = await fetch(`/api/admin/orders/${id}/ship`, { method: 'POST' });
+        const res = await fetch(`/api/admin/orders/${id}/ship`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mode: 'automated' }),
+        });
         const data = await res.json();
         if (!data.success) {
           showToast(data.error || 'Shipment creation failed', 'error');
           setActionLoading('');
           return;
         }
-        statusChanged = true;
+      }
+
+      if (action === 'ship-manual') {
+        const res = await fetch(`/api/admin/orders/${id}/ship`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            mode: 'manual',
+            courier_partner: manualCourier,
+            custom_courier_name: manualCourier === 'custom' ? customCourierName : undefined,
+            tracking_id: manualTrackingId,
+            tracking_url: manualTrackingUrl,
+          }),
+        });
+        const data = await res.json();
+        if (!data.success) {
+          showToast(data.error || 'Manual shipment failed', 'error');
+          setActionLoading('');
+          return;
+        }
       }
 
       if (action === 'deliver') {
-        await supabase.from('orders').update({ order_status: 'delivered' }).eq('id', id);
-        statusChanged = true;
+        const res = await fetch(`/api/admin/orders/${id}/deliver`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            confirmed_by_admin: deliveryVerified,
+            force_override_automated: forceOverrideAutomated,
+            delivery_note: deliveryNote,
+          }),
+        });
+        const data = await res.json();
+        if (!data.success) {
+          showToast(data.error || 'Delivery verification failed', 'error');
+          setActionLoading('');
+          return;
+        }
+        setShowDeliverModal(false);
+        setDeliveryVerified(false);
+        setForceOverrideAutomated(false);
+        setDeliveryNote('');
       }
 
       if (action === 'save-notes') {
         await supabase.from('orders').update({ notes: noteText }).eq('id', id);
       }
 
-      // Fire-and-forget lifecycle email. Server route reads the
-      // current status from the DB so it's never spoofable from
-      // here. Errors are silently logged server-side.
+      // Fire-and-forget lifecycle email for confirm/cancel transitions
+      // (ship and deliver notify deterministically on the server with DB idempotency).
       if (statusChanged) {
         fetch(`/api/admin/orders/${id}/notify-status`, { method: 'POST' }).catch(() => { });
       }
@@ -374,28 +449,90 @@ export default function AdminOrderDetail({ params }: { params: Promise<{ id: str
 
       {/* Shipment Detail Panel */}
       <div className="card" style={{ marginBottom: 'var(--space-4)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-4)' }}>
-          <p className="input-label" style={{ margin: 0 }}>Shipment</p>
-          {shipmentData.shipment && (
-            <span style={{
-              fontSize: '0.5625rem',
-              fontWeight: 700,
-              letterSpacing: '0.1em',
-              textTransform: 'uppercase',
-              color: 'var(--text-muted)',
-              padding: '2px 8px',
-              background: 'var(--bg-tertiary)',
-              borderRadius: 3,
-              border: '1px solid var(--border-color)',
-            }}>
-              {shipmentData.shipment.provider_name?.toUpperCase() ?? 'KickoffPro'}
-            </span>
-          )}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-4)', gap: 8, flexWrap: 'wrap' }}>
+          <p className="input-label" style={{ margin: 0 }}>Shipment &amp; Notification Audit</p>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+            {order.shipment_mode && (
+              <span style={{
+                fontSize: '0.5625rem',
+                fontWeight: 700,
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+                color: order.shipment_mode === 'manual' ? '#FACC15' : '#60A5FA',
+                padding: '2px 8px',
+                background: 'var(--bg-tertiary)',
+                borderRadius: 3,
+                border: '1px solid var(--border-color)',
+              }}>
+                {order.shipment_mode}
+              </span>
+            )}
+            {(shipmentData.shipment?.provider_name || order.shipping_provider) && (
+              <span style={{
+                fontSize: '0.5625rem',
+                fontWeight: 700,
+                letterSpacing: '0.1em',
+                textTransform: 'uppercase',
+                color: 'var(--text-muted)',
+                padding: '2px 8px',
+                background: 'var(--bg-tertiary)',
+                borderRadius: 3,
+                border: '1px solid var(--border-color)',
+              }}>
+                {formatCourierDisplayName(shipmentData.shipment?.provider_name || order.shipping_provider)}
+              </span>
+            )}
+          </div>
         </div>
         <ShipmentDetailPanel
           shipment={shipmentData.shipment ?? null}
           orderNumber={order.order_number}
         />
+
+        {(order.tracking_id || order.tracking_url || order.shipped_notified_at || order.delivered_notified_at) && (
+          <div style={{
+            marginTop: 'var(--space-3)',
+            padding: '10px 12px',
+            borderRadius: 'var(--radius-sm)',
+            background: 'var(--bg-input)',
+            border: '1px solid var(--border-color)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 6,
+            fontSize: '0.75rem',
+          }}>
+            {order.tracking_url && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <span className="text-muted">Customer Tracking Link</span>
+                <a
+                  href={order.tracking_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ color: 'var(--gold, #D4AF37)', fontWeight: 600, textDecoration: 'underline' }}
+                >
+                  Open {formatCourierDisplayName(order.shipping_provider)} Tracking ↗
+                </a>
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', color: 'var(--text-muted)' }}>
+              <span>
+                Shipped Email:{' '}
+                <strong style={{ color: order.shipped_notified_at ? '#4ADE80' : 'var(--text-muted)' }}>
+                  {order.shipped_notified_at ? `Sent (${formatDate(order.shipped_notified_at)})` : 'Not sent'}
+                </strong>
+              </span>
+              <span>
+                Delivered Email:{' '}
+                <strong style={{ color: order.delivered_notified_at ? '#4ADE80' : 'var(--text-muted)' }}>
+                  {order.delivered_notified_at ? `Sent (${formatDate(order.delivered_notified_at)})` : 'Not sent'}
+                </strong>
+              </span>
+            </div>
+            {order.delivery_note && (
+              <div className="text-muted">Delivery note: {order.delivery_note}</div>
+            )}
+          </div>
+        )}
 
         {/* KickoffPro: Provider Response Panel — shows forensic error details for failed shipments */}
         {shipmentData.shipment && (
@@ -447,23 +584,303 @@ export default function AdminOrderDetail({ params }: { params: Promise<{ id: str
           )}
 
           {isConfirmed && !order.tracking_id && (
-            <button
-              className={`btn btn-primary ${actionLoading === 'ship' ? 'btn-loading' : ''}`}
-              onClick={() => handleAction('ship')}
-              disabled={!!actionLoading}
-            >
-              CREATE SHIPMENT
-            </button>
+            <div className="card" style={{ borderColor: 'rgba(212,175,55,0.35)' }}>
+              <p className="input-label" style={{ marginBottom: 'var(--space-3)' }}>
+                Fulfillment — Dispatch Order
+              </p>
+
+              {/* Option A vs Option B switcher */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 'var(--space-4)' }}>
+                <button
+                  type="button"
+                  onClick={() => setFulfillMode('automated')}
+                  style={{
+                    padding: '10px 12px',
+                    borderRadius: 'var(--radius-sm)',
+                    border: `1px solid ${fulfillMode === 'automated' ? 'var(--gold, #D4AF37)' : 'var(--border-color)'}`,
+                    background: fulfillMode === 'automated' ? 'rgba(212,175,55,0.12)' : 'var(--bg-input)',
+                    color: fulfillMode === 'automated' ? 'var(--gold, #D4AF37)' : 'var(--text-secondary)',
+                    fontSize: '0.8125rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Option A: Auto Courier
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFulfillMode('manual')}
+                  style={{
+                    padding: '10px 12px',
+                    borderRadius: 'var(--radius-sm)',
+                    border: `1px solid ${fulfillMode === 'manual' ? 'var(--gold, #D4AF37)' : 'var(--border-color)'}`,
+                    background: fulfillMode === 'manual' ? 'rgba(212,175,55,0.12)' : 'var(--bg-input)',
+                    color: fulfillMode === 'manual' ? 'var(--gold, #D4AF37)' : 'var(--text-secondary)',
+                    fontSize: '0.8125rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Option B: Manual / India Post
+                </button>
+              </div>
+
+              {fulfillMode === 'automated' ? (
+                <div>
+                  <p className="text-xs text-muted" style={{ marginBottom: 'var(--space-3)' }}>
+                    Creates AWB via your active automated courier (Delhivery / Shiprocket) and automatically emails the tracking link to the customer.
+                  </p>
+                  <button
+                    className={`btn btn-primary ${actionLoading === 'ship' ? 'btn-loading' : ''}`}
+                    onClick={() => handleAction('ship')}
+                    disabled={!!actionLoading}
+                    style={{ width: '100%' }}
+                  >
+                    CREATE AUTOMATED SHIPMENT
+                  </button>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+                  <div>
+                    <label className="input-label" style={{ display: 'block', marginBottom: 6 }}>
+                      Courier Partner
+                    </label>
+                    <select
+                      className="input-field"
+                      value={manualCourier}
+                      onChange={(e) => {
+                        const nextCourier = e.target.value;
+                        setManualCourier(nextCourier);
+                        if (!manualUrlTouched) {
+                          setManualTrackingUrl(
+                            resolveTrackingUrl(nextCourier, manualTrackingId) || '',
+                          );
+                        }
+                      }}
+                    >
+                      {MANUAL_COURIER_PRESETS.map((c) => (
+                        <option key={c.key} value={c.key}>
+                          {c.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {manualCourier === 'custom' && (
+                    <div>
+                      <label className="input-label" style={{ display: 'block', marginBottom: 6 }}>
+                        Custom Courier Name *
+                      </label>
+                      <input
+                        className="input-field"
+                        placeholder="e.g. Trackon Courier, Professional Courier"
+                        value={customCourierName}
+                        onChange={(e) => setCustomCourierName(e.target.value)}
+                      />
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="input-label" style={{ display: 'block', marginBottom: 6 }}>
+                      Consignment / Tracking Number *
+                    </label>
+                    <input
+                      className="input-field"
+                      placeholder={
+                        MANUAL_COURIER_PRESETS.find((c) => c.key === manualCourier)?.placeholderTrackingId ||
+                        'Enter tracking ID'
+                      }
+                      value={manualTrackingId}
+                      onChange={(e) => {
+                        const nextId = e.target.value;
+                        setManualTrackingId(nextId);
+                        if (!manualUrlTouched) {
+                          setManualTrackingUrl(
+                            resolveTrackingUrl(manualCourier, nextId) || '',
+                          );
+                        }
+                      }}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="input-label" style={{ display: 'block', marginBottom: 6 }}>
+                      Tracking Portal URL (Optional — Included in Shipped Email)
+                    </label>
+                    <input
+                      className="input-field"
+                      type="url"
+                      placeholder="https://..."
+                      value={manualTrackingUrl}
+                      onChange={(e) => {
+                        setManualUrlTouched(true);
+                        setManualTrackingUrl(e.target.value);
+                      }}
+                    />
+                  </div>
+
+                  <button
+                    className={`btn btn-primary ${actionLoading === 'ship-manual' ? 'btn-loading' : ''}`}
+                    onClick={() => handleAction('ship-manual')}
+                    disabled={
+                      !!actionLoading ||
+                      manualTrackingId.trim().length < 4 ||
+                      (manualCourier === 'custom' && !customCourierName.trim())
+                    }
+                    style={{ width: '100%' }}
+                  >
+                    MARK SHIPPED &amp; NOTIFY CUSTOMER
+                  </button>
+                </div>
+              )}
+            </div>
           )}
 
           {order.order_status === 'shipped' && (
             <button
-              className={`btn btn-success ${actionLoading === 'deliver' ? 'btn-loading' : ''}`}
-              onClick={() => handleAction('deliver')}
+              className="btn btn-success"
+              onClick={() => {
+                setDeliveryVerified(false);
+                setForceOverrideAutomated(false);
+                setShowDeliverModal(true);
+              }}
               disabled={!!actionLoading}
             >
-              MARK DELIVERED
+              CONFIRM DELIVERY...
             </button>
+          )}
+
+          {showDeliverModal && (
+            <div
+              role="dialog"
+              aria-modal="true"
+              style={{
+                position: 'fixed',
+                inset: 0,
+                background: 'rgba(0,0,0,0.75)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                zIndex: 1000,
+                padding: 16,
+              }}
+            >
+              <div className="card" style={{ maxWidth: 460, width: '100%', padding: 'var(--space-5)' }}>
+                <p className="input-label" style={{ color: '#4ADE80', marginBottom: 6 }}>
+                  Verify &amp; Confirm Delivery
+                </p>
+                <p className="text-sm" style={{ marginBottom: 'var(--space-3)' }}>
+                  Confirming delivery sends the <strong>Product Delivered</strong> email to{' '}
+                  <strong>{order.customer.name}</strong>. Please verify parcel receipt first.
+                </p>
+
+                <div
+                  style={{
+                    background: 'var(--bg-input)',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: 'var(--radius-sm)',
+                    padding: 12,
+                    fontSize: '0.8125rem',
+                    marginBottom: 'var(--space-3)',
+                  }}
+                >
+                  <div>
+                    Courier: <strong>{formatCourierDisplayName(order.shipping_provider)}</strong> ({order.shipment_mode || 'automated'})
+                  </div>
+                  <div>
+                    Tracking ID: <strong style={{ fontFamily: 'monospace' }}>{order.tracking_id || 'Missing'}</strong>
+                  </div>
+                  {order.tracking_url && (
+                    <div style={{ marginTop: 6 }}>
+                      <a
+                        href={order.tracking_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ color: 'var(--gold, #D4AF37)', textDecoration: 'underline' }}
+                      >
+                        Check {formatCourierDisplayName(order.shipping_provider)} Tracking Status ↗
+                      </a>
+                    </div>
+                  )}
+                </div>
+
+                {order.shipment_mode !== 'manual' &&
+                  shipmentData.shipment &&
+                  shipmentData.shipment.status !== 'delivered' && (
+                    <div
+                      style={{
+                        background: 'rgba(250,204,21,0.1)',
+                        border: '1px solid rgba(250,204,21,0.35)',
+                        borderRadius: 'var(--radius-sm)',
+                        padding: 10,
+                        fontSize: '0.75rem',
+                        color: '#FACC15',
+                        marginBottom: 'var(--space-3)',
+                      }}
+                    >
+                      ⚠ Automated courier webhook still reports{' '}
+                      <strong>{shipmentData.shipment.status}</strong>. Normally wait for courier webhook.
+                      <label style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8, color: '#FDE68A', cursor: 'pointer' }}>
+                        <input
+                          type="checkbox"
+                          checked={forceOverrideAutomated}
+                          onChange={(e) => setForceOverrideAutomated(e.target.checked)}
+                        />
+                        Override automated status (courier tracking confirms delivered)
+                      </label>
+                    </div>
+                  )}
+
+                <div style={{ marginBottom: 'var(--space-3)' }}>
+                  <label className="input-label" style={{ display: 'block', marginBottom: 6 }}>
+                    Delivery Verification Note (Optional)
+                  </label>
+                  <input
+                    className="input-field"
+                    placeholder="e.g. India Post status shows Item Delivered"
+                    value={deliveryNote}
+                    onChange={(e) => setDeliveryNote(e.target.value)}
+                  />
+                </div>
+
+                <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: '0.8125rem', marginBottom: 'var(--space-4)', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={deliveryVerified}
+                    onChange={(e) => setDeliveryVerified(e.target.checked)}
+                    style={{ marginTop: 3 }}
+                  />
+                  <span>I verify this order has genuinely been delivered and approve sending the delivery confirmation email.</span>
+                </label>
+
+                <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => setShowDeliverModal(false)}
+                    disabled={!!actionLoading}
+                  >
+                    Back
+                  </button>
+                  <button
+                    type="button"
+                    className={`btn btn-success btn-sm ${actionLoading === 'deliver' ? 'btn-loading' : ''}`}
+                    style={{ flex: 1 }}
+                    disabled={
+                      !!actionLoading ||
+                      !deliveryVerified ||
+                      (order.shipment_mode !== 'manual' &&
+                        Boolean(shipmentData.shipment) &&
+                        shipmentData.shipment?.status !== 'delivered' &&
+                        !forceOverrideAutomated)
+                    }
+                    onClick={() => handleAction('deliver')}
+                  >
+                    CONFIRM DELIVERED &amp; NOTIFY
+                  </button>
+                </div>
+              </div>
+            </div>
           )}
 
           {!showCancelForm ? (

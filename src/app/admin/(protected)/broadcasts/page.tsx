@@ -11,11 +11,13 @@ interface Campaign {
   body_html: string;
   cta_label: string | null;
   cta_url: string | null;
-  audience_mode: 'all' | 'newsletter' | 'customers';
-  status: 'draft' | 'queued' | 'sending' | 'sent' | 'failed';
+  audience_mode: 'all' | 'newsletter' | 'customers' | 'opted_in_buyers';
+  status: 'draft' | 'queued' | 'sending' | 'sent' | 'failed' | 'cancelled';
   total_recipients: number;
   sent_count: number;
   failed_count: number;
+  suppressed_count?: number;
+  last_error?: string | null;
   created_at: string;
   sent_at: string | null;
 }
@@ -24,15 +26,23 @@ interface AudienceCounts {
   all: number;
   newsletter: number;
   customers: number;
+  opted_in_buyers: number;
+  suppressed: number;
 }
 
-const DEFAULT_SAMPLE_BODY = `<p style="margin:0 0 16px;font-size:16px;">Hey Football Fans,</p>
-<p style="margin:0 0 16px;">We just unlocked an exclusive secret offer on our latest premium kits and retro drops. For the next 48 hours, enjoy complimentary express shipping across India on all club & international jerseys.</p>
-<p style="margin:0 0 16px;">Stocks are strictly limited per size. Claim yours before your favorite kit sells out.</p>`;
+const DEFAULT_SAMPLE_BODY = `<p style="margin:0 0 16px;font-size:16px;">Hey there,</p>
+<p style="margin:0 0 16px;">Fresh restock just landed: heavyweight 220 GSM combed cotton tees tailored for everyday comfort, pre-shrunk finish, and reinforced collars.</p>
+<p style="margin:0 0 16px;">Enjoy complimentary express shipping on prepaid orders above ₹999 for the next 48 hours.</p>`;
 
 export default function AdminBroadcastsPage() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
-  const [counts, setCounts] = useState<AudienceCounts>({ all: 0, newsletter: 0, customers: 0 });
+  const [counts, setCounts] = useState<AudienceCounts>({
+    all: 0,
+    newsletter: 0,
+    customers: 0,
+    opted_in_buyers: 0,
+    suppressed: 0,
+  });
   const [adminEmail, setAdminEmail] = useState('');
   const [loading, setLoading] = useState(true);
 
@@ -40,10 +50,11 @@ export default function AdminBroadcastsPage() {
   const [name, setName] = useState('');
   const [subject, setSubject] = useState('');
   const [previewText, setPreviewText] = useState('');
-  const [audienceMode, setAudienceMode] = useState<'all' | 'newsletter' | 'customers'>('all');
+  const [audienceMode, setAudienceMode] = useState<'all' | 'newsletter' | 'customers' | 'opted_in_buyers'>('all');
   const [bodyHtml, setBodyHtml] = useState(DEFAULT_SAMPLE_BODY);
-  const [ctaLabel, setCtaLabel] = useState('Explore Kits Now');
-  const [ctaUrl, setCtaUrl] = useState('https://kickoffpro.in');
+  const [ctaLabel, setCtaLabel] = useState('Shop New Arrivals');
+  const [ctaUrl, setCtaUrl] = useState('https://kickoffpro.in/products');
+  const [testEmail, setTestEmail] = useState('');
 
   // Preview & Modal State
   const [activeTab, setActiveTab] = useState<'editor' | 'preview'>('editor');
@@ -59,7 +70,15 @@ export default function AdminBroadcastsPage() {
       const data = await res.json();
       if (data.success) {
         setCampaigns(data.data.campaigns || []);
-        setCounts(data.data.audienceCounts || { all: 0, newsletter: 0, customers: 0 });
+        setCounts(
+          data.data.audienceCounts || {
+            all: 0,
+            newsletter: 0,
+            customers: 0,
+            opted_in_buyers: 0,
+            suppressed: 0,
+          },
+        );
         if (data.data.adminEmail) setAdminEmail(data.data.adminEmail);
       }
     } catch (err) {
@@ -71,12 +90,39 @@ export default function AdminBroadcastsPage() {
 
   useEffect(() => {
     fetchBroadcastData();
-    // Poll every 12s if there are pending campaigns
+  }, []);
+
+  const hasActiveCampaign = campaigns.some(
+    (c) => c.status === 'queued' || c.status === 'sending',
+  );
+
+  useEffect(() => {
+    if (!hasActiveCampaign) return;
     const interval = setInterval(() => {
       fetchBroadcastData();
-    }, 12000);
+    }, 8000);
     return () => clearInterval(interval);
-  }, []);
+  }, [hasActiveCampaign]);
+
+  const handleCancelCampaign = async (campaignId: string) => {
+    if (!confirm('Stop remaining queued batches for this broadcast campaign?')) return;
+    try {
+      const res = await fetch('/api/admin/broadcast', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'cancel_campaign', campaign_id: campaignId }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setLaunchMessage({ ok: true, msg: data.data.message });
+        fetchBroadcastData();
+      } else {
+        setLaunchMessage({ ok: false, msg: data.error || 'Could not cancel campaign.' });
+      }
+    } catch {
+      setLaunchMessage({ ok: false, msg: 'Network error cancelling campaign.' });
+    }
+  };
 
   const handleSendTest = async () => {
     if (!subject.trim() || !bodyHtml.trim()) {
@@ -98,6 +144,7 @@ export default function AdminBroadcastsPage() {
           body_html: bodyHtml,
           cta_label: ctaLabel,
           cta_url: ctaUrl,
+          test_email: testEmail.trim() || undefined,
         }),
       });
       const data = await res.json();
@@ -268,7 +315,7 @@ export default function AdminBroadcastsPage() {
                   </label>
                   <input
                     type="text"
-                    placeholder="e.g. ⚡ Flash Drop: Official Kit Restock Inside"
+                    placeholder="e.g. ⚡ Fresh Drop: 220 GSM Combed Cotton Essentials"
                     value={subject}
                     onChange={(e) => setSubject(e.target.value)}
                     style={{ width: '100%', padding: '10px 14px', background: '#0B0B0D', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '8px', color: '#FFF', fontSize: '0.875rem' }}
@@ -280,7 +327,7 @@ export default function AdminBroadcastsPage() {
                   </label>
                   <input
                     type="text"
-                    placeholder="e.g. Complimentary express shipping for 48 hours"
+                    placeholder="e.g. Free express shipping on prepaid orders above ₹999"
                     value={previewText}
                     onChange={(e) => setPreviewText(e.target.value)}
                     style={{ width: '100%', padding: '10px 14px', background: '#0B0B0D', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '8px', color: '#FFF', fontSize: '0.875rem' }}
@@ -290,21 +337,27 @@ export default function AdminBroadcastsPage() {
 
               {/* Target Audience Selector */}
               <div>
-                <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: '#D1D5DB', marginBottom: '6px' }}>
-                  Target Audience
-                </label>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                  <label style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#D1D5DB' }}>
+                    Target Audience
+                  </label>
+                  <span style={{ fontSize: '0.75rem', color: '#9CA3AF' }}>
+                    {(counts as { suppressed?: number }).suppressed ?? 0} suppressed / unsubscribed excluded
+                  </span>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '10px' }}>
                   {[
                     { id: 'all', title: 'All Subscribers & Buyers', count: counts.all },
                     { id: 'newsletter', title: 'Newsletter Only', count: counts.newsletter },
-                    { id: 'customers', title: 'Past Buyers Only', count: counts.customers },
+                    { id: 'customers', title: 'All Past Buyers', count: counts.customers },
+                    { id: 'opted_in_buyers', title: 'Opted-In Buyers', count: (counts as { opted_in_buyers?: number }).opted_in_buyers ?? 0 },
                   ].map((aud) => {
                     const active = audienceMode === aud.id;
                     return (
                       <button
                         key={aud.id}
                         type="button"
-                        onClick={() => setAudienceMode(aud.id as 'all' | 'newsletter' | 'customers')}
+                        onClick={() => setAudienceMode(aud.id as 'all' | 'newsletter' | 'customers' | 'opted_in_buyers')}
                         style={{
                           padding: '12px 10px',
                           borderRadius: '8px',
@@ -326,7 +379,7 @@ export default function AdminBroadcastsPage() {
                   })}
                 </div>
                 <div style={{ marginTop: '6px', fontSize: '0.75rem', color: '#6B7280' }}>
-                  * Automatically deduplicated case-insensitively and filtered against marketing suppressions / unsubscribes.
+                  * Deduplicated case-insensitively at queue time AND re-checked against suppressions right before each chunk sends.
                 </div>
               </div>
 
@@ -372,7 +425,7 @@ export default function AdminBroadcastsPage() {
                   </label>
                   <input
                     type="url"
-                    placeholder="https://kickoffpro.in/category/kits"
+                    placeholder="https://kickoffpro.in/products"
                     value={ctaUrl}
                     onChange={(e) => setCtaUrl(e.target.value)}
                     style={{ width: '100%', padding: '10px 14px', background: '#0B0B0D', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '8px', color: '#FFF', fontSize: '0.875rem' }}
@@ -381,7 +434,23 @@ export default function AdminBroadcastsPage() {
               </div>
 
               {/* Action Buttons */}
-              <div style={{ display: 'flex', gap: '12px', marginTop: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: '10px', marginTop: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <input
+                  type="email"
+                  placeholder="Test email (defaults to your admin email)"
+                  value={testEmail}
+                  onChange={(e) => setTestEmail(e.target.value)}
+                  style={{
+                    flex: '1 1 220px',
+                    minWidth: '200px',
+                    padding: '10px 14px',
+                    background: '#0B0B0D',
+                    border: '1px solid rgba(255,255,255,0.12)',
+                    borderRadius: '8px',
+                    color: '#FFF',
+                    fontSize: '0.8125rem',
+                  }}
+                />
                 <button
                   type="button"
                   onClick={handleSendTest}
@@ -398,7 +467,7 @@ export default function AdminBroadcastsPage() {
                     opacity: isTestSending ? 0.6 : 1,
                   }}
                 >
-                  {isTestSending ? 'Sending Test...' : 'Send Test Email to Me'}
+                  {isTestSending ? 'Sending Test...' : testEmail.trim() ? 'Send Test Email' : 'Send Test to Me'}
                 </button>
 
                 <button
@@ -570,9 +639,27 @@ export default function AdminBroadcastsPage() {
 
       {/* Campaign History Table */}
       <div className="card" style={{ padding: 'var(--space-6)', background: '#12141A', border: '1px solid rgba(255,255,255,0.08)' }}>
-        <h2 style={{ fontSize: '1.125rem', fontWeight: 700, margin: '0 0 var(--space-4)', color: '#FFFFFF' }}>
-          Recent Campaigns &amp; Delivery History
-        </h2>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '0 0 var(--space-4)', gap: '12px', flexWrap: 'wrap' }}>
+          <h2 style={{ fontSize: '1.125rem', fontWeight: 700, margin: 0, color: '#FFFFFF' }}>
+            Recent Campaigns &amp; Delivery History
+          </h2>
+          <button
+            type="button"
+            onClick={() => fetchBroadcastData()}
+            style={{
+              padding: '6px 12px',
+              borderRadius: '6px',
+              background: 'rgba(255,255,255,0.06)',
+              border: '1px solid rgba(255,255,255,0.12)',
+              color: '#D1D5DB',
+              fontSize: '0.75rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+            }}
+          >
+            Refresh Status
+          </button>
+        </div>
 
         {campaigns.length === 0 ? (
           <div style={{ color: '#6B7280', fontSize: '0.875rem', textAlign: 'center', padding: '32px' }}>
@@ -587,8 +674,9 @@ export default function AdminBroadcastsPage() {
                   <th style={{ padding: '10px 12px' }}>Subject</th>
                   <th style={{ padding: '10px 12px' }}>Audience</th>
                   <th style={{ padding: '10px 12px' }}>Status</th>
-                  <th style={{ padding: '10px 12px' }}>Sent / Total</th>
+                  <th style={{ padding: '10px 12px' }}>Delivery Stats</th>
                   <th style={{ padding: '10px 12px' }}>Date</th>
+                  <th style={{ padding: '10px 12px' }}>Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -599,18 +687,25 @@ export default function AdminBroadcastsPage() {
                     sending: { bg: 'rgba(234, 179, 8, 0.1)', color: '#FACC15' },
                     sent: { bg: 'rgba(34, 197, 94, 0.1)', color: '#4ADE80' },
                     failed: { bg: 'rgba(239, 68, 68, 0.1)', color: '#F87171' },
+                    cancelled: { bg: 'rgba(156, 163, 175, 0.12)', color: '#D1D5DB' },
                   };
                   const badge = statusColors[camp.status] || statusColors.draft;
+                  const canCancel = camp.status === 'queued' || camp.status === 'sending';
                   return (
                     <tr key={camp.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
                       <td style={{ padding: '12px', fontWeight: 600, color: '#FFF' }}>
                         {camp.name}
                       </td>
                       <td style={{ padding: '12px', color: '#D1D5DB' }}>
-                        {camp.subject}
+                        <div>{camp.subject}</div>
+                        {camp.last_error && (
+                          <div style={{ fontSize: '0.75rem', color: '#F87171', marginTop: '3px' }}>
+                            Last error: {camp.last_error}
+                          </div>
+                        )}
                       </td>
                       <td style={{ padding: '12px', color: '#9CA3AF', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: 700 }}>
-                        {camp.audience_mode}
+                        {camp.audience_mode.replace(/_/g, ' ')}
                       </td>
                       <td style={{ padding: '12px' }}>
                         <span style={{ display: 'inline-block', padding: '3px 8px', borderRadius: '4px', background: badge.bg, color: badge.color, fontSize: '0.75rem', fontWeight: 700, textTransform: 'capitalize' }}>
@@ -624,6 +719,11 @@ export default function AdminBroadcastsPage() {
                             ({camp.failed_count} failed)
                           </span>
                         )}
+                        {(camp.suppressed_count ?? 0) > 0 && (
+                          <span style={{ color: '#9CA3AF', fontSize: '0.75rem', marginLeft: '6px' }}>
+                            ({camp.suppressed_count} suppressed)
+                          </span>
+                        )}
                       </td>
                       <td style={{ padding: '12px', color: '#6B7280', fontSize: '0.8125rem' }}>
                         {new Date(camp.created_at).toLocaleDateString('en-IN', {
@@ -632,6 +732,28 @@ export default function AdminBroadcastsPage() {
                           hour: '2-digit',
                           minute: '2-digit',
                         })}
+                      </td>
+                      <td style={{ padding: '12px' }}>
+                        {canCancel ? (
+                          <button
+                            type="button"
+                            onClick={() => handleCancelCampaign(camp.id)}
+                            style={{
+                              padding: '4px 10px',
+                              borderRadius: '6px',
+                              background: 'rgba(239,68,68,0.12)',
+                              border: '1px solid rgba(239,68,68,0.35)',
+                              color: '#F87171',
+                              fontSize: '0.75rem',
+                              fontWeight: 600,
+                              cursor: 'pointer',
+                            }}
+                          >
+                            Cancel
+                          </button>
+                        ) : (
+                          <span style={{ color: '#4B5563', fontSize: '0.75rem' }}>—</span>
+                        )}
                       </td>
                     </tr>
                   );

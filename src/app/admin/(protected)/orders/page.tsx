@@ -188,14 +188,13 @@ function OrdersList() {
     }
   }
 
-  async function runBulk(action: 'cancel' | 'mark_shipped' | 'mark_delivered') {
+  async function runBulk(action: 'cancel' | 'confirm') {
     if (selected.size === 0 || bulkBusy) return;
     const verbs: Record<typeof action, string> = {
       cancel: 'cancel',
-      mark_shipped: 'mark as shipped',
-      mark_delivered: 'mark as delivered',
+      confirm: 'confirm',
     };
-    if (!confirm(`${selected.size === 1 ? '1 order' : `${selected.size} orders`} will be ${verbs[action]}d. Proceed?`)) {
+    if (!confirm(`${selected.size === 1 ? '1 order' : `${selected.size} orders`} will be ${verbs[action]}ed. Proceed?`)) {
       return;
     }
     setBulkBusy(true);
@@ -362,22 +361,17 @@ function OrdersList() {
           <span style={{ fontSize: '0.8125rem', fontWeight: 600 }}>
             {selected.size} selected
           </span>
+          <span className="text-xs text-muted">
+            (Shipments &amp; delivery verification run per-order with tracking)
+          </span>
           <span style={{ flex: 1 }} />
           <button
             type="button"
-            className="btn btn-secondary btn-sm"
+            className="btn btn-primary btn-sm"
             disabled={bulkBusy}
-            onClick={() => runBulk('mark_shipped')}
+            onClick={() => runBulk('confirm')}
           >
-            Mark shipped
-          </button>
-          <button
-            type="button"
-            className="btn btn-secondary btn-sm"
-            disabled={bulkBusy}
-            onClick={() => runBulk('mark_delivered')}
-          >
-            Mark delivered
+            Confirm Orders
           </button>
           <button
             type="button"

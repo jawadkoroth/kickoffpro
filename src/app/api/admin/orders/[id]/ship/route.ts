@@ -4,13 +4,28 @@ import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { apiSuccess, apiError } from '@/lib/api-response';
 import { logEvent } from '@/lib/log';
 import { createShipmentForOrder } from '@/lib/shipping';
+import {
+  formatCourierDisplayName,
+  isValidHttpUrl,
+  resolveTrackingUrl,
+} from '@/lib/shipping/couriers';
+import { notifyOrderShipped } from '@/lib/notifications/orderNotifications';
 
 export async function POST(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params;
+
+    const rawBody = await req.json().catch(() => ({})) as {
+      mode?: 'automated' | 'manual';
+      courier_partner?: string;
+      custom_courier_name?: string;
+      tracking_id?: string;
+      tracking_url?: string;
+    };
+    const mode = rawBody?.mode === 'manual' ? 'manual' : 'automated';
 
     // 1. Verify admin
     const serverSupabase = await createServerSupabaseClient();
@@ -34,8 +49,80 @@ export async function POST(
       .single();
 
     if (!order) return apiError(404, 'Order not found');
-    if (order.order_status !== 'confirmed') return apiError(400, 'Order must be confirmed first');
-    if (order.tracking_id) return apiError(400, 'Shipment already created');
+    if (order.order_status !== 'confirmed') {
+      return apiError(400, 'Order must be confirmed before creating a shipment');
+    }
+    if (order.tracking_id) {
+      return apiError(400, 'Shipment already created with tracking ID');
+    }
+
+    // 2b. OPTION B — Manual Shipment Entry (India Post, DTDC, Blue Dart, Custom)
+    if (mode === 'manual') {
+      const trackingId = (rawBody.tracking_id || '').trim();
+      if (trackingId.length < 4) {
+        return apiError(400, 'Valid Consignment / Tracking Number is required (min 4 characters)');
+      }
+
+      const rawCourier = (rawBody.courier_partner || '').trim();
+      const customName = (rawBody.custom_courier_name || '').trim();
+      const effectiveProviderKey =
+        rawCourier === 'custom' ? customName : rawCourier;
+
+      if (!effectiveProviderKey) {
+        return apiError(400, 'Please select a courier partner or enter a custom courier name');
+      }
+
+      const explicitUrl = (rawBody.tracking_url || '').trim();
+      if (explicitUrl && !isValidHttpUrl(explicitUrl)) {
+        return apiError(400, 'Tracking URL must start with https:// or http://');
+      }
+
+      const courierDisplay = formatCourierDisplayName(effectiveProviderKey);
+      const finalTrackingUrl = resolveTrackingUrl(
+        rawCourier === 'custom' ? effectiveProviderKey : rawCourier,
+        trackingId,
+        explicitUrl || null,
+      );
+      const shippedAt = new Date().toISOString();
+
+      const { data: updated, error: updateErr } = await supabase
+        .from('orders')
+        .update({
+          order_status: 'shipped',
+          shipment_mode: 'manual',
+          shipping_provider: courierDisplay,
+          tracking_id: trackingId,
+          tracking_url: finalTrackingUrl,
+          shipped_at: shippedAt,
+          updated_at: shippedAt,
+        })
+        .eq('id', id)
+        .eq('order_status', 'confirmed')
+        .select('id')
+        .maybeSingle();
+
+      if (updateErr || !updated) {
+        return apiError(409, 'Order status changed concurrently; please refresh');
+      }
+
+      await notifyOrderShipped(id, 'manual_ship');
+
+      logEvent('shipping.ship_route.manual_success', {
+        order_id: id,
+        order_number: order.order_number,
+        courier: courierDisplay,
+        tracking_id: trackingId,
+        tracking_url: finalTrackingUrl,
+        admin_id: user.id,
+      }, { source: 'api', entityType: 'order', entityId: id });
+
+      return apiSuccess({
+        mode: 'manual',
+        shipping_provider: courierDisplay,
+        tracking_id: trackingId,
+        tracking_url: finalTrackingUrl,
+      });
+    }
 
     // 3. Get product info or line items
     let productName = 'Product';
@@ -127,18 +214,31 @@ export async function POST(
       if (!newPipeResult.providerResponse.success) {
         return apiError(500, newPipeResult.providerResponse.error || 'Shipment creation failed');
       }
+      const autoProviderName = order.shipping_provider ?? 'automated';
+      const trackingUrl = resolveTrackingUrl(autoProviderName, newPipeResult.trackingId);
+      const shippedAt = new Date().toISOString();
+
       await supabase
         .from('orders')
         .update({
           order_status: 'shipped',
+          shipment_mode: 'automated',
           tracking_id: newPipeResult.trackingId ?? null,
+          tracking_url: trackingUrl,
           label_url: newPipeResult.labelUrl ?? null,
           label_url_original: newPipeResult.labelUrl ?? null,
+          shipped_at: shippedAt,
         })
         .eq('id', id);
 
+      if (newPipeResult.trackingId) {
+        await notifyOrderShipped(id, 'auto_ship');
+      }
+
       return apiSuccess({
+        mode: 'automated',
         tracking_id: newPipeResult.trackingId,
+        tracking_url: trackingUrl,
         label_url: newPipeResult.labelUrl,
       });
     }
@@ -188,16 +288,26 @@ export async function POST(
       return apiError(500, result.error || 'Shipment creation failed');
     }
 
+    const legacyProvider = settings.provider_name ?? 'delhivery';
+    const legacyTrackingUrl = resolveTrackingUrl(legacyProvider, result.tracking_id);
+
     await supabase
       .from('orders')
       .update({
         tracking_id: result.tracking_id,
+        tracking_url: legacyTrackingUrl,
+        shipment_mode: 'automated',
         label_url: result.label_url,
         label_url_original: result.label_url,
-        shipping_provider: settings.provider_name ?? 'delhivery',
+        shipping_provider: legacyProvider,
         order_status: 'shipped',
+        shipped_at: new Date().toISOString(),
       })
       .eq('id', id);
+
+    if (result.tracking_id) {
+      await notifyOrderShipped(id, 'auto_ship');
+    }
 
     logEvent('shipping.ship_route.legacy_success', {
       order_id: id,
@@ -206,7 +316,9 @@ export async function POST(
     }, { source: 'api' });
 
     return apiSuccess({
+      mode: 'automated',
       tracking_id: result.tracking_id,
+      tracking_url: legacyTrackingUrl,
       label_url: result.label_url,
     });
   } catch (err) {

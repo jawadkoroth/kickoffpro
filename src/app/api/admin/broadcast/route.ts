@@ -4,11 +4,14 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { apiSuccess, apiError } from '@/lib/api-response';
 import { resolveAudience, getAudienceCounts, type AudienceMode } from '@/lib/broadcast/audience';
 import { sendSingleBroadcastEmail } from '@/lib/email/sendBroadcastEmail';
-import { enqueue } from '@/lib/jobs/queue';
+import { enqueue, triggerImmediateQueueProcessing } from '@/lib/jobs/queue';
 import { logEvent } from '@/lib/log';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+
+const VALID_MODES: AudienceMode[] = ['all', 'newsletter', 'customers', 'opted_in_buyers'];
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 async function gateAdmin() {
   const ssr = await createServerSupabaseClient();
@@ -43,7 +46,7 @@ export async function GET() {
         .select('*')
         .order('created_at', { ascending: false })
         .limit(50),
-      getAudienceCounts(supabase),
+      getAudienceCounts(),
     ]);
 
     if (campaignsRes.error) {
@@ -72,6 +75,7 @@ export async function POST(req: NextRequest) {
 
   let body: {
     action?: string;
+    campaign_id?: string;
     audience_mode?: AudienceMode;
     name?: string;
     subject?: string;
@@ -79,6 +83,7 @@ export async function POST(req: NextRequest) {
     body_html?: string;
     cta_label?: string;
     cta_url?: string;
+    test_email?: string;
   };
 
   try {
@@ -91,16 +96,18 @@ export async function POST(req: NextRequest) {
 
   // 1. Preview recipient count
   if (action === 'preview_count') {
-    const mode = (body.audience_mode || 'all') as AudienceMode;
-    const result = await resolveAudience(supabase, mode);
-    return apiSuccess({ count: result.count, mode: result.mode });
+    const mode = VALID_MODES.includes(body.audience_mode as AudienceMode)
+      ? (body.audience_mode as AudienceMode)
+      : 'all';
+    const emails = await resolveAudience(mode);
+    return apiSuccess({ count: emails.length, mode });
   }
 
-  // 2. Send instant test email to logged-in admin
+  // 2. Send instant test email (custom test_email or logged-in admin email)
   if (action === 'test_send') {
-    const adminEmail = user.email;
-    if (!adminEmail) {
-      return apiError(400, 'No authenticated admin email found to send test');
+    const targetEmail = (body.test_email || user.email || '').trim().toLowerCase();
+    if (!targetEmail || !EMAIL_RE.test(targetEmail)) {
+      return apiError(400, 'Valid test recipient email address is required');
     }
 
     const subject = (body.subject || '').trim();
@@ -111,7 +118,7 @@ export async function POST(req: NextRequest) {
 
     try {
       const res = await sendSingleBroadcastEmail({
-        to: adminEmail,
+        to: targetEmail,
         subject,
         previewText: body.preview_text || null,
         bodyHtml,
@@ -120,36 +127,84 @@ export async function POST(req: NextRequest) {
         isTest: true,
       });
 
-      logEvent('broadcast.test_sent', { admin: adminEmail, resend_id: res.id });
+      logEvent('broadcast.test_sent', {
+        admin: user.email || user.id,
+        recipient: targetEmail,
+        resend_id: res.id,
+      });
       return apiSuccess({
-        message: `Test email sent successfully to ${adminEmail}`,
+        message: `Test email sent successfully to ${targetEmail}`,
         resendId: res.id,
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      logEvent('broadcast.test_failed', { admin: adminEmail, error: msg });
+      logEvent('broadcast.test_failed', { recipient: targetEmail, error: msg });
       return apiError(500, `Failed to send test email: ${msg}`);
     }
   }
 
-  // 3. Queue full broadcast campaign
+  // 3. Cancel active queued/sending campaign
+  if (action === 'cancel_campaign') {
+    const campaignId = (body.campaign_id || '').trim();
+    if (!campaignId) {
+      return apiError(400, 'campaign_id is required');
+    }
+
+    const { data: cancelled, error: cancelErr } = await supabase
+      .from('email_campaigns')
+      .update({
+        status: 'cancelled',
+        cancelled_at: new Date().toISOString(),
+      })
+      .eq('id', campaignId)
+      .in('status', ['queued', 'sending'])
+      .select('id, name')
+      .maybeSingle();
+
+    if (cancelErr) {
+      return apiError(500, 'Failed to cancel campaign');
+    }
+    if (!cancelled) {
+      return apiError(400, 'Campaign is not in a cancellable state');
+    }
+
+    // Retire still-queued chunk jobs for this campaign so worker skips them cleanly
+    await supabase
+      .from('job_queue')
+      .update({ status: 'dead', last_error: 'Campaign cancelled by admin' })
+      .eq('kind', 'email.broadcast_chunk')
+      .eq('status', 'queued')
+      .contains('payload', { campaignId });
+
+    logEvent('broadcast.campaign_cancelled', {
+      campaign_id: campaignId,
+      admin: user.email || user.id,
+    });
+
+    return apiSuccess({
+      message: `Campaign "${cancelled.name}" cancelled cleanly.`,
+      campaignId,
+    });
+  }
+
+  // 4. Queue full broadcast campaign
   if (action === 'send_campaign') {
     const name = (body.name || '').trim();
     const subject = (body.subject || '').trim();
     const bodyHtml = (body.body_html || '').trim();
-    const audienceMode = (body.audience_mode || 'all') as AudienceMode;
+    const audienceMode = VALID_MODES.includes(body.audience_mode as AudienceMode)
+      ? (body.audience_mode as AudienceMode)
+      : 'all';
 
     if (!name || !subject || !bodyHtml) {
       return apiError(400, 'Campaign Name, Subject, and Content body are required');
     }
 
-    // Resolve audience
-    const audience = await resolveAudience(supabase, audienceMode);
-    if (audience.count === 0) {
+    const emails = await resolveAudience(audienceMode);
+    if (emails.length === 0) {
       return apiError(400, 'No active, non-suppressed recipients found for this audience.');
     }
 
-    // Insert campaign record
     const { data: campaign, error: insertError } = await supabase
       .from('email_campaigns')
       .insert({
@@ -161,9 +216,10 @@ export async function POST(req: NextRequest) {
         cta_url: body.cta_url || null,
         audience_mode: audienceMode,
         status: 'queued',
-        total_recipients: audience.count,
+        total_recipients: emails.length,
         sent_count: 0,
         failed_count: 0,
+        suppressed_count: 0,
         created_by: user.id,
       })
       .select('id')
@@ -176,23 +232,22 @@ export async function POST(req: NextRequest) {
 
     const campaignId = campaign.id;
 
-    // Split into rate-safe chunks of 25 emails
+    // Split into rate-safe chunks of 25 emails with deterministic idempotency keys
     const CHUNK_SIZE = 25;
-    const emails = audience.emails;
     const chunks: string[][] = [];
     for (let i = 0; i < emails.length; i += CHUNK_SIZE) {
       chunks.push(emails.slice(i, i + CHUNK_SIZE));
     }
 
-    // Enqueue each chunk with small stagger
     for (let i = 0; i < chunks.length; i++) {
       const isLastChunk = i === chunks.length - 1;
-      const delayMs = i * 4000; // 4s stagger between chunks
+      const delayMs = i * 4000;
       const runAt = new Date(Date.now() + delayMs);
 
       await enqueue(
         {
           kind: 'email.broadcast_chunk',
+          idempotencyKey: `email.broadcast.${campaignId}.chunk.${i}`,
           payload: {
             campaignId,
             emails: chunks[i],
@@ -212,17 +267,20 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Trigger immediate processing for the first chunk while remaining chunks follow via worker
+    triggerImmediateQueueProcessing();
+
     logEvent('broadcast.campaign_queued', {
       campaign_id: campaignId,
-      total_recipients: audience.count,
+      total_recipients: emails.length,
       total_chunks: chunks.length,
       mode: audienceMode,
     });
 
     return apiSuccess({
-      message: `Broadcast campaign "${name}" enqueued successfully for ${audience.count} recipients.`,
+      message: `Broadcast campaign "${name}" enqueued successfully for ${emails.length} recipients.`,
       campaignId,
-      totalRecipients: audience.count,
+      totalRecipients: emails.length,
       totalChunks: chunks.length,
     });
   }

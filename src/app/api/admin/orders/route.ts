@@ -201,6 +201,7 @@ export async function GET(req: NextRequest) {
 
 const VALID_BULK_ACTIONS = new Set([
   'cancel',
+  'confirm',
   'mark_shipped',
   'mark_delivered',
 ]);
@@ -236,14 +237,20 @@ export async function POST(req: NextRequest) {
       update = { order_status: 'cancelled', cancel_reason: 'admin_bulk' };
       allowedFromStatus = ['pending', 'confirmed'];
       break;
+    case 'confirm':
+      update = { order_status: 'confirmed' };
+      allowedFromStatus = ['pending'];
+      break;
     case 'mark_shipped':
-      update = { order_status: 'shipped' };
-      allowedFromStatus = ['confirmed'];
-      break;
+      return apiError(
+        400,
+        'Bulk "Mark shipped" is disabled to ensure accurate courier tracking. Create Automated or Manual (India Post / Courier) shipments inside each confirmed order.',
+      );
     case 'mark_delivered':
-      update = { order_status: 'delivered' };
-      allowedFromStatus = ['shipped'];
-      break;
+      return apiError(
+        400,
+        'Bulk "Mark delivered" is disabled. Delivery notifications require courier webhook confirmation or explicit admin verification on the order page.',
+      );
     default:
       return apiError(400, 'Unsupported action');
   }
@@ -278,11 +285,20 @@ export async function POST(req: NextRequest) {
   }
 
   if (action === 'cancel' && data && data.length > 0) {
+    const { notifyOrderCancelled } = await import('@/lib/notifications/orderNotifications');
     for (const item of data) {
       const prev = previousMap.get(item.id);
       if (prev && prev.order_status !== 'cancelled' && prev.payment_status !== 'failed') {
         await admin.rpc('restore_order_stock', { p_order_id: item.id });
       }
+      await notifyOrderCancelled(item.id, 'admin_action').catch(() => {});
+    }
+  }
+
+  if (action === 'confirm' && data && data.length > 0) {
+    const { notifyOrderConfirmed } = await import('@/lib/notifications/orderNotifications');
+    for (const item of data) {
+      await notifyOrderConfirmed(item.id, 'admin_action').catch(() => {});
     }
   }
 
