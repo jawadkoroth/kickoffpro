@@ -295,6 +295,18 @@
   border-color: rgba(239, 68, 68, 0.2);
 }
 
+.badge_return_requested {
+  background: #FEF9C3;
+  color: #A16207;
+  border-color: #FDE047;
+}
+
+.badge_returned {
+  background: #FEF3C7;
+  color: #B45309;
+  border-color: #FCD34D;
+}
+
 .badge_paid {
   background: rgba(34, 197, 94, 0.08);
   color: #22C55E;

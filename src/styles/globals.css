@@ -439,6 +439,17 @@ img {
   color: var(--error);
 }
 
+.badge-return_requested {
+  background: rgba(250, 204, 21, 0.22);
+  color: #B45309;
+  border: 1px solid rgba(250, 204, 21, 0.5);
+}
+
+.badge-returned {
+  background: rgba(250, 204, 21, 0.16);
+  color: #D97706;
+}
+
 .badge-paid {
   background: rgba(76, 175, 80, 0.15);
   color: var(--success);

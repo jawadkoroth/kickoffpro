@@ -9,6 +9,8 @@ import { useCart } from '@/lib/cart';
 import { FEATURE_FLAGS } from '@/lib/featureFlags';
 import { getPublicUrl } from '@/lib/media';
 import { trackPurchase, clearCheckoutEventId } from '@/lib/tracking/client';
+import CustomerOrderActions from '@/components/orders/CustomerOrderActions';
+import { formatCourierDisplayName, resolveTrackingUrl } from '@/lib/shipping/couriers';
 import styles from './page.module.css';
 
 interface OrderLine {
@@ -38,11 +40,17 @@ interface Order {
   customer: { name: string; phone: string; email?: string };
   shipping_address: { line1: string; line2?: string; city: string; state: string; pincode: string };
   tracking_id: string | null;
+  tracking_url?: string | null;
   shipping_provider: string | null;
   created_at: string;
   updated_at: string;
   retry_count: number;
   cancel_reason?: string | null;
+  return_type?: string | null;
+  return_reason?: string | null;
+  return_notes?: string | null;
+  return_status?: string | null;
+  return_requested_at?: string | null;
   tracking_event_id?: string | null;
 }
 
@@ -54,6 +62,10 @@ export default function OrderPage({ params }: { params: Promise<{ id: string }> 
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [retrying, setRetrying] = useState(false);
+  const [guestAuth, setGuestAuth] = useState<{ email: string | null; phone: string | null }>({
+    email: null,
+    phone: null,
+  });
   const [upsellProduct, setUpsellProduct] = useState<{
     id: string;
     name: string;
@@ -113,6 +125,7 @@ export default function OrderPage({ params }: { params: Promise<{ id: string }> 
         if (!phone) {
           phone = window.sessionStorage.getItem('kickoffpro_checkout_phone');
         }
+        setGuestAuth({ email, phone });
       }
 
       let url = `/api/orders/${id}/track`;
@@ -261,16 +274,28 @@ export default function OrderPage({ params }: { params: Promise<{ id: string }> 
   }
 
   const isCancelled = order.order_status === 'cancelled';
-  const isSuccess = !isCancelled && (order.payment_method === 'cod' || order.payment_status === 'paid');
+  const isReturnActive =
+    order.order_status === 'return_requested' || order.order_status === 'returned';
+  const isSuccess =
+    !isCancelled &&
+    !isReturnActive &&
+    (order.payment_status === 'paid' || order.payment_method === 'cod');
   const isFailedPayment = order.payment_method === 'online' && order.payment_status === 'failed' && order.order_status !== 'cancelled';
   const isPendingPayment = order.payment_method === 'online' && order.payment_status === 'pending' && order.order_status !== 'cancelled';
   const canRetry = (isPendingPayment || isFailedPayment) && order.retry_count < 3;
 
+  const resolvedTrackUrl = resolveTrackingUrl(
+    order.shipping_provider,
+    order.tracking_id,
+    order.tracking_url,
+  );
+  const courierLabel = formatCourierDisplayName(order.shipping_provider);
+
   const statusSteps = [
     { key: 'pending', label: 'Placed', done: true, time: order.created_at },
-    { key: 'confirmed', label: 'Confirmed', done: ['confirmed', 'shipped', 'delivered'].includes(order.order_status), time: order.order_status !== 'pending' ? order.updated_at : null },
-    { key: 'shipped', label: 'Shipped', done: ['shipped', 'delivered'].includes(order.order_status), time: order.order_status === 'shipped' || order.order_status === 'delivered' ? order.updated_at : null },
-    { key: 'delivered', label: 'Delivered', done: order.order_status === 'delivered', time: order.order_status === 'delivered' ? order.updated_at : null },
+    { key: 'confirmed', label: 'Confirmed', done: ['confirmed', 'shipped', 'delivered', 'return_requested', 'returned'].includes(order.order_status), time: order.order_status !== 'pending' ? order.updated_at : null },
+    { key: 'shipped', label: 'Shipped', done: ['shipped', 'delivered', 'return_requested', 'returned'].includes(order.order_status), time: ['shipped', 'delivered', 'return_requested', 'returned'].includes(order.order_status) ? order.updated_at : null },
+    { key: 'delivered', label: 'Delivered', done: ['delivered', 'return_requested', 'returned'].includes(order.order_status), time: ['delivered', 'return_requested', 'returned'].includes(order.order_status) ? order.updated_at : null },
   ];
 
   return (
@@ -282,8 +307,30 @@ export default function OrderPage({ params }: { params: Promise<{ id: string }> 
           {isSuccess && (
             <>
               <div className={styles.successIcon}>✓</div>
-              <h1 className={styles.heroTitle}>Order Placed!</h1>
-              <p className={styles.heroSubtitle}>Your jersey order is being processed. Thank you for shopping with KickoffPro!</p>
+              <h1 className={styles.heroTitle}>
+                {order.order_status === 'delivered'
+                  ? 'Order Delivered!'
+                  : order.order_status === 'shipped'
+                    ? 'Order Shipped!'
+                    : 'Order Placed!'}
+              </h1>
+              <p className={styles.heroSubtitle}>
+                {order.order_status === 'delivered'
+                  ? 'Your order has been delivered. Thank you for shopping with KickoffPro!'
+                  : 'Your order is being processed. Thank you for shopping with KickoffPro!'}
+              </p>
+            </>
+          )}
+
+          {isReturnActive && (
+            <>
+              <div className={styles.warningIcon}>↺</div>
+              <h1 className={styles.heroTitle}>
+                {order.order_status === 'returned' ? 'Return Completed' : 'Return in Progress'}
+              </h1>
+              <p className={styles.heroSubtitle}>
+                Your return is getting processed. Our team will get in contact with you shortly.
+              </p>
             </>
           )}
 
@@ -487,6 +534,22 @@ export default function OrderPage({ params }: { params: Promise<{ id: string }> 
           </div>
         </section>
 
+        {/* CANCEL / RETURN CONTROLS */}
+        <CustomerOrderActions
+          orderId={order.id}
+          orderNumber={order.order_number}
+          orderStatus={order.order_status}
+          hasTracking={Boolean(order.tracking_id)}
+          returnType={order.return_type}
+          returnReason={order.return_reason}
+          returnNotes={order.return_notes}
+          returnStatus={order.return_status}
+          returnRequestedAt={order.return_requested_at}
+          guestEmail={guestAuth.email}
+          guestPhone={guestAuth.phone}
+          onUpdated={fetchOrder}
+        />
+
         {/* TRACKING */}
         {order.tracking_id && (
           <section className={styles.summarySection}>
@@ -494,33 +557,22 @@ export default function OrderPage({ params }: { params: Promise<{ id: string }> 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
                 <p className="text-xs text-muted" style={{ margin: 0 }}>Courier Provider</p>
-                <p style={{ fontWeight: 700, textTransform: 'capitalize', margin: '2px 0 0 0' }}>{order.shipping_provider || 'Pending dispatch'}</p>
+                <p style={{ fontWeight: 700, margin: '2px 0 0 0' }}>{order.shipping_provider ? courierLabel : 'Pending dispatch'}</p>
               </div>
               <div style={{ textAlign: 'right' }}>
                 <p className="text-xs text-muted" style={{ margin: 0 }}>Tracking Waybill</p>
                 <p style={{ fontWeight: 700, fontFamily: 'monospace', margin: '2px 0 0 0' }}>{order.tracking_id}</p>
               </div>
             </div>
-            {order.shipping_provider === 'delhivery' && (
+            {resolvedTrackUrl && (
               <a
-                href={`https://www.delhivery.com/track/package/${order.tracking_id}`}
+                href={resolvedTrackUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className={styles.btnSecondary}
                 style={{ width: '100%', marginTop: '16px', fontWeight: 700 }}
               >
-                Track Delhivery Shipment →
-              </a>
-            )}
-            {order.shipping_provider === 'shiprocket' && (
-              <a
-                href={`https://shiprocket.co/tracking/${order.tracking_id}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className={styles.btnSecondary}
-                style={{ width: '100%', marginTop: '16px', fontWeight: 700 }}
-              >
-                Track Shiprocket Shipment →
+                Track {courierLabel} Shipment →
               </a>
             )}
           </section>

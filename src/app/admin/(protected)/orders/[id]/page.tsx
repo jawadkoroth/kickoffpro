@@ -54,6 +54,14 @@ interface Order {
   delivered_notified_at: string | null;
   delivery_note: string | null;
   cancel_reason: string | null;
+  cancelled_by: string | null;
+  cancelled_at: string | null;
+  return_type: 'refund' | 'exchange' | null;
+  return_reason: string | null;
+  return_notes: string | null;
+  return_status: string | null;
+  return_requested_at: string | null;
+  return_resolved_at: string | null;
   notes: string | null;
   created_at: string;
   updated_at: string;
@@ -217,8 +225,17 @@ export default function AdminOrderDetail({ params }: { params: Promise<{ id: str
     const supabase = createClient();
 
     try {
-      if (action === 'verify') {
-        await supabase.from('orders').update({ payment_status: 'verified' }).eq('id', id);
+      if (action === 'cod-paid') {
+        if (!window.confirm('Confirm that COD cash/remittance has been collected and mark payment as PAID?')) {
+          setActionLoading('');
+          return;
+        }
+        await supabase
+          .from('orders')
+          .update({ payment_status: 'paid', updated_at: new Date().toISOString() })
+          .eq('id', id)
+          .eq('payment_method', 'cod')
+          .eq('order_status', 'delivered');
       }
 
       // Track which actions transition order_status so we can fire
@@ -242,9 +259,14 @@ export default function AdminOrderDetail({ params }: { params: Promise<{ id: str
           .single();
 
         if (currentOrder && currentOrder.order_status !== 'cancelled') {
-          const { data: updatedOrders, error: updateError } = await supabase
+          const { data: updatedOrders } = await supabase
             .from('orders')
-            .update({ order_status: 'cancelled', cancel_reason: cancelReason })
+            .update({
+              order_status: 'cancelled',
+              cancel_reason: cancelReason,
+              cancelled_by: 'admin',
+              cancelled_at: new Date().toISOString(),
+            })
             .eq('id', id)
             .in('order_status', ['pending', 'confirmed'])
             .select('id');
@@ -334,6 +356,32 @@ export default function AdminOrderDetail({ params }: { params: Promise<{ id: str
     setActionLoading('');
   }
 
+  async function handleReturnStatus(nextStatus: string, markRefunded = false) {
+    if (actionLoading || !order) return;
+    if (nextStatus === 'rejected' && !window.confirm('Close/reject this return request and revert status to Delivered?')) {
+      return;
+    }
+    setActionLoading(`return:${nextStatus}`);
+    try {
+      const res = await fetch(`/api/admin/orders/${id}/return-status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ return_status: nextStatus, mark_refunded: markRefunded }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        showToast(json.error || 'Failed to update return status', 'error');
+      } else {
+        await fetchOrder();
+        showToast(`Return status updated to ${nextStatus.replace('_', ' ')}`, 'success');
+      }
+    } catch {
+      showToast('Failed to update return status', 'error');
+    } finally {
+      setActionLoading('');
+    }
+  }
+
   if (loading) return <div className="animate-pulse text-muted" style={{ textAlign: 'center', padding: 'var(--space-8)' }}>Loading...</div>;
   if (!order) return <div className="text-muted" style={{ textAlign: 'center', padding: 'var(--space-8)' }}>Order not found</div>;
 
@@ -361,6 +409,159 @@ export default function AdminOrderDetail({ params }: { params: Promise<{ id: str
           </span>
         </div>
       </div>
+
+      {/* Prominent Return / Exchange Alert & Contact Card (Light Yellow) */}
+      {(order.order_status === 'return_requested' || order.order_status === 'returned' || order.return_type) && (
+        <div
+          className="card"
+          style={{
+            marginBottom: 'var(--space-4)',
+            background: 'rgba(250, 204, 21, 0.14)',
+            border: '1px solid rgba(250, 204, 21, 0.5)',
+            borderLeft: '4px solid #FACC15',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 'var(--space-3)' }}>
+            <p className="input-label" style={{ margin: 0, color: '#FACC15' }}>
+              Return / Exchange Request — {(order.return_type || 'refund').toUpperCase()}
+            </p>
+            <span
+              style={{
+                padding: '3px 10px',
+                borderRadius: 999,
+                background: 'rgba(250, 204, 21, 0.25)',
+                color: '#FDE047',
+                fontSize: '0.6875rem',
+                fontWeight: 700,
+                textTransform: 'uppercase',
+              }}
+            >
+              {(order.return_status || 'requested').replace(/_/g, ' ')}
+            </span>
+          </div>
+
+          <div style={{ fontSize: '0.875rem', marginBottom: 'var(--space-3)' }}>
+            <div>
+              <strong>Reason:</strong> {order.return_reason || '—'}
+            </div>
+            {order.return_notes && (
+              <div style={{ marginTop: 4, color: 'var(--text-secondary)' }}>
+                <strong>Customer Notes:</strong> {order.return_notes}
+              </div>
+            )}
+            {order.return_requested_at && (
+              <div className="text-xs text-muted" style={{ marginTop: 4 }}>
+                Requested on {formatDate(order.return_requested_at)}
+              </div>
+            )}
+          </div>
+
+          {/* Direct Customer Contact Block */}
+          <div
+            style={{
+              background: 'rgba(0,0,0,0.22)',
+              borderRadius: 'var(--radius-sm)',
+              padding: '10px 12px',
+              marginBottom: 'var(--space-3)',
+              fontSize: '0.8125rem',
+            }}
+          >
+            <div style={{ fontWeight: 700, marginBottom: 4 }}>Contact Customer Directly</div>
+            <div>
+              {order.customer.name} ·{' '}
+              <a href={`tel:${order.customer.phone}`} style={{ color: '#FACC15', fontWeight: 700, textDecoration: 'underline' }}>
+                📞 {order.customer.phone}
+              </a>
+              {order.customer.email && (
+                <>
+                  {' '}·{' '}
+                  <a href={`mailto:${order.customer.email}`} style={{ color: '#FACC15', textDecoration: 'underline' }}>
+                    ✉ {order.customer.email}
+                  </a>
+                </>
+              )}
+            </div>
+            <div className="text-xs text-muted" style={{ marginTop: 4 }}>
+              Pickup Address: {order.shipping_address.line1}
+              {order.shipping_address.line2 ? `, ${order.shipping_address.line2}` : ''}, {order.shipping_address.city}, {order.shipping_address.state} {order.shipping_address.pincode}
+            </div>
+          </div>
+
+          {order.order_status === 'return_requested' && (
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {order.return_status === 'requested' && (
+                <button
+                  type="button"
+                  className={`btn btn-primary btn-sm ${actionLoading === 'return:approved' ? 'btn-loading' : ''}`}
+                  disabled={!!actionLoading}
+                  onClick={() => handleReturnStatus('approved')}
+                >
+                  Approve Return
+                </button>
+              )}
+              {(order.return_status === 'requested' || order.return_status === 'approved') && (
+                <button
+                  type="button"
+                  className={`btn btn-secondary btn-sm ${actionLoading === 'return:pickup_scheduled' ? 'btn-loading' : ''}`}
+                  disabled={!!actionLoading}
+                  onClick={() => handleReturnStatus('pickup_scheduled')}
+                >
+                  Mark Pickup Scheduled
+                </button>
+              )}
+              <button
+                type="button"
+                className={`btn btn-success btn-sm ${actionLoading === 'return:completed' ? 'btn-loading' : ''}`}
+                disabled={!!actionLoading}
+                onClick={() =>
+                  handleReturnStatus(
+                    'completed',
+                    order.return_type === 'refund' && order.payment_status === 'paid',
+                  )
+                }
+              >
+                {order.return_type === 'refund' && order.payment_status === 'paid'
+                  ? 'Complete Return & Mark Refunded'
+                  : 'Mark Return / Exchange Completed'}
+              </button>
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                style={{ color: 'var(--error)' }}
+                disabled={!!actionLoading}
+                onClick={() => handleReturnStatus('rejected')}
+              >
+                Reject / Close
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Prominent Cancelled Order Banner (Light Red) */}
+      {isCancelled && (
+        <div
+          className="card"
+          style={{
+            marginBottom: 'var(--space-4)',
+            background: 'rgba(239, 68, 68, 0.12)',
+            border: '1px solid rgba(239, 68, 68, 0.45)',
+            borderLeft: '4px solid #EF4444',
+          }}
+        >
+          <p className="input-label" style={{ color: '#F87171', margin: '0 0 4px' }}>
+            ORDER CANCELLED {order.cancelled_by === 'customer' ? 'BY CUSTOMER' : ''} — DO NOT DISPATCH
+          </p>
+          {order.cancel_reason && (
+            <p className="text-sm" style={{ margin: 0 }}>{order.cancel_reason}</p>
+          )}
+          {order.cancelled_at && (
+            <p className="text-xs text-muted" style={{ margin: '4px 0 0' }}>
+              Cancelled on {formatDate(order.cancelled_at)}
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Customer */}
       <div className="card" style={{ marginBottom: 'var(--space-4)' }}>
@@ -561,16 +762,31 @@ export default function AdminOrderDetail({ params }: { params: Promise<{ id: str
       {/* Actions */}
       {!isCancelled && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)', marginBottom: 'var(--space-5)' }}>
-          {/* COD Verify explicitly bounds to payment_status verified explicitly skipping shipping */}
-          {isCOD && order.payment_status === 'pending' && (
-            <button
-              className={`btn btn-success btn-sm ${actionLoading === 'verify' ? 'btn-loading' : ''}`}
-              onClick={() => handleAction('verify')}
-              disabled={!!actionLoading}
-              style={{ width: '100%' }}
+          {/* Only allow marking COD cash as Paid AFTER order is genuinely delivered */}
+          {isCOD && order.order_status === 'delivered' && order.payment_status === 'pending' && (
+            <div
+              className="card"
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                gap: 12,
+                flexWrap: 'wrap',
+                padding: '12px 16px',
+              }}
             >
-              ✓ Mark Payment Verified
-            </button>
+              <div>
+                <div style={{ fontSize: '0.8125rem', fontWeight: 600 }}>COD Cash Collection Pending</div>
+                <div className="text-xs text-muted">Mark as Paid once COD remittance is settled.</div>
+              </div>
+              <button
+                className={`btn btn-secondary btn-sm ${actionLoading === 'cod-paid' ? 'btn-loading' : ''}`}
+                onClick={() => handleAction('cod-paid')}
+                disabled={!!actionLoading}
+              >
+                Mark COD Paid
+              </button>
+            </div>
           )}
 
           {isPending && (
@@ -883,45 +1099,68 @@ export default function AdminOrderDetail({ params }: { params: Promise<{ id: str
             </div>
           )}
 
-          {!showCancelForm ? (
-            <button className="btn btn-ghost" onClick={() => setShowCancelForm(true)} style={{ color: 'var(--error)' }}>
-              Cancel Order
-            </button>
-          ) : (
-            <div className="card">
-              <p className="input-label" style={{ marginBottom: 'var(--space-3)' }}>Cancel Reason</p>
-              <input
-                className="input-field"
-                placeholder="Enter reason..."
-                value={cancelReason}
-                onChange={e => setCancelReason(e.target.value)}
-              />
-              <div style={{ display: 'flex', gap: 'var(--space-3)', marginTop: 'var(--space-3)' }}>
-                <button className="btn btn-ghost btn-sm" onClick={() => setShowCancelForm(false)}>Back</button>
-                <button
-                  className={`btn btn-danger btn-sm ${actionLoading === 'cancel' ? 'btn-loading' : ''}`}
-                  onClick={() => handleAction('cancel')}
-                  disabled={!cancelReason.trim() || !!actionLoading}
-                  style={{ flex: 1 }}
-                >
-                  CANCEL ORDER
-                </button>
+          {/* Strict safety guard: Admin Cancel is ONLY allowed before dispatch (pending / confirmed) */}
+          {(isPending || isConfirmed) && (
+            !showCancelForm ? (
+              <button className="btn btn-ghost" onClick={() => setShowCancelForm(true)} style={{ color: 'var(--error)' }}>
+                Cancel Order
+              </button>
+            ) : (
+              <div className="card">
+                <p className="input-label" style={{ marginBottom: 'var(--space-3)' }}>Cancel Reason</p>
+                <input
+                  className="input-field"
+                  placeholder="Enter reason..."
+                  value={cancelReason}
+                  onChange={e => setCancelReason(e.target.value)}
+                />
+                <div style={{ display: 'flex', gap: 'var(--space-3)', marginTop: 'var(--space-3)' }}>
+                  <button className="btn btn-ghost btn-sm" onClick={() => setShowCancelForm(false)}>Back</button>
+                  <button
+                    className={`btn btn-danger btn-sm ${actionLoading === 'cancel' ? 'btn-loading' : ''}`}
+                    onClick={() => handleAction('cancel')}
+                    disabled={!cancelReason.trim() || !!actionLoading}
+                    style={{ flex: 1 }}
+                  >
+                    CANCEL ORDER
+                  </button>
+                </div>
               </div>
-            </div>
+            )
           )}
         </div>
       )}
 
+      {/* Chronological Order History (preserved when old orders bump to top on Return) */}
+      <div className="card" style={{ marginBottom: 'var(--space-4)' }}>
+        <p className="input-label" style={{ marginBottom: 'var(--space-3)' }}>Order Lifecycle History</p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: '0.8125rem' }}>
+          <div>• Order Placed: <strong>{formatDate(order.created_at)}</strong></div>
+          {order.shipped_at && (
+            <div>• Shipped ({formatCourierDisplayName(order.shipping_provider)} · {order.tracking_id || '—'}): <strong>{formatDate(order.shipped_at)}</strong></div>
+          )}
+          {order.delivered_at && (
+            <div>• Delivered: <strong>{formatDate(order.delivered_at)}</strong></div>
+          )}
+          {order.cancelled_at && (
+            <div style={{ color: '#F87171' }}>
+              • Cancelled ({order.cancelled_by || 'admin'}): <strong>{formatDate(order.cancelled_at)}</strong>
+              {order.cancel_reason ? ` — ${order.cancel_reason}` : ''}
+            </div>
+          )}
+          {order.return_requested_at && (
+            <div style={{ color: '#FACC15' }}>
+              • Return Requested ({(order.return_type || 'refund').toUpperCase()}): <strong>{formatDate(order.return_requested_at)}</strong> — {order.return_reason}
+            </div>
+          )}
+          {order.return_resolved_at && (
+            <div>• Return Resolved ({order.return_status}): <strong>{formatDate(order.return_resolved_at)}</strong></div>
+          )}
+        </div>
+      </div>
+
       {/* Admin Notes — Premium Internal Thread */}
       <AdminNotes orderId={id} />
-
-      {/* Cancel reason display */}
-      {isCancelled && order.cancel_reason && (
-        <div className="card" style={{ borderColor: 'var(--error)' }}>
-          <p className="input-label" style={{ color: 'var(--error)' }}>Cancellation Reason</p>
-          <p className="text-sm" style={{ marginTop: 'var(--space-2)' }}>{order.cancel_reason}</p>
-        </div>
-      )}
     </div>
   );
 }

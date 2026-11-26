@@ -23,6 +23,8 @@ const ALLOWED_STATUSES = [
   'shipped',
   'delivered',
   'cancelled',
+  'return_requested',
+  'returned',
 ] as const;
 type OrderStatus = (typeof ALLOWED_STATUSES)[number];
 
@@ -40,6 +42,8 @@ export function getHumanOrderStatus(status: string): string {
     shipped: 'Shipped',
     delivered: 'Delivered',
     cancelled: 'Cancelled',
+    return_requested: 'Return Processing',
+    returned: 'Returned',
   };
   return map[status.toLowerCase()] || status;
 }
@@ -128,11 +132,15 @@ export default async function OrdersPage() {
             // ETA Calculation
             let etaLabel = 'Delivery in 3–5 business days';
             if (order.order_status === 'delivered') {
-              etaLabel = `Delivered on ${formatDate(order.created_at)}`;
+              etaLabel = `Delivered`;
+            } else if (order.order_status === 'return_requested') {
+              etaLabel = 'Return is getting processed — team will contact you';
+            } else if (order.order_status === 'returned') {
+              etaLabel = 'Return completed';
             } else if (order.order_status === 'cancelled') {
               etaLabel = 'Cancelled';
             } else if (order.order_status === 'shipped') {
-              etaLabel = 'Out for delivery';
+              etaLabel = 'Shipped — In transit';
             }
 
             return (
@@ -161,7 +169,7 @@ export default async function OrdersPage() {
                   
                   <div className={styles.cardDetails}>
                     <p className={styles.cardProductName}>
-                      {firstItem?.product_name || 'Football Jersey'}
+                      {firstItem?.product_name || 'Apparel Item'}
                       {otherItemsCount > 0 && ` + ${otherItemsCount} more`}
                     </p>
                     <div className={styles.cardMeta}>

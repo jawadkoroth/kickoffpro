@@ -21,6 +21,14 @@ interface OrderRow {
   payment_method: string;
   customer_name: string;
   customer_phone: string;
+  cancel_reason?: string | null;
+  cancelled_by?: string | null;
+  return_type?: string | null;
+  return_reason?: string | null;
+  return_status?: string | null;
+  return_requested_at?: string | null;
+  shipping_provider?: string | null;
+  tracking_id?: string | null;
   created_at: string;
 }
 
@@ -30,6 +38,7 @@ const STATUS_FILTERS = [
   { key: 'confirmed', label: 'Confirmed' },
   { key: 'shipped', label: 'Shipped' },
   { key: 'delivered', label: 'Delivered' },
+  { key: 'return_requested,returned', label: 'Returns' },
   { key: 'cancelled', label: 'Cancelled' },
   { key: 'stuck', label: '⚠ Stuck' },
 ] as const;
@@ -430,17 +439,51 @@ function OrdersList() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
           {rows.map((order) => {
             const checked = selected.has(order.id);
+            const isCancelled = order.order_status === 'cancelled';
+            const isReturn =
+              order.order_status === 'return_requested' ||
+              order.order_status === 'returned';
+            const isShipped = order.order_status === 'shipped';
+            const isDelivered = order.order_status === 'delivered';
+
+            const tileStyle: React.CSSProperties = {
+              display: 'grid',
+              gridTemplateColumns: 'auto 1fr',
+              gap: 'var(--space-3)',
+              alignItems: 'center',
+              padding: 'var(--space-4)',
+              transition: 'background 0.15s ease, border-color 0.15s ease',
+            };
+
+            if (isCancelled) {
+              tileStyle.background = 'rgba(239, 68, 68, 0.11)';
+              tileStyle.border = '1px solid rgba(239, 68, 68, 0.42)';
+              tileStyle.borderLeft = '4px solid #EF4444';
+            } else if (isReturn) {
+              tileStyle.background = 'rgba(250, 204, 21, 0.14)';
+              tileStyle.border = '1px solid rgba(250, 204, 21, 0.48)';
+              tileStyle.borderLeft = '4px solid #FACC15';
+            } else if (isShipped) {
+              tileStyle.background = 'rgba(34, 197, 94, 0.10)';
+              tileStyle.border = '1px solid rgba(34, 197, 94, 0.36)';
+              tileStyle.borderLeft = '4px solid #22C55E';
+            } else if (isDelivered) {
+              tileStyle.border = '1px solid rgba(212, 175, 55, 0.45)';
+              tileStyle.background = 'rgba(212, 175, 55, 0.04)';
+            }
+
+            const statusLabel =
+              order.order_status === 'return_requested'
+                ? 'RETURN REQUEST'
+                : order.order_status === 'returned'
+                  ? 'RETURNED'
+                  : order.order_status;
+
             return (
               <div
                 key={order.id}
                 className="order-card"
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'auto 1fr',
-                  gap: 'var(--space-3)',
-                  alignItems: 'center',
-                  padding: 'var(--space-4)',
-                }}
+                style={tileStyle}
               >
                 <input
                   type="checkbox"
@@ -464,19 +507,67 @@ function OrdersList() {
                     <span style={{ fontWeight: 600, fontSize: '0.8125rem', fontFamily: 'monospace' }}>
                       {order.order_number}
                     </span>
-                    <span className={`badge badge-${order.order_status}`}>{order.order_status}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      {isDelivered && (
+                        <span
+                          title="Delivered Order"
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 4,
+                            padding: '2px 8px',
+                            borderRadius: 999,
+                            background: 'rgba(212, 175, 55, 0.18)',
+                            border: '1px solid rgba(212, 175, 55, 0.55)',
+                            color: '#D4AF37',
+                            fontSize: '0.6875rem',
+                            fontWeight: 700,
+                            letterSpacing: '0.04em',
+                          }}
+                        >
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="#D4AF37" aria-hidden="true">
+                            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                          </svg>
+                          DELIVERED
+                        </span>
+                      )}
+                      {!isDelivered && (
+                        <span className={`badge badge-${order.order_status}`}>{statusLabel}</span>
+                      )}
+                    </div>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8125rem', color: 'var(--text-muted)' }}>
                     <span>
                       {order.customer_name || '—'} · {order.payment_method.toUpperCase()}
                     </span>
-                    <span>{formatPrice(order.total_paise)}</span>
+                    <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{formatPrice(order.total_paise)}</span>
                   </div>
+                  {isReturn && order.return_reason && (
+                    <div style={{ fontSize: '0.75rem', color: '#D97706', fontWeight: 600 }}>
+                      Return ({(order.return_type || 'refund').toUpperCase()}): {order.return_reason}
+                      {order.customer_phone ? ` · 📞 ${order.customer_phone}` : ''}
+                    </div>
+                  )}
+                  {isCancelled && order.cancel_reason && (
+                    <div style={{ fontSize: '0.75rem', color: '#EF4444', fontWeight: 600 }}>
+                      {order.cancelled_by === 'customer' ? 'Cancelled by customer' : 'Cancelled'}: {order.cancel_reason}
+                    </div>
+                  )}
+                  {isShipped && order.tracking_id && (
+                    <div style={{ fontSize: '0.75rem', color: '#22C55E', fontWeight: 500 }}>
+                      Shipped via {order.shipping_provider || 'Courier'} · {order.tracking_id}
+                    </div>
+                  )}
                   <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                     {formatDate(order.created_at)}
                     {order.payment_status === 'paid' && (
                       <span className="badge badge-paid" style={{ marginLeft: 'var(--space-2)' }}>
                         Paid
+                      </span>
+                    )}
+                    {order.payment_status === 'refunded' && (
+                      <span className="badge badge-cancelled" style={{ marginLeft: 'var(--space-2)' }}>
+                        Refunded
                       </span>
                     )}
                     {order.payment_status === 'failed' && (

@@ -50,6 +50,8 @@ const VALID_STATUSES = new Set([
   'shipped',
   'delivered',
   'cancelled',
+  'return_requested',
+  'returned',
 ]);
 
 const VALID_PAYMENT_METHODS = new Set(['online', 'cod']);
@@ -105,9 +107,10 @@ export async function GET(req: NextRequest) {
   let query = admin
     .from('orders')
     .select(
-      'id, order_number, total_paise, order_status, payment_status, payment_method, customer, created_at',
+      'id, order_number, total_paise, order_status, payment_status, payment_method, customer, cancel_reason, cancelled_by, return_type, return_reason, return_status, return_requested_at, last_activity_at, shipping_provider, tracking_id, created_at',
       { count: 'exact' },
     )
+    .order('last_activity_at', { ascending: false })
     .order('created_at', { ascending: false });
 
   if (stuckOnly) {
@@ -174,6 +177,15 @@ export async function GET(req: NextRequest) {
       payment_status: string;
       payment_method: string;
       customer: Customer | null;
+      cancel_reason?: string | null;
+      cancelled_by?: string | null;
+      return_type?: string | null;
+      return_reason?: string | null;
+      return_status?: string | null;
+      return_requested_at?: string | null;
+      last_activity_at?: string | null;
+      shipping_provider?: string | null;
+      tracking_id?: string | null;
       created_at: string;
     };
     return {
@@ -185,6 +197,15 @@ export async function GET(req: NextRequest) {
       payment_method: row.payment_method,
       customer_name: row.customer?.name ?? '',
       customer_phone: row.customer?.phone ?? '',
+      cancel_reason: row.cancel_reason ?? null,
+      cancelled_by: row.cancelled_by ?? null,
+      return_type: row.return_type ?? null,
+      return_reason: row.return_reason ?? null,
+      return_status: row.return_status ?? null,
+      return_requested_at: row.return_requested_at ?? null,
+      last_activity_at: row.last_activity_at ?? row.created_at,
+      shipping_provider: row.shipping_provider ?? null,
+      tracking_id: row.tracking_id ?? null,
       created_at: row.created_at,
     };
   });

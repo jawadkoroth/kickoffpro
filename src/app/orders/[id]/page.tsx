@@ -3,6 +3,8 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { getPublicUrl } from '@/lib/media';
+import CustomerOrderActions from '@/components/orders/CustomerOrderActions';
+import { formatCourierDisplayName, resolveTrackingUrl } from '@/lib/shipping/couriers';
 import styles from '../orders.module.css';
 
 /**
@@ -52,7 +54,15 @@ type OrderDetail = {
   created_at: string;
   updated_at: string;
   tracking_id: string | null;
+  tracking_url: string | null;
   shipping_provider: string | null;
+  shipped_at: string | null;
+  delivered_at: string | null;
+  return_type: string | null;
+  return_reason: string | null;
+  return_notes: string | null;
+  return_status: string | null;
+  return_requested_at: string | null;
 };
 
 const ALLOWED_STATUSES = [
@@ -61,6 +71,8 @@ const ALLOWED_STATUSES = [
   'shipped',
   'delivered',
   'cancelled',
+  'return_requested',
+  'returned',
 ] as const;
 type OrderStatus = (typeof ALLOWED_STATUSES)[number];
 
@@ -81,6 +93,8 @@ export function getHumanOrderStatus(status: string): string {
     shipped: 'Shipped',
     delivered: 'Delivered',
     cancelled: 'Cancelled',
+    return_requested: 'Return Processing',
+    returned: 'Returned',
   };
   return map[status.toLowerCase()] || status;
 }
@@ -119,6 +133,8 @@ const STEP_INDEX: Record<OrderStatus, number> = {
   shipped: 2,
   delivered: 3,
   cancelled: -1,
+  return_requested: 3,
+  returned: 3,
 };
 
 export default async function OrderDetailPage({
@@ -145,7 +161,8 @@ export default async function OrderDetailPage({
       subtotal_paise, discount_paise, shipping_paise, cod_fee_paise, total_paise,
       coupon_code, payment_method, payment_status, order_status,
       customer, shipping_address, cancel_reason, created_at, updated_at,
-      tracking_id, shipping_provider
+      tracking_id, tracking_url, shipping_provider, shipped_at, delivered_at,
+      return_type, return_reason, return_notes, return_status, return_requested_at
       `,
     )
     .eq('id', id)
@@ -181,10 +198,16 @@ export default async function OrderDetailPage({
   const steps: { key: string; label: string; time: string | null }[] = [
     { key: 'placed', label: 'Placed', time: order.created_at },
     { key: 'confirmed', label: 'Confirmed', time: status === 'pending' ? null : order.updated_at },
-    { key: 'shipped', label: 'Shipped', time: status === 'shipped' || status === 'delivered' ? order.updated_at : null },
-    { key: 'delivered', label: 'Delivered', time: status === 'delivered' ? order.updated_at : null },
+    { key: 'shipped', label: 'Shipped', time: ['shipped', 'delivered', 'return_requested', 'returned'].includes(status) ? (order.shipped_at || order.updated_at) : null },
+    { key: 'delivered', label: 'Delivered', time: ['delivered', 'return_requested', 'returned'].includes(status) ? (order.delivered_at || order.updated_at) : null },
   ];
   const activeIdx = STEP_INDEX[status]; // -1 for cancelled
+  const resolvedTrackUrl = resolveTrackingUrl(
+    order.shipping_provider,
+    order.tracking_id,
+    order.tracking_url,
+  );
+  const courierLabel = formatCourierDisplayName(order.shipping_provider);
 
   return (
     <div className={styles.page}>
@@ -231,12 +254,12 @@ export default async function OrderDetailPage({
           >
             <div className={styles.stepperTrack} aria-hidden="true">
               <div
-                className={`${styles.stepperFill} ${styles[`fill_${status}`]}`}
+                className={`${styles.stepperFill} ${styles[`fill_${status === 'return_requested' || status === 'returned' ? 'delivered' : status}`]}`}
               />
             </div>
             {steps.map((step, idx) => {
               const isPastOrCurrent = idx <= activeIdx;
-              const isCurrent = idx === activeIdx && status !== 'delivered';
+              const isCurrent = idx === activeIdx && !['delivered', 'return_requested', 'returned'].includes(status);
               const dotClass = [
                 styles.dot,
                 isPastOrCurrent ? styles.dotDone : '',
@@ -271,6 +294,19 @@ export default async function OrderDetailPage({
         </section>
       )}
 
+      {/* Customer Self-Serve Cancel / Return / Exchange Actions */}
+      <CustomerOrderActions
+        orderId={order.id}
+        orderNumber={order.order_number}
+        orderStatus={order.order_status}
+        hasTracking={Boolean(order.tracking_id)}
+        returnType={order.return_type}
+        returnReason={order.return_reason}
+        returnNotes={order.return_notes}
+        returnStatus={order.return_status}
+        returnRequestedAt={order.return_requested_at}
+      />
+
       {/* Tracking info */}
       {order.tracking_id && (
         <section className={styles.section}>
@@ -278,33 +314,22 @@ export default async function OrderDetailPage({
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
             <div>
               <p className="text-xs text-muted" style={{ margin: 0, opacity: 0.7, fontSize: '0.75rem' }}>Courier Provider</p>
-              <p style={{ fontWeight: 700, textTransform: 'capitalize', margin: '2px 0 0 0', fontSize: '0.9rem' }}>{order.shipping_provider || 'Pending dispatch'}</p>
+              <p style={{ fontWeight: 700, margin: '2px 0 0 0', fontSize: '0.9rem' }}>{order.shipping_provider ? courierLabel : 'Pending dispatch'}</p>
             </div>
             <div style={{ textAlign: 'right' }}>
               <p className="text-xs text-muted" style={{ margin: 0, opacity: 0.7, fontSize: '0.75rem' }}>Tracking Waybill</p>
               <p style={{ fontWeight: 700, fontFamily: 'monospace', margin: '2px 0 0 0', fontSize: '0.9rem' }}>{order.tracking_id}</p>
             </div>
           </div>
-          {order.shipping_provider === 'delhivery' && (
+          {resolvedTrackUrl && (
             <a
-              href={`https://www.delhivery.com/track/package/${order.tracking_id}`}
+              href={resolvedTrackUrl}
               target="_blank"
               rel="noopener noreferrer"
               className={styles.cardBtnSecondary}
               style={{ display: 'block', marginTop: '16px', fontWeight: 800 }}
             >
-              Track Delhivery Shipment →
-            </a>
-          )}
-          {order.shipping_provider === 'shiprocket' && (
-            <a
-              href={`https://shiprocket.co/tracking/${order.tracking_id}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={styles.cardBtnSecondary}
-              style={{ display: 'block', marginTop: '16px', fontWeight: 800 }}
-            >
-              Track Shiprocket Shipment →
+              Track {courierLabel} Shipment →
             </a>
           )}
         </section>
