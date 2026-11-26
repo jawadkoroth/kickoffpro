@@ -24,13 +24,14 @@ function buildSections(): NavSection[] {
 
   const sections: NavSection[] = [
     {
-      title: 'Shop Jerseys',
+      title: 'Shop Essentials',
       items: [
-        { label: 'Club Jerseys', href: '/products?category=club' },
-        { label: 'National Teams', href: '/products?category=national' },
-        { label: 'Retro Jerseys', href: '/products?category=retro' },
-        { label: 'New Arrivals', href: '/products?category=new' },
-        { label: 'Sale & Offers', href: '/products?category=sale' },
+        { label: 'T-Shirts', href: '/products?category=t-shirts' },
+        { label: 'Track Pants', href: '/products?category=track-pants' },
+        { label: 'Shorts', href: '/products?category=shorts' },
+        { label: 'Jeans', href: '/products?category=jeans' },
+        { label: 'All Products', href: '/products' },
+        { label: 'Sale & Offers', href: '/products?sale=true' },
       ],
     },
     {

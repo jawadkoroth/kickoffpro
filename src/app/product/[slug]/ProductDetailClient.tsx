@@ -20,7 +20,10 @@ export interface ProductDetail {
   price_paise: number;
   sale_price_paise: number | null;
   images: string[];
+  videos?: string[];
   sizes: string[];
+  category?: string | null;
+  variety?: string | null;
   gsm?: string | null;
   fabric?: string | null;
   fit?: string | null;
@@ -30,6 +33,7 @@ export interface ProductDetail {
 export interface InventoryItem {
   size: string;
   stock: number;
+  low_stock_alert?: boolean;
 }
 
 const SIZE_GUIDE_DATA = [
@@ -178,6 +182,10 @@ export default function ProductDetailClient({
     return inventory.find(i => i.size === size)?.stock ?? 0;
   }, [inventory]);
 
+  const isLowStockFlagged = useCallback((size: string) => {
+    return Boolean(inventory.find(i => i.size === size)?.low_stock_alert);
+  }, [inventory]);
+
   // Pricing: sale price takes priority, coupon stacks on top
   const originalPrice = product.price_paise;
   const basePrice = product.sale_price_paise ?? originalPrice;
@@ -286,24 +294,56 @@ export default function ProductDetailClient({
   }
 
   const images = getImages();
+  const videoUrls = useMemo(
+    () =>
+      (product.videos || [])
+        .map((v) => getPublicUrl(v))
+        .filter((v): v is string => Boolean(v)),
+    [product.videos],
+  );
+  const mediaSlides = useMemo(
+    () => [
+      ...images.map((url) => ({ type: 'image' as const, url, poster: undefined })),
+      ...videoUrls.map((url) => ({ type: 'video' as const, url, poster: images[0] })),
+    ],
+    [images, videoUrls],
+  );
 
   return (
     <div className={styles.page}>
       <div className={styles.desktopLayout}>
-        {/* Embla Image Carousel — swipeable */}
+        {/* Embla Media Carousel — swipeable images + lazy-loaded product videos */}
         <div className={styles.galleryWrap}>
           <div className={styles.emblaViewport} ref={emblaRef}>
             <div className={styles.emblaContainer}>
-              {images.map((img, idx) => (
-               <div key={idx} className={styles.emblaSlide}>
-                 <img src={img} alt={`${product.name} - ${idx + 1}`} />
-               </div>
+              {mediaSlides.map((slide, idx) => (
+                <div key={`${slide.type}-${idx}`} className={styles.emblaSlide}>
+                  {slide.type === 'video' ? (
+                    <video
+                      src={slide.url}
+                      poster={slide.poster}
+                      controls
+                      playsInline
+                      muted
+                      loop
+                      preload="none"
+                      style={{
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'cover',
+                        background: '#000',
+                      }}
+                    />
+                  ) : (
+                    <img src={slide.url} alt={`${product.name} - ${idx + 1}`} />
+                  )}
+                </div>
               ))}
             </div>
           </div>
-          {images.length > 1 && (
+          {mediaSlides.length > 1 && (
             <div className={styles.dots}>
-              {images.map((_, idx) => (
+              {mediaSlides.map((_, idx) => (
                 <button
                   key={idx}
                   className={`${styles.dot} ${idx === selectedSlide ? styles.dotActive : ''}`}
@@ -316,13 +356,36 @@ export default function ProductDetailClient({
 
           {/* Desktop thumbnails */}
           <div className={styles.thumbnails}>
-            {images.map((img, idx) => (
+            {mediaSlides.map((slide, idx) => (
               <button
                 key={idx}
                 className={`${styles.thumb} ${idx === selectedSlide ? styles.thumbActive : ''}`}
                 onClick={() => emblaApi?.scrollTo(idx)}
+                style={{ position: 'relative' }}
+                aria-label={slide.type === 'video' ? `Play product video ${idx + 1}` : `View image ${idx + 1}`}
               >
-                <img src={img} alt={`Thumb ${idx + 1}`} />
+                {slide.type === 'video' ? (
+                  <>
+                    <img src={slide.poster || '/product-1.png'} alt={`Video ${idx + 1}`} />
+                    <span
+                      style={{
+                        position: 'absolute',
+                        inset: 0,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        background: 'rgba(0,0,0,0.42)',
+                        color: '#fff',
+                        fontSize: '0.875rem',
+                        fontWeight: 700,
+                      }}
+                    >
+                      ▶
+                    </span>
+                  </>
+                ) : (
+                  <img src={slide.url} alt={`Thumb ${idx + 1}`} />
+                )}
               </button>
             ))}
           </div>
@@ -357,7 +420,7 @@ export default function ProductDetailClient({
                     type="button"
                     className={styles.tryOnLink}
                     onClick={handleOpenTryOn}
-                    aria-label="Try this jersey virtually"
+                    aria-label="Try this outfit virtually"
                   >
                     ✨ Virtual Try-On
                   </button>
@@ -414,8 +477,12 @@ export default function ProductDetailClient({
                   );
                 })}
               </div>
-              {selectedSize && getStock(selectedSize) <= 3 && getStock(selectedSize) > 0 && (
-                <p className={styles.lowStock}>Only {getStock(selectedSize)} left in stock</p>
+              {selectedSize && getStock(selectedSize) > 0 && (getStock(selectedSize) <= 3 || isLowStockFlagged(selectedSize)) && (
+                <p className={styles.lowStock}>
+                  {getStock(selectedSize) <= 3
+                    ? `Only ${getStock(selectedSize)} left in ${selectedSize}`
+                    : `Only a few left in ${selectedSize}`}
+                </p>
               )}
               {sizeError && (
                 <p className={styles.sizeErrorMsg}>Please select a size before continuing.</p>

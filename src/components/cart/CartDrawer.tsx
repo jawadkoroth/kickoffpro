@@ -33,6 +33,7 @@ interface UpsellProduct {
   sale_price_paise: number | null;
   images: string[];
   sizes: string[];
+  is_cart_upsell?: boolean;
   inventory?: { size: string; stock: number }[];
 }
 
@@ -221,17 +222,18 @@ export default function CartDrawer() {
     );
   }, [appliedCoupon, activeCoupons, totalPaise, paidCount, items]);
 
-  // Visible cross-sell recommendations (not already in cart, with stock > 0, max 2 items)
+  // Visible cross-sell recommendations: prioritize curated (`is_cart_upsell`) products, falling back only if none are ticked
   const visibleUpsells = useMemo(() => {
     if (!FEATURE_FLAGS.CART_UPSELLS) return [];
     const inCartIds = new Set(items.map((i) => i.product_id));
-    return upsellProducts
+    const eligible = upsellProducts
       .filter((p) => !inCartIds.has(p.id))
       .filter((p) => {
         if (!p.inventory || p.inventory.length === 0) return true;
         return p.inventory.some((inv) => inv.stock > 0);
-      })
-      .slice(0, 2);
+      });
+    const curated = eligible.filter((p) => Boolean(p.is_cart_upsell));
+    return (curated.length > 0 ? curated : eligible).slice(0, 2);
   }, [upsellProducts, items]);
 
   // Sync activeCoupons metadata with appliedCoupon and handle sync_auto mode

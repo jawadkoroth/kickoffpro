@@ -2,6 +2,7 @@ import type { NextRequest } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { BRAND, SITE_URL, absoluteUrl } from '@/lib/seo/site';
 import { getPublicUrl } from '@/lib/media';
+import { getCategoryDef } from '@/lib/catalog/categories';
 
 /**
  * Google Merchant Center & Meta Catalog — RSS 2.0 Product Feed.
@@ -90,7 +91,6 @@ function rupees(paise: number): string {
 function extractColor(name: string, description: string | null, category: string | null): string {
   const text = `${name} ${description || ''} ${category || ''}`.toLowerCase();
 
-  // National teams & known color schemes
   if (text.includes('brazil')) return 'Yellow / Green';
   if (text.includes('portugal')) return 'Red / Green';
   if (text.includes('argentina')) return 'White / Sky Blue';
@@ -162,8 +162,10 @@ function buildVariantItem(
   }
   parts.push('<g:condition>new</g:condition>');
   parts.push(`<g:brand>${cdata(BRAND.name)}</g:brand>`);
-  parts.push('<g:google_product_category>Apparel &amp; Accessories &gt; Clothing &gt; Activewear &gt; Jerseys</g:google_product_category>');
-  parts.push(`<g:product_type>${cdata(row.category ? `Sportswear &gt; ${row.category}` : 'Sportswear &gt; Football Jerseys')}</g:product_type>`);
+  const catDef = getCategoryDef(row.category);
+  const googleCategory = catDef?.googleProductCategory || 'Apparel & Accessories > Clothing > Shirts & Tops';
+  parts.push(`<g:google_product_category>${xmlEscape(googleCategory)}</g:google_product_category>`);
+  parts.push(`<g:product_type>${cdata(row.category ? `Apparel &gt; ${row.category}` : 'Apparel &gt; Daily Essentials')}</g:product_type>`);
   parts.push('<g:identifier_exists>no</g:identifier_exists>');
   parts.push('<g:gender>unisex</g:gender>');
   parts.push('<g:age_group>adult</g:age_group>');
@@ -215,8 +217,10 @@ function buildSingleItem(
   }
   parts.push('<g:condition>new</g:condition>');
   parts.push(`<g:brand>${cdata(BRAND.name)}</g:brand>`);
-  parts.push('<g:google_product_category>Apparel &amp; Accessories &gt; Clothing &gt; Activewear &gt; Jerseys</g:google_product_category>');
-  parts.push(`<g:product_type>${cdata(row.category ? `Sportswear &gt; ${row.category}` : 'Sportswear &gt; Football Jerseys')}</g:product_type>`);
+  const catDef = getCategoryDef(row.category);
+  const googleCategory = catDef?.googleProductCategory || 'Apparel & Accessories > Clothing > Shirts & Tops';
+  parts.push(`<g:google_product_category>${xmlEscape(googleCategory)}</g:google_product_category>`);
+  parts.push(`<g:product_type>${cdata(row.category ? `Apparel &gt; ${row.category}` : 'Apparel &gt; Daily Essentials')}</g:product_type>`);
   parts.push('<g:identifier_exists>no</g:identifier_exists>');
   parts.push('<g:gender>unisex</g:gender>');
   parts.push('<g:age_group>adult</g:age_group>');

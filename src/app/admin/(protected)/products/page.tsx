@@ -26,7 +26,7 @@ import styles from './products.module.css';
  * scans cleanly at rest.
  */
 
-interface InventoryRow { size: string; stock: number }
+interface InventoryRow { size: string; stock: number; low_stock_alert?: boolean }
 
 interface Product {
   id: string;
@@ -37,6 +37,8 @@ interface Product {
   is_active: boolean;
   archived_at: string | null;
   category: string | null;
+  variety: string | null;
+  is_cart_upsell: boolean;
   images: string[] | null;
   created_at: string;
   inventory?: InventoryRow[];
@@ -87,7 +89,7 @@ export default function AdminProducts() {
     let query = supabase
       .from('products')
       .select(
-        'id, name, slug, price_paise, sale_price_paise, is_active, archived_at, category, images, created_at',
+        'id, name, slug, price_paise, sale_price_paise, is_active, archived_at, category, variety, is_cart_upsell, images, created_at',
       )
       .order('created_at', { ascending: false });
     if (!includeArchived) query = query.is('archived_at', null);
@@ -100,17 +102,18 @@ export default function AdminProducts() {
     }
 
     const ids = data.map((p) => p.id);
-    let inv: { product_id: string; size: string; stock: number }[] = [];
+    let inv: { product_id: string; size: string; stock: number; low_stock_alert?: boolean }[] = [];
     if (ids.length > 0) {
       const { data: invRows } = await supabase
         .from('inventory')
-        .select('product_id, size, stock')
+        .select('product_id, size, stock, low_stock_alert')
         .in('product_id', ids);
       inv = invRows ?? [];
     }
 
     const enriched: Product[] = data.map((p) => ({
       ...p,
+      is_cart_upsell: Boolean(p.is_cart_upsell),
       images: Array.isArray(p.images) ? (p.images as string[]) : null,
       inventory: inv
         .filter((i) => i.product_id === p.id)
@@ -138,7 +141,8 @@ export default function AdminProducts() {
         (p) =>
           p.name.toLowerCase().includes(q) ||
           p.slug.toLowerCase().includes(q) ||
-          (p.category ?? '').toLowerCase().includes(q),
+          (p.category ?? '').toLowerCase().includes(q) ||
+          (p.variety ?? '').toLowerCase().includes(q),
       );
     }
 
@@ -247,6 +251,32 @@ export default function AdminProducts() {
               ...p,
               inventory: (p.inventory ?? []).map((i) =>
                 i.size === size ? { ...i, stock: clamped } : i,
+              ),
+            }
+          : p,
+      ),
+    );
+  }
+
+  async function toggleLowStockAlert(productId: string, size: string, current: boolean) {
+    const next = !current;
+    const supabase = createClient();
+    const { error } = await supabase
+      .from('inventory')
+      .update({ low_stock_alert: next })
+      .eq('product_id', productId)
+      .eq('size', size);
+    if (error) {
+      showToast('Failed to update low-stock alert', 'error');
+      return;
+    }
+    setProducts((prev) =>
+      prev.map((p) =>
+        p.id === productId
+          ? {
+              ...p,
+              inventory: (p.inventory ?? []).map((i) =>
+                i.size === size ? { ...i, low_stock_alert: next } : i,
               ),
             }
           : p,
@@ -420,7 +450,13 @@ export default function AdminProducts() {
                   <div className={styles.metaLine}>
                     <span className={styles.slug}>/{product.slug}</span>
                     {product.category && (
-                      <span className={styles.category}>{product.category}</span>
+                      <span className={styles.category}>
+                        {product.category}
+                        {product.variety ? ` · ${product.variety}` : ''}
+                      </span>
+                    )}
+                    {product.is_cart_upsell && (
+                      <span className={styles.category}>Upsell</span>
                     )}
                   </div>
                 </div>
@@ -563,6 +599,31 @@ export default function AdminProducts() {
                               +
                             </button>
                           </div>
+                          <label
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 4,
+                              marginLeft: 8,
+                              fontSize: '0.6875rem',
+                              color: inv.low_stock_alert ? '#f59e0b' : 'var(--text-muted)',
+                              cursor: 'pointer',
+                            }}
+                            title="Flag low stock urgency on product page"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={Boolean(inv.low_stock_alert)}
+                              onChange={() =>
+                                toggleLowStockAlert(
+                                  product.id,
+                                  inv.size,
+                                  Boolean(inv.low_stock_alert),
+                                )
+                              }
+                            />
+                            Low alert
+                          </label>
                         </div>
                       ))
                     )}

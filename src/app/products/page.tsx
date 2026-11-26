@@ -6,6 +6,12 @@ import SortSelect, { type SortValue } from '@/components/SortSelect';
 import { JsonLd } from '@/components/seo/JsonLd';
 import { breadcrumbLd, collectionLd } from '@/lib/seo/jsonLd';
 import { BRAND, absoluteUrl, canonicalUrl } from '@/lib/seo/site';
+import {
+  APPAREL_CATEGORIES,
+  getCategoryDef,
+  getVarietiesForCategory,
+  resolveCategoryLabel,
+} from '@/lib/catalog/categories';
 import styles from './page.module.css';
 import DatabaseErrorPanel from '@/components/DatabaseErrorPanel';
 import { handleSupabaseQueryResult } from '@/lib/supabase/query-helper';
@@ -13,22 +19,20 @@ import { handleSupabaseQueryResult } from '@/lib/supabase/query-helper';
 export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
-  title: 'Football Jerseys Catalog',
+  title: 'Apparel & Daily Essentials Catalog',
   description:
-    'Browse our full catalogue of affordable club, national team, and retro football jerseys with budget-friendly pricing.',
+    'Browse our collection of daily-wear essentials: heavyweight & basic t-shirts, track pants, shorts, jeans, and casual shirts.',
   alternates: { canonical: canonicalUrl('/products') },
   openGraph: {
     type: 'website',
     url: canonicalUrl('/products'),
-    title: `Football Jerseys Catalog — ${BRAND.name}`,
+    title: `Apparel & Daily Essentials — ${BRAND.name}`,
     description:
-      'Browse our full catalogue of affordable club, national team, and retro football jerseys.',
+      'Shop everyday essentials across T-Shirts, Track Pants, Shorts, Jeans, and Shirts.',
   },
 };
 
 const VALID_SORTS: SortValue[] = ['latest', 'price-asc', 'price-desc'];
-
-const POPULAR_NATIONAL_TEAMS = ['Argentina', 'Brazil', 'Portugal', 'Spain'];
 
 interface ProductRow {
   id: string;
@@ -40,6 +44,7 @@ interface ProductRow {
   is_active: boolean;
   created_at: string;
   category: string | null;
+  variety?: string | null;
   homepage_feature_image: string | null;
   homepage_feature_enabled: boolean;
 }
@@ -52,6 +57,7 @@ interface InventoryRow {
 interface PageParams {
   sort?: string;
   category?: string;
+  variety?: string;
   q?: string;
   sale?: string;
 }
@@ -65,7 +71,10 @@ export default async function ProductsPage({
   const sort: SortValue = VALID_SORTS.includes(params.sort as SortValue)
     ? (params.sort as SortValue)
     : 'latest';
-  const category = params.category;
+  const rawCategory = params.category;
+  const resolvedCategoryDef = getCategoryDef(rawCategory);
+  const categoryFilterValue = resolvedCategoryDef?.id ?? rawCategory;
+  const varietyFilter = params.variety?.trim() || '';
   const q = params.q;
   const sale = params.sale === 'true';
 
@@ -73,17 +82,25 @@ export default async function ProductsPage({
 
   let productsQuery = supabase
     .from('products')
-    .select('id, slug, name, price_paise, sale_price_paise, images, is_active, created_at, category, homepage_feature_image, homepage_feature_enabled')
+    .select(
+      'id, slug, name, price_paise, sale_price_paise, images, is_active, created_at, category, variety, homepage_feature_image, homepage_feature_enabled',
+    )
     .eq('is_active', true);
 
-  if (sale || (category && category.toLowerCase() === 'sale')) {
+  if (sale || (categoryFilterValue && categoryFilterValue.toLowerCase() === 'sale')) {
     productsQuery = productsQuery.or('sale_price_paise.not.is.null,category.ilike.%sale%');
-  } else if (category) {
-    productsQuery = productsQuery.ilike('category', `%${category}%`);
+  } else if (categoryFilterValue) {
+    productsQuery = productsQuery.ilike('category', `%${categoryFilterValue}%`);
+  }
+
+  if (varietyFilter) {
+    productsQuery = productsQuery.ilike('variety', `%${varietyFilter}%`);
   }
 
   if (q) {
-    productsQuery = productsQuery.or(`name.ilike.%${q}%,slug.ilike.%${q}%,category.ilike.%${q}%`);
+    productsQuery = productsQuery.or(
+      `name.ilike.%${q}%,slug.ilike.%${q}%,category.ilike.%${q}%,variety.ilike.%${q}%`,
+    );
   }
 
   if (sort === 'latest') {
@@ -92,14 +109,14 @@ export default async function ProductsPage({
 
   const response = await productsQuery;
   const result = handleSupabaseQueryResult(response, 'products_catalog.products_fetch');
-  
+
   if (result.error) {
     return (
       <div className={styles.page}>
         <header className={styles.header}>
           <div>
             <p className={styles.eyebrow}>CATALOG ERROR</p>
-            <h1 className={styles.title}>Error Loading Jerseys</h1>
+            <h1 className={styles.title}>Error Loading Products</h1>
           </div>
         </header>
         <DatabaseErrorPanel error={result.error} title="Failed to load product catalog" />
@@ -117,7 +134,7 @@ export default async function ProductsPage({
     products = products.slice().sort((a, b) => effectivePrice(b) - effectivePrice(a));
   }
 
-  const ids = products.map(p => p.id);
+  const ids = products.map((p) => p.id);
   const stockByProduct = new Map<string, number>();
 
   if (ids.length > 0) {
@@ -134,7 +151,7 @@ export default async function ProductsPage({
     }
   }
 
-  const cards: ProductCardData[] = products.map(p => ({
+  const cards: ProductCardData[] = products.map((p) => ({
     id: p.id,
     slug: p.slug,
     name: p.name,
@@ -142,9 +159,10 @@ export default async function ProductsPage({
     sale_price_paise: p.sale_price_paise,
     images: Array.isArray(p.images) ? (p.images as string[]) : [],
     totalStock: stockByProduct.get(p.id) ?? 0,
-    category: p.category || 'Football Jersey',
+    category: resolveCategoryLabel(p.category),
+    variety: p.variety ?? null,
     homepage_feature_image: p.homepage_feature_image,
-    homepage_feature_enabled: p.homepage_feature_enabled
+    homepage_feature_enabled: p.homepage_feature_enabled,
   }));
 
   const collectionUrl = canonicalUrl('/products');
@@ -153,31 +171,44 @@ export default async function ProductsPage({
     url: absoluteUrl(`/product/${c.slug}`),
   }));
 
-  const isSale = sale || (category && category.toLowerCase() === 'sale');
+  const isSale = sale || (rawCategory && rawCategory.toLowerCase() === 'sale');
+  const categoryTitle = resolvedCategoryDef?.label ?? rawCategory ?? '';
+
   const displayEyebrow = isSale
     ? 'SALE & OFFERS'
-    : (category 
-        ? `${category.toUpperCase()} COLLECTION` 
-        : (q ? `SEARCH RESULTS FOR "${q.toUpperCase()}"` : 'FOOTBALL JERSEYS'));
+    : categoryTitle
+      ? `${categoryTitle.toUpperCase()} COLLECTION`
+      : q
+        ? `SEARCH RESULTS FOR "${q.toUpperCase()}"`
+        : 'DAILY ESSENTIALS';
 
   const displayTitle = isSale
-    ? 'Sale Jerseys'
-    : (category 
-        ? `${category.charAt(0).toUpperCase() + category.slice(1)} Jerseys` 
-        : (q ? `Search results` : 'All Jerseys'));
+    ? 'Sale & Deals'
+    : categoryTitle
+      ? varietyFilter
+        ? `${categoryTitle} — ${varietyFilter}`
+        : categoryTitle
+      : q
+        ? 'Search results'
+        : 'All Essentials';
+
+  // Surface sub-variety pills when a specific category is active (or T-Shirts default)
+  const visibleVarieties = resolvedCategoryDef
+    ? resolvedCategoryDef.varieties
+    : getVarietiesForCategory('T-Shirts');
 
   return (
     <div className={styles.page}>
       <JsonLd
         data={breadcrumbLd([
           { name: 'Home', path: '/' },
-          { name: 'Jerseys', path: '/products' },
+          { name: 'Catalog', path: '/products' },
         ])}
       />
       <JsonLd
         data={collectionLd({
           name: displayTitle,
-          description: `Buy high quality ${displayTitle} with budget-friendly pricing. Fast shipping in India.`,
+          description: `Shop ${displayTitle} with fast shipping across India.`,
           url: collectionUrl,
           items: featuredForSchema,
         })}
@@ -190,34 +221,71 @@ export default async function ProductsPage({
         {cards.length > 0 && <SortSelect current={sort} />}
       </header>
 
+      {/* Top-Level Category Pills */}
       <section className={styles.quickAccess}>
         <div className={styles.quickAccessList}>
-          {POPULAR_NATIONAL_TEAMS.map(team => {
-            const isActive = q?.toLowerCase() === team.toLowerCase();
-            const linkHref = isActive ? '/products' : `/products?q=${team}`;
+          <Link
+            href="/products"
+            className={`${styles.quickAccessBtn} ${!rawCategory && !isSale ? styles.quickAccessBtnActive : ''}`}
+          >
+            All
+          </Link>
+          {APPAREL_CATEGORIES.map((cat) => {
+            const isActive =
+              resolvedCategoryDef?.slug === cat.slug ||
+              rawCategory?.toLowerCase() === cat.id.toLowerCase();
             return (
               <Link
-                key={team}
-                href={linkHref}
+                key={cat.id}
+                href={`/products?category=${cat.slug}`}
                 className={`${styles.quickAccessBtn} ${isActive ? styles.quickAccessBtnActive : ''}`}
               >
-                {team}
+                {cat.label}
               </Link>
             );
           })}
+          <Link
+            href="/products?sale=true"
+            className={`${styles.quickAccessBtn} ${isSale ? styles.quickAccessBtnActive : ''}`}
+          >
+            Sale
+          </Link>
         </div>
+
+        {/* Product Variety / Fit Sub-Pills */}
+        {(resolvedCategoryDef || varietyFilter) && (
+          <div className={styles.quickAccessList} style={{ marginTop: 10 }}>
+            {visibleVarieties.map((v) => {
+              const isActive = varietyFilter.toLowerCase() === v.toLowerCase();
+              const baseCat = resolvedCategoryDef?.slug || rawCategory || 't-shirts';
+              const href = isActive
+                ? `/products?category=${baseCat}`
+                : `/products?category=${baseCat}&variety=${encodeURIComponent(v)}`;
+              return (
+                <Link
+                  key={v}
+                  href={href}
+                  className={`${styles.quickAccessBtn} ${isActive ? styles.quickAccessBtnActive : ''}`}
+                  style={{ fontSize: '0.75rem', padding: '5px 12px' }}
+                >
+                  {v}
+                </Link>
+              );
+            })}
+          </div>
+        )}
       </section>
 
       {cards.length === 0 ? (
         <div className={styles.emptyState}>
-          <p className={styles.emptyTitle}>No jerseys found</p>
+          <p className={styles.emptyTitle}>No products found</p>
           <p className={styles.emptyBody}>
-            We couldn&apos;t find any jerseys matching your filters. Check back soon for restocks!
+            We couldn&apos;t find any styles matching your filters. Try another variety or check back soon!
           </p>
         </div>
       ) : (
         <div className={styles.grid}>
-          {cards.map(p => (
+          {cards.map((p) => (
             <ProductCard key={p.id} product={p} />
           ))}
         </div>

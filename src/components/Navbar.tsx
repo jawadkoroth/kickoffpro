@@ -33,10 +33,10 @@ export default function Navbar() {
         
         <div className={styles.navLinks}>
           <Link href="/" className={styles.navLink}>Home</Link>
-          <Link href="/products?category=national" className={styles.navLink}>National Teams</Link>
-          <Link href="/products?category=club" className={styles.navLink}>Club Jerseys</Link>
-          <Link href="/products?category=retro" className={styles.navLink}>Retro Jerseys</Link>
-          <Link href="/products?sort=newest" className={styles.navLink}>New Arrivals</Link>
+          <Link href="/products?category=t-shirts" className={styles.navLink}>T-Shirts</Link>
+          <Link href="/products?category=track-pants" className={styles.navLink}>Track Pants</Link>
+          <Link href="/products?category=shorts" className={styles.navLink}>Shorts</Link>
+          <Link href="/products" className={styles.navLink}>All Essentials</Link>
           <Link href="/products?sale=true" className={`${styles.navLink} ${styles.saleLink}`}>Sale</Link>
         </div>
 
@@ -76,10 +76,11 @@ export default function Navbar() {
             </div>
             
             <Link href="/" className={styles.mobileNavLink} onClick={closeMenu}>Home</Link>
-            <Link href="/products?category=national" className={styles.mobileNavLink} onClick={closeMenu}>National Teams</Link>
-            <Link href="/products?category=club" className={styles.mobileNavLink} onClick={closeMenu}>Club Jerseys</Link>
-            <Link href="/products?category=retro" className={styles.mobileNavLink} onClick={closeMenu}>Retro Jerseys</Link>
-            <Link href="/products?sort=newest" className={styles.mobileNavLink} onClick={closeMenu}>New Arrivals</Link>
+            <Link href="/products?category=t-shirts" className={styles.mobileNavLink} onClick={closeMenu}>T-Shirts</Link>
+            <Link href="/products?category=track-pants" className={styles.mobileNavLink} onClick={closeMenu}>Track Pants</Link>
+            <Link href="/products?category=shorts" className={styles.mobileNavLink} onClick={closeMenu}>Shorts</Link>
+            <Link href="/products?category=jeans" className={styles.mobileNavLink} onClick={closeMenu}>Jeans</Link>
+            <Link href="/products" className={styles.mobileNavLink} onClick={closeMenu}>All Essentials</Link>
             <Link href="/products?sale=true" className={`${styles.mobileNavLink} ${styles.saleLink}`} onClick={closeMenu}>Sale</Link>
           </motion.div>
         )}

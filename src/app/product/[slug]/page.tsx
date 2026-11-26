@@ -3,6 +3,7 @@ import { notFound, permanentRedirect } from 'next/navigation';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { normalizeSlug } from '@/lib/slug';
+import { normalizeVideoList } from '@/lib/catalog/categories';
 import ProductDetailClient, {
   type ProductDetail,
   type InventoryItem,
@@ -21,7 +22,10 @@ interface ProductRow {
   price_paise: number;
   sale_price_paise: number | null;
   images: unknown;
+  videos?: unknown;
   sizes: unknown;
+  category?: string | null;
+  variety?: string | null;
   is_active: boolean;
   gsm?: string | null;
   fabric?: string | null;
@@ -32,6 +36,7 @@ interface ProductRow {
 interface InventoryRow {
   size: string;
   stock: number;
+  low_stock_alert?: boolean | null;
 }
 
 interface ProductMetaRow {
@@ -155,10 +160,14 @@ export default async function ProductDetailPage({
 
   const { data: inventoryRows } = await supabase
     .from('inventory')
-    .select('size, stock')
+    .select('size, stock, low_stock_alert')
     .eq('product_id', productRow.id);
 
-  const inventory: InventoryItem[] = (inventoryRows ?? []) as InventoryRow[];
+  const inventory: InventoryItem[] = ((inventoryRows ?? []) as InventoryRow[]).map((r) => ({
+    size: r.size,
+    stock: r.stock ?? 0,
+    low_stock_alert: Boolean(r.low_stock_alert),
+  }));
   const totalStock = inventory.reduce((sum, row) => sum + (row.stock ?? 0), 0);
 
   // Coerce JSONB defensively so the client never has to.
@@ -170,7 +179,10 @@ export default async function ProductDetailPage({
     price_paise: productRow.price_paise,
     sale_price_paise: productRow.sale_price_paise ?? null,
     images: Array.isArray(productRow.images) ? (productRow.images as string[]) : [],
+    videos: normalizeVideoList(productRow.videos),
     sizes: Array.isArray(productRow.sizes) ? (productRow.sizes as string[]) : [],
+    category: productRow.category ?? null,
+    variety: productRow.variety ?? null,
     gsm: productRow.gsm ?? null,
     fabric: productRow.fabric ?? null,
     fit: productRow.fit ?? null,

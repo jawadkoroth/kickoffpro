@@ -18,61 +18,31 @@ import {
   MessageSquare 
 } from 'lucide-react';
 import { getPublicUrl } from '@/lib/media';
+import { APPAREL_CATEGORIES } from '@/lib/catalog/categories';
 import styles from './page.module.css';
 
 interface LandingClientProps {
   products: ProductCardData[];
 }
 
-// Popular national teams mapping for Quick Access and category deductions
-const POPULAR_NATIONAL_TEAMS = [
-  'Argentina', 'Brazil', 'Portugal', 'France', 'Germany', 'Spain', 'England', 'Italy'
-];
-
-// Popular clubs mapping for category showcases
-const POPULAR_CLUBS = [
-  'Real Madrid', 'Barcelona', 'Manchester United', 'Manchester City', 'Liverpool', 'Arsenal', 'Chelsea', 'PSG', 'Bayern Munich', 'Juventus'
-];
-
 export default function LandingClient({ products }: LandingClientProps) {
-  // Helper to extract team name from product name
-  const getTeamName = (p: ProductCardData) => {
-    const team = POPULAR_NATIONAL_TEAMS.find(t => p.name.toLowerCase().includes(t.toLowerCase()));
-    return team || p.name;
-  };
-
-  // Helper to extract club name from product name
-  const getClubName = (p: ProductCardData) => {
-    const club = POPULAR_CLUBS.find(c => p.name.toLowerCase().includes(c.toLowerCase()));
-    return club || p.name;
-  };
-
-  // Try to deduce available national teams from products for quick access pills
-  const availableTeams = POPULAR_NATIONAL_TEAMS.filter(team => 
-    products.some(p => p.name.toLowerCase().includes(team.toLowerCase()))
-  );
-
-  // Filter products for homepage featured nation and club showcases
-  const featuredNations = products
-    .filter(p => p.homepage_feature_enabled && p.category?.toLowerCase() === 'national team')
-    .slice(0, 4);
-
-  const featuredClubs = products
-    .filter(p => p.homepage_feature_enabled && p.category?.toLowerCase() === 'club jersey')
+  // Featured showcase cards marked by admin across apparel categories
+  const featuredShowcase = products
+    .filter((p) => p.homepage_feature_enabled)
     .slice(0, 4);
 
   // Trending (Top 8)
   const trendingProducts = products.slice(0, 8);
-  
-  // New Arrivals (Sorted by date)
-  const newArrivals = [...products].sort((a, b) => {
-    return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
-  }).slice(0, 8);
 
-  // Best Sellers (Assume items with category 'best-seller' or slice middle of catalogue)
-  const bestSellers = products.filter(
-    p => p.category?.toLowerCase().includes('best') || p.name.toLowerCase().includes('home')
-  ).slice(0, 8);
+  // New Arrivals (Sorted by date)
+  const newArrivals = [...products]
+    .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
+    .slice(0, 8);
+
+  // Best Sellers (Prefer T-Shirts / Sale items or top essentials)
+  const bestSellers = products
+    .filter((p) => p.sale_price_paise != null || p.category?.toLowerCase().includes('t-shirt'))
+    .slice(0, 8);
 
   // FAQ state
   const [openFaq, setOpenFaq] = useState<number | null>(null);
@@ -186,69 +156,70 @@ export default function LandingClient({ products }: LandingClientProps) {
           transition={{ duration: 0.8, ease: 'easeOut' }}
         >
           <span style={{ color: '#FFC928', fontSize: '0.875rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.2em', marginBottom: '16px', display: 'block' }}>
-            🏆 World Cup Fever Is Live 🏆
+            Everyday Heavyweight Essentials
           </span>
           <h1 className={styles.heroTitle}>
-            Support Your Team
+            Built For Daily Rotation
           </h1>
           <p className={styles.heroSubtitle}>
-            Premium Quality Football Jerseys Starting At ₹549. Get ready for the ultimate matchday experience.
+            Combed cotton basic t-shirts, track pants, and everyday staples crafted for Indian weather and all-day comfort.
           </p>
           
           <div className={styles.heroCtaGroup}>
             <Link href="/products" className={styles.heroCtaPrimary}>
-              Shop Collections
+              Shop All Essentials
             </Link>
-            <Link href="/products?category=national" className={styles.heroCtaSecondary}>
-              National Teams
+            <Link href="/products?category=t-shirts" className={styles.heroCtaSecondary}>
+              Shop T-Shirts
             </Link>
           </div>
         </motion.div>
       </section>
 
-      {/* SECTION 2: WORLD CUP TEAM QUICK ACCESS */}
-      {availableTeams.length > 0 && (
-        <section className={styles.quickAccess}>
-          <div className={styles.quickAccessList}>
-            {availableTeams.map(team => (
-              <Link key={team} href={`/products?q=${team}`} className={styles.quickAccessBtn}>
-                {team}
-              </Link>
-            ))}
-          </div>
-        </section>
-      )}
+      {/* SECTION 2: CATEGORY & VARIETY QUICK ACCESS */}
+      <section className={styles.quickAccess}>
+        <div className={styles.quickAccessList}>
+          {APPAREL_CATEGORIES.slice(0, 5).map((cat) => (
+            <Link key={cat.id} href={`/products?category=${cat.slug}`} className={styles.quickAccessBtn}>
+              {cat.label}
+            </Link>
+          ))}
+        </div>
+      </section>
 
-      {/* SECTION 3: SHOP BY NATIONAL TEAM */}
-      {featuredNations.length > 0 && (
+      {/* SECTION 3: FEATURED CATEGORIES / SHOWCASE */}
+      {featuredShowcase.length > 0 && (
         <section className={styles.section}>
           <div className={styles.sectionHeader}>
-            <h2 className={styles.sectionTitle}>Shop By Nation</h2>
+            <h2 className={styles.sectionTitle}>Featured Essentials</h2>
           </div>
           <div className={styles.teamGrid}>
-            {featuredNations.map(p => {
-              const teamName = getTeamName(p);
+            {featuredShowcase.map((p) => {
+              const title = p.variety ? `${p.category || 'Essential'} · ${p.variety}` : p.name;
               const imageUrl = getPublicUrl(p.homepage_feature_image || p.images?.[0]) || '/product-1.png';
+              const catSlug = APPAREL_CATEGORIES.find((c) => c.id === p.category)?.slug || 't-shirts';
               return (
                 <Link
                   key={p.id}
-                  href={`/products?q=${teamName}`}
+                  href={`/products?category=${catSlug}`}
                   className={styles.teamCard}
                   data-non-wearable="true"
                   data-tryon="false"
                 >
                   <div className={styles.teamImageWrap} data-non-wearable="true" data-tryon="false">
-                    <img 
-                      src={imageUrl} 
-                      alt={teamName} 
-                      loading="lazy" 
+                    <img
+                      src={imageUrl}
+                      alt={title}
+                      loading="lazy"
                       data-vton-pinned="disabled"
                       data-tryon="false"
                     />
                   </div>
                   <div className={styles.teamBody}>
-                    <h3 className={styles.teamName}>{teamName}</h3>
-                    <p className={styles.teamPrice}>From ₹549</p>
+                    <h3 className={styles.teamName}>{title}</h3>
+                    <p className={styles.teamPrice}>
+                      From ₹{Math.round((p.sale_price_paise ?? p.price_paise) / 100)}
+                    </p>
                     <span className={styles.teamShopBtn}>
                       Shop Now <ChevronRight size={14} style={{ display: 'inline', verticalAlign: 'middle' }} />
                     </span>
@@ -260,52 +231,11 @@ export default function LandingClient({ products }: LandingClientProps) {
         </section>
       )}
 
-      {/* SECTION 3.5: SHOP BY CLUB */}
-      {featuredClubs.length > 0 && (
-        <section className={styles.sectionAlt}>
-          <div className={styles.sectionHeader}>
-            <h2 className={styles.sectionTitle}>Shop By Club</h2>
-          </div>
-          <div className={styles.teamGrid}>
-            {featuredClubs.map(p => {
-              const clubName = getClubName(p);
-              const imageUrl = getPublicUrl(p.homepage_feature_image || p.images?.[0]) || '/product-1.png';
-              return (
-                <Link
-                  key={p.id}
-                  href={`/products?q=${clubName}`}
-                  className={styles.teamCard}
-                  data-non-wearable="true"
-                  data-tryon="false"
-                >
-                  <div className={styles.teamImageWrap} data-non-wearable="true" data-tryon="false">
-                    <img 
-                      src={imageUrl} 
-                      alt={clubName} 
-                      loading="lazy" 
-                      data-vton-pinned="disabled"
-                      data-tryon="false"
-                    />
-                  </div>
-                  <div className={styles.teamBody}>
-                    <h3 className={styles.teamName}>{clubName}</h3>
-                    <p className={styles.teamPrice}>From ₹549</p>
-                    <span className={styles.teamShopBtn}>
-                      Shop Now <ChevronRight size={14} style={{ display: 'inline', verticalAlign: 'middle' }} />
-                    </span>
-                  </div>
-                </Link>
-              );
-            })}
-          </div>
-        </section>
-      )}
-
-      {/* SECTION 4: TRENDING JERSEYS */}
+      {/* SECTION 4: TRENDING ESSENTIALS */}
       {trendingProducts.length > 0 && (
         <section className={styles.sectionAlt}>
           <div className={styles.sectionHeader}>
-            <h2 className={styles.sectionTitle}>Trending Jerseys</h2>
+            <h2 className={styles.sectionTitle}>Trending Now</h2>
           </div>
           <div className={styles.productsGrid}>
             {trendingProducts.map((product) => (

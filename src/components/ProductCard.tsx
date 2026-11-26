@@ -17,6 +17,7 @@ export interface ProductCardData {
   images: string[];
   totalStock: number;
   category?: string;
+  variety?: string | null;
   sizes?: string[];
   created_at?: string;
   homepage_feature_image?: string | null;
@@ -114,7 +115,9 @@ export default function ProductCard({ product }: { product: ProductCardData }) {
 
         <div className={styles.body}>
           <div className={styles.categoryLine}>
-            {product.category || 'FOOTBALL JERSEY'}
+            {product.variety
+              ? `${product.category || 'Essential'} · ${product.variety}`
+              : product.category || 'Everyday Essential'}
           </div>
           <h3 className={styles.name}>{product.name}</h3>
           
