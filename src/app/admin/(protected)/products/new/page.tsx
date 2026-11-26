@@ -5,7 +5,9 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import MediaUploader from '@/components/admin/MediaUploader';
 import ProductVideoManager from '@/components/admin/ProductVideoManager';
+import QualityHighlightsEditor from '@/components/admin/QualityHighlightsEditor';
 import { normalizeSlug, getUniqueSlug } from '@/lib/slug';
+import { normalizeQualityHighlights, type QualityHighlightRow } from '@/lib/catalog/qualityTemplates';
 import {
   APPAREL_CATEGORIES,
   DEFAULT_CATEGORY_ID,
@@ -29,6 +31,11 @@ export default function AdminNewProduct() {
   const [images, setImages] = useState<string[]>([]);
   const [videos, setVideos] = useState<string[]>([]);
   const [isCartUpsell, setIsCartUpsell] = useState(false);
+  const [gsm, setGsm] = useState('');
+  const [fabric, setFabric] = useState('');
+  const [fit, setFit] = useState('');
+  const [modelInfo, setModelInfo] = useState('');
+  const [qualityHighlights, setQualityHighlights] = useState<QualityHighlightRow[]>([]);
   const [homepageFeatureImage, setHomepageFeatureImage] = useState('');
   const [homepageFeatureEnabled, setHomepageFeatureEnabled] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -84,6 +91,11 @@ export default function AdminNewProduct() {
         category,
         variety: resolvedVariety,
         is_cart_upsell: isCartUpsell,
+        gsm: gsm.trim() || null,
+        fabric: fabric.trim() || null,
+        fit: fit.trim() || null,
+        model_info: modelInfo.trim() || null,
+        quality_highlights: normalizeQualityHighlights(qualityHighlights),
         is_active: true,
         homepage_feature_image: homepageFeatureImage || null,
         homepage_feature_enabled: homepageFeatureEnabled,
@@ -394,6 +406,26 @@ export default function AdminNewProduct() {
             Product Images
           </label>
           <MediaUploader value={images} onChange={setImages} folder="products" />
+        </div>
+
+        <div className="card" style={{ marginBottom: 'var(--space-4)' }}>
+          <label className="input-label" style={{ marginBottom: 'var(--space-3)' }}>
+            Fabric Specs &amp; Below-the-Fold Quality Showcase
+          </label>
+          <QualityHighlightsEditor
+            gsm={gsm}
+            fabric={fabric}
+            fit={fit}
+            modelInfo={modelInfo}
+            onSpecsChange={(patch) => {
+              if (patch.gsm !== undefined) setGsm(patch.gsm);
+              if (patch.fabric !== undefined) setFabric(patch.fabric);
+              if (patch.fit !== undefined) setFit(patch.fit);
+              if (patch.modelInfo !== undefined) setModelInfo(patch.modelInfo);
+            }}
+            rows={qualityHighlights}
+            onRowsChange={setQualityHighlights}
+          />
         </div>
 
         <div className="card" style={{ marginBottom: 'var(--space-5)' }}>

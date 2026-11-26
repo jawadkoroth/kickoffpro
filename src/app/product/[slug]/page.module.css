@@ -573,3 +573,189 @@
   font-weight: 600;
   color: var(--error, #dc2626);
 }
+
+/* Best Price / Get It For Offer Callout */
+.bestOfferStrip {
+  margin-bottom: var(--space-4);
+  padding: 12px 14px;
+  border-radius: var(--radius-md, 10px);
+  background: var(--bg-secondary);
+  border: 1px dashed var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.bestOfferMain {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 1;
+}
+
+.bestOfferBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.6875rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--success, #059669);
+}
+
+.bestOfferHeadline {
+  font-size: 0.9375rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  line-height: 1.3;
+}
+
+.bestOfferSubline {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  line-height: 1.35;
+}
+
+.bestOfferApplyBtn {
+  background: var(--text-primary);
+  color: var(--bg-primary);
+  border: none;
+  border-radius: var(--radius-sm, 6px);
+  padding: 9px 14px;
+  min-height: 40px;
+  font-size: 0.75rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.bestOfferAppliedBtn {
+  background: var(--success, #059669);
+  color: #ffffff;
+}
+
+/* Below-the-Fold Quality & Fabric Showcase */
+.qualitySection {
+  max-width: 1200px;
+  margin: var(--space-8, 32px) auto 0;
+  padding: 0 var(--space-5, 20px) var(--space-8, 32px);
+}
+
+@media (min-width: 1024px) {
+  .qualitySection {
+    padding: 0 var(--space-12, 48px) var(--space-12, 48px);
+  }
+}
+
+.qualityHeader {
+  margin-bottom: var(--space-4, 16px);
+}
+
+.qualityEyebrow {
+  display: block;
+  font-size: 0.6875rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.qualityHeading {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.qualityRows {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.qualityRow {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md, 10px);
+  padding: 14px 16px;
+}
+
+.qualityRowWithImg {
+  display: grid;
+  grid-template-columns: 76px 1fr;
+  gap: 14px;
+  align-items: center;
+}
+
+@media (min-width: 768px) {
+  .qualityRowWithImg {
+    grid-template-columns: 112px 1fr;
+    gap: 20px;
+  }
+}
+
+.qualityImgWrap {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: var(--radius-sm, 6px);
+  overflow: hidden;
+  background: var(--bg-tertiary, #f1f5f9);
+}
+
+.qualityImgWrap img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.qualityTextCol {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+@media (min-width: 768px) {
+  .qualityRow:not(.qualityRowWithImg) .qualityTextCol {
+    flex-direction: row;
+    align-items: baseline;
+    gap: 20px;
+  }
+}
+
+.qualityBadge {
+  display: inline-block;
+  align-self: flex-start;
+  flex-shrink: 0;
+  min-width: 112px;
+  font-size: 0.6875rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.qualityCopy {
+  flex: 1;
+}
+
+.qualityTitle {
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0 0 4px 0;
+}
+
+.qualitySubtitle {
+  font-size: 0.84rem;
+  color: var(--text-secondary);
+  margin: 0;
+  line-height: 1.5;
+}

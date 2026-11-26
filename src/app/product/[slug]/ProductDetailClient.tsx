@@ -9,7 +9,8 @@ import { estimatePincodeDelivery, type PincodeEtaResult } from '@/lib/shipping/p
 import { formatPaise } from '@/lib/format';
 import { getPublicUrl } from '@/lib/media';
 import { trackViewContent, trackAddToCart } from '@/lib/tracking/client';
-import { Truck, ShieldCheck, RefreshCw, ShoppingCart, Check } from 'lucide-react';
+import type { QualityHighlightRow } from '@/lib/catalog/qualityTemplates';
+import { Truck, ShieldCheck, RefreshCw, ShoppingCart, Check, Tag } from 'lucide-react';
 import styles from './page.module.css';
 
 export interface ProductDetail {
@@ -28,12 +29,27 @@ export interface ProductDetail {
   fabric?: string | null;
   fit?: string | null;
   model_info?: string | null;
+  quality_highlights?: QualityHighlightRow[];
 }
 
 export interface InventoryItem {
   size: string;
   stock: number;
   low_stock_alert?: boolean;
+}
+
+export interface PdpBestOffer {
+  badge: string;
+  bestPricePaise: number;
+  savingsPaise: number;
+  headline: string;
+  subline?: string | null;
+  couponCode?: string | null;
+  discountType?: 'percent' | 'flat';
+  discountPercent?: number;
+  discountPaiseFlat?: number | null;
+  maxDiscountPaise?: number | null;
+  minCartPaise?: number | null;
 }
 
 const SIZE_GUIDE_DATA = [
@@ -48,13 +64,15 @@ export default function ProductDetailClient({
   product,
   inventory,
   totalStock,
+  bestOffer = null,
 }: {
   product: ProductDetail;
   inventory: InventoryItem[];
   totalStock: number;
+  bestOffer?: PdpBestOffer | null;
 }) {
   const router = useRouter();
-  const { addItem } = useCart();
+  const { addItem, applyCoupon, appliedCoupon } = useCart();
   const [selectedSize, setSelectedSize] = useState('');
   const [sizeError, setSizeError] = useState(false);
   const [couponCode, setCouponCode] = useState('');
@@ -190,8 +208,15 @@ export default function ProductDetailClient({
   const originalPrice = product.price_paise;
   const basePrice = product.sale_price_paise ?? originalPrice;
   const hasSalePrice = product.sale_price_paise != null && product.sale_price_paise < originalPrice;
-  const discountAmount = Math.round(basePrice * couponDiscount / 100);
-  const finalPrice = basePrice - discountAmount;
+  const isBestOfferApplied = Boolean(
+    bestOffer?.couponCode &&
+      (appliedCoupon?.code === bestOffer.couponCode ||
+        (couponApplied && couponCode.toUpperCase() === bestOffer.couponCode)),
+  );
+  const discountAmount = isBestOfferApplied
+    ? Math.min(bestOffer!.savingsPaise, basePrice)
+    : Math.round((basePrice * couponDiscount) / 100);
+  const finalPrice = Math.max(0, basePrice - discountAmount);
 
   async function handleValidateCoupon() {
     if (!couponCode.trim()) return;
@@ -335,7 +360,13 @@ export default function ProductDetailClient({
                       }}
                     />
                   ) : (
-                    <img src={slide.url} alt={`${product.name} - ${idx + 1}`} />
+                    <img
+                      src={slide.url}
+                      alt={`${product.name} - ${idx + 1}`}
+                      loading={idx === 0 ? 'eager' : 'lazy'}
+                      decoding={idx === 0 ? 'sync' : 'async'}
+                      fetchPriority={idx === 0 ? 'high' : 'auto'}
+                    />
                   )}
                 </div>
               ))}
@@ -401,6 +432,49 @@ export default function ProductDetailClient({
                 <span className={styles.originalPrice}>{formatPaise(hasSalePrice && discountAmount > 0 ? originalPrice : (hasSalePrice ? originalPrice : basePrice))}</span>
               )}
             </div>
+
+            {bestOffer && (
+              <div className={styles.bestOfferStrip}>
+                <div className={styles.bestOfferMain}>
+                  <span className={styles.bestOfferBadge}>
+                    <Tag size={12} /> {bestOffer.badge}
+                  </span>
+                  <div className={styles.bestOfferHeadline}>{bestOffer.headline}</div>
+                  {bestOffer.subline && (
+                    <div className={styles.bestOfferSubline}>{bestOffer.subline}</div>
+                  )}
+                </div>
+                {bestOffer.couponCode && bestOffer.savingsPaise > 0 && (
+                  <button
+                    type="button"
+                    className={`${styles.bestOfferApplyBtn} ${
+                      appliedCoupon?.code === bestOffer.couponCode || couponApplied
+                        ? styles.bestOfferAppliedBtn
+                        : ''
+                    }`}
+                    onClick={() => {
+                      const code = bestOffer.couponCode!;
+                      setCouponCode(code);
+                      setCouponDiscount(bestOffer.discountPercent ?? 0);
+                      setCouponApplied(true);
+                      applyCoupon({
+                        code,
+                        discountPaise: bestOffer.savingsPaise,
+                        discountPercent: bestOffer.discountPercent ?? 0,
+                        discountType: bestOffer.discountType ?? 'percent',
+                        discountPaiseFlat: bestOffer.discountPaiseFlat ?? null,
+                        minCartPaise: bestOffer.minCartPaise ?? null,
+                        maxDiscountPaise: bestOffer.maxDiscountPaise ?? null,
+                      });
+                    }}
+                  >
+                    {appliedCoupon?.code === bestOffer.couponCode || couponApplied
+                      ? 'Applied ✓'
+                      : 'Tap to Apply'}
+                  </button>
+                )}
+              </div>
+            )}
 
             <p className={styles.description}>{product.description}</p>
 
@@ -571,6 +645,42 @@ export default function ProductDetailClient({
           </div>
         </div>
       </div>
+
+      {/* Below-the-Fold Fabric & Quality Showcase (Hidden cleanly if empty) */}
+      {(product.quality_highlights?.length ?? 0) > 0 && (
+        <section className={styles.qualitySection} aria-label="Fabric Quality and Craftsmanship">
+          <div className={styles.qualityHeader}>
+            <span className={styles.qualityEyebrow}>CRAFTED FOR DAILY ROTATION</span>
+            <h2 className={styles.qualityHeading}>Fabric, Fit &amp; Durability Details</h2>
+          </div>
+          <div className={styles.qualityRows}>
+            {product.quality_highlights!.map((row, idx) => (
+              <div
+                key={`${row.title}-${idx}`}
+                className={`${styles.qualityRow} ${row.image ? styles.qualityRowWithImg : ''}`}
+              >
+                {row.image && (
+                  <div className={styles.qualityImgWrap}>
+                    <img
+                      src={getPublicUrl(row.image)}
+                      alt={row.title || 'Fabric detail'}
+                      loading="lazy"
+                      decoding="async"
+                    />
+                  </div>
+                )}
+                <div className={styles.qualityTextCol}>
+                  <span className={styles.qualityBadge}>{row.badge}</span>
+                  <div className={styles.qualityCopy}>
+                    <h3 className={styles.qualityTitle}>{row.title}</h3>
+                    {row.subtitle && <p className={styles.qualitySubtitle}>{row.subtitle}</p>}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Mobile Sticky CTAs */}
       <div className={styles.mobileCta}>

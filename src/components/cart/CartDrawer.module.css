@@ -64,7 +64,9 @@
   border: none;
   cursor: pointer;
   color: var(--text-muted);
-  padding: 6px;
+  padding: 8px;
+  min-width: 40px;
+  min-height: 40px;
   border-radius: var(--radius-sm);
   display: flex;
   align-items: center;
@@ -295,8 +297,8 @@
   background: transparent;
   border: none;
   cursor: pointer;
-  width: 28px;
-  height: 28px;
+  width: 36px;
+  height: 36px;
   display: flex;
   align-items: center;
   justify-content: center;
