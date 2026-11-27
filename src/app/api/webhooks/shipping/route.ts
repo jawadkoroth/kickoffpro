@@ -70,8 +70,8 @@ async function getLegacyProviderConfig(
     webhook_secret: data.webhook_secret ?? null,
     token: null,
     token_expires_at: null,
-    auth_email: null,
-    auth_password_encrypted: null,
+    auth_email: data.auth_email ?? null,
+    auth_password_encrypted: data.auth_password ?? null,
     pickup_name: data.pickup_name ?? null,
     pickup_phone: data.pickup_phone ?? null,
     pickup_gstin: null,
@@ -86,17 +86,56 @@ async function getLegacyProviderConfig(
   };
 }
 
+function detectProviderName(req: NextRequest, rawBody: string): string | null {
+  const url = new URL(req.url);
+  const explicit =
+    url.searchParams.get('provider') ??
+    headerStr(req.headers, 'x-provider');
+  if (explicit) return explicit;
+
+  // Shiprocket blocks URLs containing "shiprocket", "kartrocket", "sr", or "kr"
+  const courierAlias = url.searchParams.get('courier')?.toLowerCase();
+  if (courierAlias === 'rocket' || courierAlias === '2') return 'shiprocket';
+  if (courierAlias === 'delhivery' || courierAlias === '1') return 'delhivery';
+
+  if (req.headers.has('x-shiprocket-signature')) return 'shiprocket';
+
+  try {
+    const parsed = JSON.parse(rawBody) as Record<string, unknown>;
+    if (parsed && typeof parsed === 'object') {
+      if ('Shipment' in parsed) return 'delhivery';
+      if (
+        'awb' in parsed ||
+        'current_status' in parsed ||
+        'current_status_id' in parsed ||
+        'shipment_status' in parsed ||
+        'courier_name' in parsed
+      ) {
+        return 'shiprocket';
+      }
+    }
+  } catch {
+    // Non-JSON body; fall back to DB active provider below
+  }
+  return null;
+}
+
 /* ─── POST handler ────────────────────────────────────────────────── */
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const rawBody = await req.text();
-  const url = new URL(req.url);
-  const providerName =
-    url.searchParams.get('provider') ??
-    headerStr(req.headers, 'x-provider') ??
-    'delhivery';
-
   const supabase = createAdminClient();
+
+  const detected = detectProviderName(req, rawBody);
+  let providerName: string = detected ?? '';
+  if (!providerName) {
+    const { data: settings } = await supabase
+      .from('shipping_settings')
+      .select('provider_name')
+      .limit(1)
+      .maybeSingle();
+    providerName = settings?.provider_name || 'delhivery';
+  }
 
   const headersRecord: Record<string, string | string[] | undefined> = {};
   req.headers.forEach((value, key) => { headersRecord[key] = value; });

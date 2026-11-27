@@ -494,7 +494,7 @@ function ProviderCard({
                 <div style={{ padding: '12px 14px', background: 'var(--bg-input)', borderRadius: 6, border: '1px solid var(--border-color)', fontSize: '0.75rem', color: 'var(--text-secondary)', lineHeight: 1.55 }}>
                   <div style={{ fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>Shiprocket Setup Notes</div>
                   <div>1. Create an API user in <strong>Shiprocket → Settings → API → Add New API User</strong> (dedicated API credentials, not your 2FA login).</div>
-                  <div style={{ marginTop: 4 }}>2. Webhook URL for live tracking updates: <code style={{ fontSize: '0.7rem', padding: '2px 6px', background: 'var(--bg-secondary)', borderRadius: 4 }}>https://kickoffpro.in/api/webhooks/shipping?provider=shiprocket</code></div>
+                  <div style={{ marginTop: 4 }}>2. Webhook URL for live tracking updates: <code style={{ fontSize: '0.7rem', padding: '2px 6px', background: 'var(--bg-secondary)', borderRadius: 4 }}>https://kickoffpro.in/api/webhooks/shipping?courier=rocket</code> (Shiprocket blocks URLs containing &quot;shiprocket&quot;, &quot;sr&quot;, or &quot;kr&quot;).</div>
                 </div>
               )}
             </div>
