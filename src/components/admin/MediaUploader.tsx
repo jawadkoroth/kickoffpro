@@ -13,6 +13,8 @@ interface MediaUploaderProps {
   value: string[];
   /** Called whenever the image list changes. */
   onChange: (urls: string[]) => void;
+  /** Optional hook called immediately with selected File objects (before upload finishes). */
+  onFilesSelected?: (files: File[]) => void;
   /** Storage subfolder for new uploads (default: 'misc'). */
   folder?: string;
   /** Maximum number of images allowed (default: 10). */
@@ -43,6 +45,7 @@ function isExternalUrl(path: string): boolean {
 export default function MediaUploader({
   value,
   onChange,
+  onFilesSelected,
   folder = 'misc',
   maxFiles = 10,
 }: MediaUploaderProps) {
@@ -87,6 +90,10 @@ export default function MediaUploader({
       if (fileArray.length === 0) {
         if (isMaxed) setError(`Maximum ${maxFiles} images allowed`);
         return;
+      }
+
+      if (onFilesSelected) {
+        onFilesSelected(fileArray);
       }
 
       // Create preview entries for immediate visual feedback
@@ -158,7 +165,7 @@ export default function MediaUploader({
         setError(errors.join('; '));
       }
     },
-    [value, onChange, folder, remaining, isMaxed, maxFiles],
+    [value, onChange, onFilesSelected, folder, remaining, isMaxed, maxFiles],
   );
 
   /* ---------------------------------------------------------------- */

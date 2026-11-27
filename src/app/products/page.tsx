@@ -12,6 +12,7 @@ import {
   getVarietiesForCategory,
   resolveCategoryLabel,
 } from '@/lib/catalog/categories';
+import { buildStyleGroupDotMap } from '@/lib/catalog/colorSwatches';
 import styles from './page.module.css';
 import DatabaseErrorPanel from '@/components/DatabaseErrorPanel';
 import { handleSupabaseQueryResult } from '@/lib/supabase/query-helper';
@@ -47,6 +48,10 @@ interface ProductRow {
   variety?: string | null;
   homepage_feature_image: string | null;
   homepage_feature_enabled: boolean;
+  style_group?: string | null;
+  color_name?: string | null;
+  color_hex?: string | null;
+  color_secondary_hex?: string | null;
 }
 
 interface InventoryRow {
@@ -83,7 +88,7 @@ export default async function ProductsPage({
   let productsQuery = supabase
     .from('products')
     .select(
-      'id, slug, name, price_paise, sale_price_paise, images, is_active, created_at, category, variety, homepage_feature_image, homepage_feature_enabled',
+      'id, slug, name, price_paise, sale_price_paise, images, is_active, created_at, category, variety, homepage_feature_image, homepage_feature_enabled, style_group, color_name, color_hex, color_secondary_hex',
     )
     .eq('is_active', true);
 
@@ -135,21 +140,40 @@ export default async function ProductsPage({
   }
 
   const ids = products.map((p) => p.id);
+  const styleGroups = Array.from(
+    new Set(products.map((p) => p.style_group?.trim()).filter((g): g is string => Boolean(g))),
+  );
   const stockByProduct = new Map<string, number>();
 
-  if (ids.length > 0) {
-    const { data: inventoryRows } = await supabase
-      .from('inventory')
-      .select('product_id, stock')
-      .in('product_id', ids);
+  const [invRes, siblingDotsRes] = await Promise.all([
+    ids.length > 0
+      ? supabase.from('inventory').select('product_id, stock').in('product_id', ids)
+      : Promise.resolve({ data: [] as InventoryRow[] }),
+    styleGroups.length > 0
+      ? supabase
+          .from('products')
+          .select('slug, style_group, color_name, color_hex, color_secondary_hex')
+          .eq('is_active', true)
+          .in('style_group', styleGroups)
+      : Promise.resolve({ data: [] as Array<Record<string, unknown>> }),
+  ]);
 
-    for (const row of (inventoryRows ?? []) as InventoryRow[]) {
-      stockByProduct.set(
-        row.product_id,
-        (stockByProduct.get(row.product_id) ?? 0) + (row.stock ?? 0),
-      );
-    }
+  for (const row of (invRes.data ?? []) as InventoryRow[]) {
+    stockByProduct.set(
+      row.product_id,
+      (stockByProduct.get(row.product_id) ?? 0) + (row.stock ?? 0),
+    );
   }
+
+  const styleGroupDots = buildStyleGroupDotMap(
+    (siblingDotsRes.data ?? []) as Array<{
+      slug: string;
+      style_group?: string | null;
+      color_name?: string | null;
+      color_hex?: string | null;
+      color_secondary_hex?: string | null;
+    }>,
+  );
 
   const cards: ProductCardData[] = products.map((p) => ({
     id: p.id,
@@ -163,6 +187,11 @@ export default async function ProductsPage({
     variety: p.variety ?? null,
     homepage_feature_image: p.homepage_feature_image,
     homepage_feature_enabled: p.homepage_feature_enabled,
+    style_group: p.style_group ?? null,
+    color_name: p.color_name ?? null,
+    color_hex: p.color_hex ?? null,
+    color_secondary_hex: p.color_secondary_hex ?? null,
+    color_swatches: p.style_group ? styleGroupDots.get(p.style_group.trim()) : undefined,
   }));
 
   const collectionUrl = canonicalUrl('/products');

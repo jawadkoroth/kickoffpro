@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import useEmblaCarousel from 'embla-carousel-react';
 import { useCart } from '@/lib/cart';
@@ -10,6 +11,7 @@ import { formatPaise } from '@/lib/format';
 import { getPublicUrl } from '@/lib/media';
 import { trackViewContent, trackAddToCart } from '@/lib/tracking/client';
 import type { QualityHighlightRow } from '@/lib/catalog/qualityTemplates';
+import { getSwatchBackground, type ColorSwatchItem } from '@/lib/catalog/colorSwatches';
 import { Truck, ShieldCheck, RefreshCw, ShoppingCart, Check, Tag } from 'lucide-react';
 import styles from './page.module.css';
 
@@ -30,6 +32,10 @@ export interface ProductDetail {
   fit?: string | null;
   model_info?: string | null;
   quality_highlights?: QualityHighlightRow[];
+  style_group?: string | null;
+  color_name?: string | null;
+  color_hex?: string | null;
+  color_secondary_hex?: string | null;
 }
 
 export interface InventoryItem {
@@ -65,11 +71,13 @@ export default function ProductDetailClient({
   inventory,
   totalStock,
   bestOffer = null,
+  colorSiblings = [],
 }: {
   product: ProductDetail;
   inventory: InventoryItem[];
   totalStock: number;
   bestOffer?: PdpBestOffer | null;
+  colorSiblings?: ColorSwatchItem[];
 }) {
   const router = useRouter();
   const { addItem, applyCoupon, appliedCoupon } = useCart();
@@ -482,6 +490,47 @@ export default function ProductDetailClient({
             {fabricSpecs.length > 0 && (
               <div className={styles.specStrip}>
                 {fabricSpecs.join('  •  ')}
+              </div>
+            )}
+
+            {/* Colorway Switcher (shown when product has color_hex & sibling colorways exist) */}
+            {product.color_hex && colorSiblings.length >= 2 && (
+              <div className={styles.section}>
+                <div className={styles.colorHeader}>
+                  <span className="input-label" style={{ margin: 0 }}>Color:</span>
+                  <span className={styles.colorNameValue}>
+                    {product.color_name || 'Selected Colorway'}
+                  </span>
+                </div>
+                <div className={styles.colorSwatchRow} role="list" aria-label="Available colorways">
+                  {colorSiblings.map((swatch) => {
+                    const isCurrent = swatch.id === product.id;
+                    const label = swatch.color_name || swatch.name;
+                    return (
+                      <Link
+                        key={swatch.id}
+                        href={`/product/${swatch.slug}`}
+                        role="listitem"
+                        title={swatch.in_stock ? label : `${label} (Out of stock)`}
+                        aria-label={swatch.in_stock ? label : `${label}, out of stock`}
+                        aria-current={isCurrent ? 'true' : undefined}
+                        className={[
+                          styles.colorSwatch,
+                          isCurrent ? styles.colorSwatchActive : '',
+                          !swatch.in_stock ? styles.colorSwatchOos : '',
+                        ]
+                          .filter(Boolean)
+                          .join(' ')}
+                        style={{
+                          background: getSwatchBackground(
+                            swatch.color_hex,
+                            swatch.color_secondary_hex,
+                          ),
+                        }}
+                      />
+                    );
+                  })}
+                </div>
               </div>
             )}
 

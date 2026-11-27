@@ -1,13 +1,16 @@
 'use client';
 
-import { useState, useEffect, use } from 'react';
+import { useState, useEffect, useRef, use } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import MediaUploader from '@/components/admin/MediaUploader';
+import ColorGroupCard from '@/components/admin/ColorGroupCard';
 import ProductVideoManager from '@/components/admin/ProductVideoManager';
 import QualityHighlightsEditor from '@/components/admin/QualityHighlightsEditor';
 import { normalizeSlug, getUniqueSlug } from '@/lib/slug';
 import { normalizeQualityHighlights, type QualityHighlightRow } from '@/lib/catalog/qualityTemplates';
+import { extractProductColors } from '@/lib/catalog/extractProductColors';
+import { normalizeHexColor, normalizeStyleGroup } from '@/lib/catalog/colorSwatches';
 import {
   APPAREL_CATEGORIES,
   DEFAULT_CATEGORY_ID,
@@ -68,6 +71,11 @@ export default function AdminEditProduct({ params }: { params: Promise<{ id: str
   const [qualityHighlights, setQualityHighlights] = useState<QualityHighlightRow[]>([]);
   const [homepageFeatureImage, setHomepageFeatureImage] = useState('');
   const [homepageFeatureEnabled, setHomepageFeatureEnabled] = useState(false);
+  const [styleGroup, setStyleGroup] = useState('');
+  const [colorName, setColorName] = useState('');
+  const [colorHex, setColorHex] = useState('');
+  const [colorSecondaryHex, setColorSecondaryHex] = useState('');
+  const colorsManuallyEditedRef = useRef(false);
 
   useEffect(() => {
     async function load() {
@@ -107,6 +115,11 @@ export default function AdminEditProduct({ params }: { params: Promise<{ id: str
       setQualityHighlights(normalizeQualityHighlights(p.quality_highlights));
       setHomepageFeatureImage(p.homepage_feature_image || '');
       setHomepageFeatureEnabled(Boolean(p.homepage_feature_enabled));
+      setStyleGroup(p.style_group || '');
+      setColorName(p.color_name || '');
+      setColorHex(p.color_hex || '');
+      setColorSecondaryHex(p.color_secondary_hex || '');
+      colorsManuallyEditedRef.current = Boolean(p.color_hex);
 
       const { data: inv } = await supabase
         .from('inventory')
@@ -202,6 +215,10 @@ export default function AdminEditProduct({ params }: { params: Promise<{ id: str
         is_active: isActive,
         homepage_feature_image: homepageFeatureImage || null,
         homepage_feature_enabled: homepageFeatureEnabled,
+        style_group: normalizeStyleGroup(styleGroup) || null,
+        color_name: colorName.trim() || null,
+        color_hex: normalizeHexColor(colorHex),
+        color_secondary_hex: normalizeHexColor(colorSecondaryHex),
       })
       .eq('id', id);
 
@@ -542,8 +559,42 @@ export default function AdminEditProduct({ params }: { params: Promise<{ id: str
           <label className="input-label" style={{ marginBottom: 'var(--space-3)' }}>
             Product Images
           </label>
-          <MediaUploader value={images} onChange={setImages} folder="products" />
+          <MediaUploader
+            value={images}
+            onChange={setImages}
+            folder="products"
+            onFilesSelected={(files) => {
+              if (images.length === 0 && !colorsManuallyEditedRef.current && files[0]) {
+                extractProductColors(files[0])
+                  .then((res) => {
+                    if (!res || colorsManuallyEditedRef.current) return;
+                    setColorHex(res.primaryHex);
+                    setColorSecondaryHex(res.secondaryHex ?? '');
+                  })
+                  .catch(() => {});
+              }
+            }}
+          />
         </div>
+
+        <ColorGroupCard
+          category={category}
+          variety={variety === '__custom__' ? customVariety : variety}
+          styleGroup={styleGroup}
+          colorName={colorName}
+          colorHex={colorHex}
+          colorSecondaryHex={colorSecondaryHex}
+          primaryImagePath={images[0]}
+          onManualColorEdit={() => {
+            colorsManuallyEditedRef.current = true;
+          }}
+          onChange={(patch) => {
+            if (patch.styleGroup !== undefined) setStyleGroup(patch.styleGroup);
+            if (patch.colorName !== undefined) setColorName(patch.colorName);
+            if (patch.colorHex !== undefined) setColorHex(patch.colorHex);
+            if (patch.colorSecondaryHex !== undefined) setColorSecondaryHex(patch.colorSecondaryHex);
+          }}
+        />
 
         <div className="card" style={{ marginBottom: 'var(--space-4)' }}>
           <label className="input-label" style={{ marginBottom: 'var(--space-3)' }}>

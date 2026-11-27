@@ -5,6 +5,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { normalizeSlug } from '@/lib/slug';
 import { normalizeVideoList } from '@/lib/catalog/categories';
 import { normalizeQualityHighlights } from '@/lib/catalog/qualityTemplates';
+import { normalizeHexColor, type ColorSwatchItem } from '@/lib/catalog/colorSwatches';
 import ProductDetailClient, {
   type ProductDetail,
   type InventoryItem,
@@ -34,6 +35,10 @@ interface ProductRow {
   fit?: string | null;
   model_info?: string | null;
   quality_highlights?: unknown;
+  style_group?: string | null;
+  color_name?: string | null;
+  color_hex?: string | null;
+  color_secondary_hex?: string | null;
 }
 
 interface InventoryRow {
@@ -162,7 +167,7 @@ export default async function ProductDetailPage({
   }
 
   const nowIso = new Date().toISOString();
-  const [invRes, couponsRes, settingsRes] = await Promise.all([
+  const [invRes, couponsRes, settingsRes, siblingsRes] = await Promise.all([
     supabase
       .from('inventory')
       .select('size, stock, low_stock_alert')
@@ -180,6 +185,14 @@ export default async function ProductDetailPage({
       )
       .limit(1)
       .maybeSingle(),
+    productRow.style_group
+      ? supabase
+          .from('products')
+          .select('id, slug, name, color_name, color_hex, color_secondary_hex, images')
+          .eq('style_group', productRow.style_group)
+          .eq('is_active', true)
+          .order('created_at', { ascending: true })
+      : Promise.resolve({ data: [] as Array<Record<string, unknown>> }),
   ]);
 
   const inventoryRows = invRes.data;
@@ -189,6 +202,43 @@ export default async function ProductDetailPage({
     low_stock_alert: Boolean(r.low_stock_alert),
   }));
   const totalStock = inventory.reduce((sum, row) => sum + (row.stock ?? 0), 0);
+
+  // Build sibling colorways for the Color Switcher when style_group has 2+ colored items
+  const rawSiblings = (siblingsRes.data ?? []) as Array<{
+    id: string;
+    slug: string;
+    name: string;
+    color_name?: string | null;
+    color_hex?: string | null;
+    color_secondary_hex?: string | null;
+    images?: unknown;
+  }>;
+  let colorSiblings: ColorSwatchItem[] = [];
+  if (rawSiblings.length >= 2) {
+    const siblingIds = rawSiblings.map((s) => s.id);
+    const { data: siblingInvRows } = await supabase
+      .from('inventory')
+      .select('product_id, stock')
+      .in('product_id', siblingIds);
+
+    const siblingStockMap = new Map<string, number>();
+    for (const row of (siblingInvRows ?? []) as Array<{ product_id: string; stock: number }>) {
+      siblingStockMap.set(row.product_id, (siblingStockMap.get(row.product_id) ?? 0) + (row.stock ?? 0));
+    }
+
+    colorSiblings = rawSiblings
+      .filter((s) => Boolean(normalizeHexColor(s.color_hex)))
+      .map((s) => ({
+        id: s.id,
+        slug: s.slug,
+        name: s.name,
+        color_name: s.color_name ?? null,
+        color_hex: normalizeHexColor(s.color_hex),
+        color_secondary_hex: normalizeHexColor(s.color_secondary_hex),
+        primary_image: firstImageOrNull(s.images),
+        in_stock: (siblingStockMap.get(s.id) ?? 0) > 0,
+      }));
+  }
 
   const unitPrice = productRow.sale_price_paise ?? productRow.price_paise;
   const activeCoupons = ((couponsRes.data ?? []) as Array<{
@@ -340,6 +390,10 @@ export default async function ProductDetailPage({
     fit: productRow.fit ?? null,
     model_info: productRow.model_info ?? null,
     quality_highlights: normalizeQualityHighlights(productRow.quality_highlights),
+    style_group: productRow.style_group ?? null,
+    color_name: productRow.color_name ?? null,
+    color_hex: normalizeHexColor(productRow.color_hex),
+    color_secondary_hex: normalizeHexColor(productRow.color_secondary_hex),
   };
 
   const productUrl = canonicalUrl(`/product/${slug}`);
@@ -383,6 +437,7 @@ export default async function ProductDetailPage({
         inventory={inventory}
         totalStock={totalStock}
         bestOffer={bestOffer}
+        colorSiblings={colorSiblings}
       />
     </>
   );

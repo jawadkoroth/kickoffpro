@@ -138,6 +138,42 @@
   text-decoration: line-through;
 }
 
+.colorDotsRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.colorDot {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.55);
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+:global([data-theme='dark']) .colorDot {
+  border-color: rgba(255, 255, 255, 0.25);
+  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.45);
+}
+
+.colorDotActive {
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.75),
+    0 0 0 1.5px var(--bg-primary),
+    0 0 0 2.5px var(--text-primary);
+}
+
+.colorDotMore {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  margin-left: 2px;
+}
+
 /* ---------- Quick actions ---------- */
 .actionsContainer {
   padding: 0 var(--space-4) var(--space-4);

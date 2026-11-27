@@ -4,6 +4,7 @@ import { JsonLd } from '@/components/seo/JsonLd';
 import { organizationLd, webSiteLd } from '@/lib/seo/jsonLd';
 import { BRAND, SITE_URL } from '@/lib/seo/site';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
+import { buildStyleGroupDotMap } from '@/lib/catalog/colorSwatches';
 import DatabaseErrorPanel from '@/components/DatabaseErrorPanel';
 import { handleSupabaseQueryResult, QueryResultError } from '@/lib/supabase/query-helper';
 
@@ -34,6 +35,10 @@ interface Product {
   variety?: string | null;
   homepage_feature_image: string | null;
   homepage_feature_enabled: boolean;
+  style_group?: string | null;
+  color_name?: string | null;
+  color_hex?: string | null;
+  color_secondary_hex?: string | null;
 }
 
 export const revalidate = 60; // Revalidate every minute
@@ -46,7 +51,7 @@ export default async function LandingPage() {
     const supabase = await createServerSupabaseClient();
     const response = await supabase
       .from('products')
-      .select('id, slug, name, price_paise, sale_price_paise, images, is_active, created_at, category, variety, homepage_feature_image, homepage_feature_enabled')
+      .select('id, slug, name, price_paise, sale_price_paise, images, is_active, created_at, category, variety, homepage_feature_image, homepage_feature_enabled, style_group, color_name, color_hex, color_secondary_hex')
       .eq('is_active', true)
       .order('created_at', { ascending: false })
       .limit(100);
@@ -72,6 +77,8 @@ export default async function LandingPage() {
     return <DatabaseErrorPanel error={dbError} title="Failed to load homepage products" />;
   }
 
+  const styleGroupDots = buildStyleGroupDotMap(products);
+
   // Parse images helper
   const parsedProducts = products.map(p => ({
     id: p.id,
@@ -85,7 +92,12 @@ export default async function LandingPage() {
     created_at: p.created_at,
     totalStock: 10, // Mock total stock for UI since we don't query variants table here
     homepage_feature_image: p.homepage_feature_image || null,
-    homepage_feature_enabled: p.homepage_feature_enabled || false
+    homepage_feature_enabled: p.homepage_feature_enabled || false,
+    style_group: p.style_group ?? null,
+    color_name: p.color_name ?? null,
+    color_hex: p.color_hex ?? null,
+    color_secondary_hex: p.color_secondary_hex ?? null,
+    color_swatches: p.style_group ? styleGroupDots.get(p.style_group.trim()) : undefined,
   }));
 
   return (

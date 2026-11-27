@@ -6,6 +6,7 @@ import { formatPaise } from '@/lib/format';
 import { getPublicUrl } from '@/lib/media';
 import { useCart } from '@/lib/cart';
 import { trackAddToCart } from '@/lib/tracking/client';
+import { getSwatchBackground, type CompactColorDot } from '@/lib/catalog/colorSwatches';
 import styles from './ProductCard.module.css';
 
 export interface ProductCardData {
@@ -22,6 +23,11 @@ export interface ProductCardData {
   created_at?: string;
   homepage_feature_image?: string | null;
   homepage_feature_enabled?: boolean;
+  style_group?: string | null;
+  color_name?: string | null;
+  color_hex?: string | null;
+  color_secondary_hex?: string | null;
+  color_swatches?: CompactColorDot[];
 }
 
 export default function ProductCard({ product }: { product: ProductCardData }) {
@@ -131,6 +137,29 @@ export default function ProductCard({ product }: { product: ProductCardData }) {
               <span className={styles.price}>{formatPaise(originalPrice)}</span>
             )}
           </div>
+
+          {product.color_swatches && product.color_swatches.length >= 2 && (
+            <div
+              className={styles.colorDotsRow}
+              aria-label={`${product.color_swatches.length} colors available`}
+            >
+              {product.color_swatches.slice(0, 5).map((dot) => (
+                <span
+                  key={dot.slug}
+                  title={dot.color_name || undefined}
+                  className={`${styles.colorDot} ${dot.slug === product.slug ? styles.colorDotActive : ''}`}
+                  style={{
+                    background: getSwatchBackground(dot.color_hex, dot.color_secondary_hex),
+                  }}
+                />
+              ))}
+              {product.color_swatches.length > 5 && (
+                <span className={styles.colorDotMore}>
+                  +{product.color_swatches.length - 5}
+                </span>
+              )}
+            </div>
+          )}
         </div>
       </Link>
 
