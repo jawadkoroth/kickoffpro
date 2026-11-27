@@ -100,6 +100,25 @@ export async function POST(_req: NextRequest): Promise<NextResponse> {
     const result = await provider.testConnection();
     const latency = Date.now() - t0;
 
+    // Persist refreshed token if provider refreshed auth (e.g. Shiprocket)
+    const maybeRefreshed = (provider as { getRefreshedAuth?: () => { token: string; expires_at: string } | null })
+      .getRefreshedAuth?.();
+    if (maybeRefreshed && !isLegacy) {
+      const adminSb = createAdminClient();
+      await adminSb
+        .from('shipping_providers')
+        .update({
+          token: maybeRefreshed.token,
+          token_expires_at: maybeRefreshed.expires_at,
+          last_auth_ok: true,
+          last_auth_at: new Date().toISOString(),
+          last_test_at: new Date().toISOString(),
+          last_test_ok: result.success,
+          last_test_error: result.errors[0] ?? null,
+        })
+        .eq('is_active', true);
+    }
+
     logEvent('shipping.test.completed', {
       provider: result.provider,
       success: result.success,

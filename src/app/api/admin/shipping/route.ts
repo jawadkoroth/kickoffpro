@@ -75,6 +75,7 @@ const READ_COLUMNS = [
   'provider_enabled',
   'provider_name',
   'api_url',
+  'auth_email',
   'pickup_name',
   'pickup_phone',
   'pickup_address_line1',
@@ -115,7 +116,7 @@ export async function GET() {
   // 1. Try service role client
   const res1 = await auth.supabase
     .from('shipping_settings')
-    .select(`${READ_COLUMNS}, api_key` as '*')
+    .select(`${READ_COLUMNS}, api_key, auth_password, webhook_secret` as '*')
     .limit(1)
     .maybeSingle();
 
@@ -126,7 +127,7 @@ export async function GET() {
   if (error || !data) {
     const res2 = await auth.serverSupabase
       .from('shipping_settings')
-      .select(`${READ_COLUMNS}, api_key` as '*')
+      .select(`${READ_COLUMNS}, api_key, auth_password, webhook_secret` as '*')
       .limit(1)
       .maybeSingle();
     if (res2.data) {
@@ -166,9 +167,9 @@ export async function GET() {
     return apiError(500, `Failed to load shipping settings: ${error.message}`);
   }
 
-  // Strip the raw key before responding; only tell the client
-  // whether one is currently set.
-  const { api_key, ...rest } = (data ?? {}) as Record<string, unknown>;
+  // Strip raw secrets before responding; only tell the client
+  // whether each credential is currently set.
+  const { api_key, auth_password, webhook_secret, ...rest } = (data ?? {}) as Record<string, unknown>;
   const res = apiSuccess({
     settings: {
       free_shipping_threshold_paise: 99900,
@@ -192,6 +193,8 @@ export async function GET() {
       get_y_quantity: 1,
       ...rest,
       api_key_set: typeof api_key === 'string' && api_key.trim().length > 0,
+      auth_password_set: typeof auth_password === 'string' && auth_password.trim().length > 0,
+      webhook_secret_set: typeof webhook_secret === 'string' && webhook_secret.trim().length > 0,
     },
   });
   res.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
@@ -207,6 +210,9 @@ interface PatchBody {
   provider_name?: string;
   api_url?: string;
   api_key?: string; // empty string / undefined = keep existing
+  auth_email?: string;
+  auth_password?: string; // empty string / undefined = keep existing
+  webhook_secret?: string; // empty string / undefined = keep existing
   pickup_name?: string;
   pickup_phone?: string;
   pickup_address_line1?: string;
@@ -255,9 +261,18 @@ export async function PATCH(req: NextRequest) {
   if (typeof body.api_url === 'string')
     update.api_url = toStringOrNull(body.api_url);
 
-  // api_key: only overwrite when a non-empty string is provided.
+  // api_key / auth_password / webhook_secret: only overwrite when a non-empty string is provided.
   if (typeof body.api_key === 'string' && body.api_key.trim().length > 0) {
     update.api_key = body.api_key.trim();
+  }
+  if (typeof body.auth_email === 'string') {
+    update.auth_email = toStringOrNull(body.auth_email);
+  }
+  if (typeof body.auth_password === 'string' && body.auth_password.trim().length > 0) {
+    update.auth_password = body.auth_password.trim();
+  }
+  if (typeof body.webhook_secret === 'string' && body.webhook_secret.trim().length > 0) {
+    update.webhook_secret = body.webhook_secret.trim();
   }
 
   if (typeof body.pickup_name === 'string')
@@ -447,7 +462,9 @@ export async function PATCH(req: NextRequest) {
       const providerUpdate: Record<string, any> = {
         name: providerName,
         is_active: finalSettings.provider_enabled ?? false,
+        environment: 'live',
         api_url: finalSettings.api_url ?? null,
+        auth_email: finalSettings.auth_email ?? null,
         pickup_name: finalSettings.pickup_name ?? null,
         pickup_phone: finalSettings.pickup_phone ?? null,
         pickup_line1: finalSettings.pickup_address_line1 ?? null,
@@ -459,6 +476,17 @@ export async function PATCH(req: NextRequest) {
       };
       if (finalSettings.api_key) {
         providerUpdate.api_key = finalSettings.api_key;
+      }
+      if (finalSettings.auth_password) {
+        providerUpdate.auth_password_encrypted = finalSettings.auth_password;
+      }
+      if (finalSettings.webhook_secret) {
+        providerUpdate.webhook_secret = finalSettings.webhook_secret;
+      }
+      // If Shiprocket auth credentials changed, clear cached JWT so next call logs in cleanly
+      if (providerName === 'shiprocket' && (body.auth_email !== undefined || body.auth_password)) {
+        providerUpdate.token = null;
+        providerUpdate.token_expires_at = null;
       }
 
       const { data: upsertedProvider } = await (auth.supabase || auth.serverSupabase)

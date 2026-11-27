@@ -145,6 +145,21 @@ export async function createShipmentForOrder(
   const providerResponse = await provider.createShipment(input.req);
   const latencyMs = Date.now() - t0;
 
+  // Persist refreshed JWT token (e.g. Shiprocket 24h token) back to shipping_providers
+  const maybeRefreshed = (provider as { getRefreshedAuth?: () => { token: string; expires_at: string } | null })
+    .getRefreshedAuth?.();
+  if (maybeRefreshed) {
+    await supabase
+      .from('shipping_providers')
+      .update({
+        token: maybeRefreshed.token,
+        token_expires_at: maybeRefreshed.expires_at,
+        last_auth_ok: true,
+        last_auth_at: new Date().toISOString(),
+      })
+      .eq('id', config.id);
+  }
+
   // Add latency to response for storage
   const providerResponseWithLatency = { ...providerResponse, latency_ms: latencyMs };
 

@@ -12,6 +12,9 @@ interface SettingsState {
   provider_name: string;
   api_url: string;
   api_key_set: boolean;
+  auth_email: string;
+  auth_password_set: boolean;
+  webhook_secret_set: boolean;
   pickup_name: string;
   pickup_phone: string;
   pickup_address_line1: string;
@@ -51,6 +54,9 @@ const EMPTY: SettingsState = {
   provider_name: 'delhivery',
   api_url: '',
   api_key_set: false,
+  auth_email: '',
+  auth_password_set: false,
+  webhook_secret_set: false,
   pickup_name: '',
   pickup_phone: '',
   pickup_address_line1: '',
@@ -248,7 +254,11 @@ interface TestResult {
 }
 
 function ProviderCard({
-  providerKey, state, isExpanded, onExpand, onStateChange, errors, newApiKey, onApiKeyChange, onSave, saving,
+  providerKey, state, isExpanded, onExpand, onStateChange, errors,
+  newApiKey, onApiKeyChange,
+  newAuthPassword, onAuthPasswordChange,
+  newWebhookSecret, onWebhookSecretChange,
+  onSave, saving,
 }: {
   providerKey: string;
   state: SettingsState;
@@ -258,6 +268,10 @@ function ProviderCard({
   errors: Record<string, string>;
   newApiKey: string;
   onApiKeyChange: (v: string) => void;
+  newAuthPassword: string;
+  onAuthPasswordChange: (v: string) => void;
+  newWebhookSecret: string;
+  onWebhookSecretChange: (v: string) => void;
   onSave: () => void;
   saving: boolean;
 }) {
@@ -266,8 +280,11 @@ function ProviderCard({
   const { showToast } = useToast();
 
   const meta = PROVIDER_META[providerKey] ?? PROVIDER_META.delhivery;
+  const isShiprocket = providerKey === 'shiprocket';
   const isActive = state.provider_name === providerKey && state.provider_enabled;
-  const hasKey = state.api_key_set;
+  const isConfigured = isShiprocket
+    ? Boolean(state.auth_email.trim()) && state.auth_password_set
+    : state.api_key_set;
   const pickup = pickupOneliner(state);
 
   const handleTestConnection = async () => {
@@ -312,11 +329,11 @@ function ProviderCard({
                 {meta.label}
               </span>
               {isActive && <Pill label="ACTIVE" tone="active" />}
-              <Pill label={hasKey && state.provider_name === providerKey ? 'LIVE' : 'SANDBOX'} tone={hasKey && state.provider_name === providerKey ? 'active' : 'muted'} />
+              <Pill label={isConfigured && state.provider_name === providerKey ? 'LIVE' : 'SANDBOX'} tone={isConfigured && state.provider_name === providerKey ? 'active' : 'muted'} />
             </div>
             <div style={{ marginTop: 4, fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <span style={{ color: hasKey && state.provider_name === providerKey ? 'var(--success)' : 'var(--text-muted)' }}>
-                {hasKey && state.provider_name === providerKey ? 'Connected' : 'Not configured'}
+              <span style={{ color: isConfigured && state.provider_name === providerKey ? 'var(--success)' : 'var(--text-muted)' }}>
+                {isConfigured && state.provider_name === providerKey ? 'Connected' : 'Not configured'}
               </span>
               {pickup !== 'No pickup address' && state.provider_name === providerKey && (
                 <>
@@ -340,9 +357,9 @@ function ProviderCard({
             {/* Operational status bar */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 10, marginBottom: 22 }}>
               {[
-                { label: 'API', value: hasKey && state.provider_name === providerKey ? 'Connected' : 'Not set', ok: hasKey && state.provider_name === providerKey },
-                { label: 'Environment', value: hasKey && state.provider_name === providerKey ? 'Live' : 'Sandbox', ok: hasKey && state.provider_name === providerKey },
-                { label: 'Webhooks', value: 'Pending setup', ok: false },
+                { label: 'API', value: isConfigured && state.provider_name === providerKey ? 'Connected' : 'Not set', ok: isConfigured && state.provider_name === providerKey },
+                { label: 'Environment', value: isConfigured && state.provider_name === providerKey ? 'Live' : 'Sandbox', ok: isConfigured && state.provider_name === providerKey },
+                { label: 'Webhooks', value: state.webhook_secret_set ? 'Configured' : 'Optional', ok: state.webhook_secret_set ? true : null },
                 { label: 'Last shipment', value: '—', ok: null },
               ].map((item) => (
                 <div key={item.label} style={{ padding: '10px 12px', background: 'var(--bg-input)', borderRadius: 6, border: '1px solid var(--border-color)' }}>
@@ -357,7 +374,22 @@ function ProviderCard({
               title="Provider active"
               subtitle={isActive ? 'Shipments routed through this courier' : 'Enable to route shipments through this courier'}
               checked={isActive}
-              onChange={(v) => onStateChange({ provider_enabled: v, provider_name: v ? providerKey : state.provider_name })}
+              onChange={(v) => {
+                const patch: Partial<SettingsState> = {
+                  provider_enabled: v,
+                  provider_name: v ? providerKey : state.provider_name,
+                };
+                if (v) {
+                  const currentUrl = state.api_url.trim();
+                  const isOtherDefault = Object.entries(PROVIDER_META)
+                    .filter(([k]) => k !== providerKey)
+                    .some(([, m]) => currentUrl === m.defaultUrl);
+                  if (!currentUrl || isOtherDefault) {
+                    patch.api_url = meta.defaultUrl;
+                  }
+                }
+                onStateChange(patch);
+              }}
             />
 
             {/* Capabilities */}
@@ -379,32 +411,108 @@ function ProviderCard({
                   onChange={(e) => onStateChange({ api_url: e.target.value })}
                 />
               </Field>
-              <Field label="API Key" error={errors.api_key} hint={hasKey ? '(leave blank to keep existing)' : undefined}>
+
+              {isShiprocket ? (
+                <>
+                  <Field label="Shiprocket API Email" error={errors.auth_email}>
+                    <input
+                      className={`input-field${errors.auth_email ? ' input-error' : ''}`}
+                      type="email"
+                      placeholder="api-user@yourbrand.com"
+                      value={state.auth_email}
+                      onChange={(e) => onStateChange({ auth_email: e.target.value })}
+                      autoComplete="off"
+                    />
+                  </Field>
+                  <Field
+                    label="Shiprocket API Password"
+                    error={errors.auth_password}
+                    hint={state.auth_password_set ? '(leave blank to keep existing)' : undefined}
+                  >
+                    <div style={{ position: 'relative' }}>
+                      <input
+                        className={`input-field${errors.auth_password ? ' input-error' : ''}`}
+                        type="password"
+                        placeholder={state.auth_password_set ? '••••••••' : 'Enter API user password'}
+                        value={newAuthPassword}
+                        onChange={(e) => onAuthPasswordChange(e.target.value)}
+                        autoComplete="new-password"
+                        style={{ paddingRight: state.auth_password_set ? 70 : undefined }}
+                      />
+                      {state.auth_password_set && (
+                        <span style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', fontSize: '0.5625rem', fontWeight: 700, letterSpacing: '0.1em', color: 'var(--success)', pointerEvents: 'none' }}>
+                          SET ✓
+                        </span>
+                      )}
+                    </div>
+                  </Field>
+                </>
+              ) : (
+                <Field label="API Key" error={errors.api_key} hint={state.api_key_set ? '(leave blank to keep existing)' : undefined}>
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      className={`input-field${errors.api_key ? ' input-error' : ''}`}
+                      type="password"
+                      placeholder={state.api_key_set ? '••••••••' : 'Enter API key'}
+                      value={newApiKey}
+                      onChange={(e) => onApiKeyChange(e.target.value)}
+                      autoComplete="new-password"
+                      style={{ paddingRight: state.api_key_set ? 70 : undefined }}
+                    />
+                    {state.api_key_set && (
+                      <span style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', fontSize: '0.5625rem', fontWeight: 700, letterSpacing: '0.1em', color: 'var(--success)', pointerEvents: 'none' }}>
+                        SET ✓
+                      </span>
+                    )}
+                  </div>
+                </Field>
+              )}
+
+              <Field
+                label="Webhook Secret (Optional)"
+                hint={state.webhook_secret_set ? '(leave blank to keep existing)' : 'Used to verify incoming courier tracking webhooks'}
+              >
                 <div style={{ position: 'relative' }}>
                   <input
-                    className={`input-field${errors.api_key ? ' input-error' : ''}`}
+                    className="input-field"
                     type="password"
-                    placeholder={hasKey ? '••••••••' : 'Enter API key'}
-                    value={newApiKey}
-                    onChange={(e) => onApiKeyChange(e.target.value)}
+                    placeholder={state.webhook_secret_set ? '••••••••' : 'Optional webhook token / secret'}
+                    value={newWebhookSecret}
+                    onChange={(e) => onWebhookSecretChange(e.target.value)}
                     autoComplete="new-password"
-                    style={{ paddingRight: hasKey ? 70 : undefined }}
+                    style={{ paddingRight: state.webhook_secret_set ? 70 : undefined }}
                   />
-                  {hasKey && (
+                  {state.webhook_secret_set && (
                     <span style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', fontSize: '0.5625rem', fontWeight: 700, letterSpacing: '0.1em', color: 'var(--success)', pointerEvents: 'none' }}>
                       SET ✓
                     </span>
                   )}
                 </div>
               </Field>
+
+              {isShiprocket && (
+                <div style={{ padding: '12px 14px', background: 'var(--bg-input)', borderRadius: 6, border: '1px solid var(--border-color)', fontSize: '0.75rem', color: 'var(--text-secondary)', lineHeight: 1.55 }}>
+                  <div style={{ fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>Shiprocket Setup Notes</div>
+                  <div>1. Create an API user in <strong>Shiprocket → Settings → API → Add New API User</strong> (dedicated API credentials, not your 2FA login).</div>
+                  <div style={{ marginTop: 4 }}>2. Webhook URL for live tracking updates: <code style={{ fontSize: '0.7rem', padding: '2px 6px', background: 'var(--bg-secondary)', borderRadius: 4 }}>https://kickoffpro.in/api/webhooks/shipping?provider=shiprocket</code></div>
+                </div>
+              )}
             </div>
 
             {/* Pickup address */}
             <SectionRule label="Pickup Address" />
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div className="input-row">
-                <Field label="Pickup Facility Name (Delhivery Warehouse)" error={errors.pickup_name}>
-                  <input className={`input-field${errors.pickup_name ? ' input-error' : ''}`} placeholder="Exact Facility Name in Delhivery One (e.g. noir)" value={state.pickup_name} onChange={(e) => onStateChange({ pickup_name: e.target.value })} />
+                <Field
+                  label={isShiprocket ? 'Pickup Location Nickname (Shiprocket)' : 'Pickup Facility Name (Delhivery Warehouse)'}
+                  error={errors.pickup_name}
+                >
+                  <input
+                    className={`input-field${errors.pickup_name ? ' input-error' : ''}`}
+                    placeholder={isShiprocket ? 'Exact Pickup Nickname in Shiprocket (e.g. Primary)' : 'Exact Facility Name in Delhivery One (e.g. noir)'}
+                    value={state.pickup_name}
+                    onChange={(e) => onStateChange({ pickup_name: e.target.value })}
+                  />
                 </Field>
                 <Field label="Phone" error={errors.pickup_phone}>
                   <input className={`input-field${errors.pickup_phone ? ' input-error' : ''}`} placeholder="10-digit mobile" value={state.pickup_phone} onChange={(e) => onStateChange({ pickup_phone: e.target.value })} />
@@ -514,13 +622,21 @@ function ProviderCard({
    Tab content components
 ───────────────────────────────────────────────────────────────────── */
 function ProvidersTab({
-  state, onStateChange, errors, newApiKey, onApiKeyChange, onSave, saving,
+  state, onStateChange, errors,
+  newApiKey, onApiKeyChange,
+  newAuthPassword, onAuthPasswordChange,
+  newWebhookSecret, onWebhookSecretChange,
+  onSave, saving,
 }: {
   state: SettingsState;
   onStateChange: (patch: Partial<SettingsState>) => void;
   errors: Record<string, string>;
   newApiKey: string;
   onApiKeyChange: (v: string) => void;
+  newAuthPassword: string;
+  onAuthPasswordChange: (v: string) => void;
+  newWebhookSecret: string;
+  onWebhookSecretChange: (v: string) => void;
   onSave: () => void;
   saving: boolean;
 }) {
@@ -544,6 +660,10 @@ function ProvidersTab({
           errors={errors}
           newApiKey={newApiKey}
           onApiKeyChange={onApiKeyChange}
+          newAuthPassword={newAuthPassword}
+          onAuthPasswordChange={onAuthPasswordChange}
+          newWebhookSecret={newWebhookSecret}
+          onWebhookSecretChange={onWebhookSecretChange}
           onSave={onSave}
           saving={saving}
         />
@@ -1544,6 +1664,8 @@ export default function AdminShipping() {
   const [codFeeRs, setCodFeeRs] = useState('');
   const [promoThresholdRs, setPromoThresholdRs] = useState('');
   const [newApiKey, setNewApiKey] = useState('');
+  const [newAuthPassword, setNewAuthPassword] = useState('');
+  const [newWebhookSecret, setNewWebhookSecret] = useState('');
   const [storeProducts, setStoreProducts] = useState<Array<{ id: string; name: string; price_paise: number }>>([]);
 
   useEffect(() => {
@@ -1593,6 +1715,9 @@ export default function AdminShipping() {
         ...raw,
         provider_name: raw.provider_name ?? EMPTY.provider_name,
         api_url: raw.api_url ?? '',
+        auth_email: raw.auth_email ?? '',
+        auth_password_set: Boolean(raw.auth_password_set),
+        webhook_secret_set: Boolean(raw.webhook_secret_set),
         pickup_name: raw.pickup_name ?? '',
         pickup_phone: raw.pickup_phone ?? '',
         pickup_address_line1: raw.pickup_address_line1 ?? '',
@@ -1634,7 +1759,12 @@ export default function AdminShipping() {
     const e: Record<string, string> = {};
     if (state.provider_enabled) {
       if (!state.api_url.trim()) e.api_url = 'API URL is required';
-      if (!state.api_key_set && !newApiKey.trim()) e.api_key = 'API key is required';
+      if (state.provider_name === 'shiprocket') {
+        if (!state.auth_email.trim()) e.auth_email = 'Shiprocket API email is required';
+        if (!state.auth_password_set && !newAuthPassword.trim()) e.auth_password = 'Shiprocket API password is required';
+      } else {
+        if (!state.api_key_set && !newApiKey.trim()) e.api_key = 'API key is required';
+      }
       if (!state.pickup_name.trim()) e.pickup_name = 'Pickup facility name is required';
       if (!state.pickup_address_line1.trim()) e.pickup_address_line1 = 'Address is required';
       if (!state.pickup_city.trim()) e.pickup_city = 'City is required';
@@ -1684,7 +1814,10 @@ export default function AdminShipping() {
       buy_x_quantity: Number(state.buy_x_quantity) || 2,
       get_y_quantity: Number(state.get_y_quantity) || 1,
     };
+    if (state.auth_email.trim().length > 0) payload.auth_email = state.auth_email.trim();
     if (newApiKey.trim().length > 0) payload.api_key = newApiKey.trim();
+    if (newAuthPassword.trim().length > 0) payload.auth_password = newAuthPassword.trim();
+    if (newWebhookSecret.trim().length > 0) payload.webhook_secret = newWebhookSecret.trim();
     try {
       const res = await fetch('/api/admin/shipping', {
         method: 'PATCH',
@@ -1705,6 +1838,14 @@ export default function AdminShipping() {
       if (newApiKey.trim().length > 0) {
         setNewApiKey('');
         setState((s) => ({ ...s, api_key_set: true }));
+      }
+      if (newAuthPassword.trim().length > 0) {
+        setNewAuthPassword('');
+        setState((s) => ({ ...s, auth_password_set: true }));
+      }
+      if (newWebhookSecret.trim().length > 0) {
+        setNewWebhookSecret('');
+        setState((s) => ({ ...s, webhook_secret_set: true }));
       }
       await fetchSettings();
     } catch {
@@ -1770,6 +1911,10 @@ export default function AdminShipping() {
             errors={errors}
             newApiKey={newApiKey}
             onApiKeyChange={setNewApiKey}
+            newAuthPassword={newAuthPassword}
+            onAuthPasswordChange={setNewAuthPassword}
+            newWebhookSecret={newWebhookSecret}
+            onWebhookSecretChange={setNewWebhookSecret}
             onSave={handleSave}
             saving={saving}
           />
