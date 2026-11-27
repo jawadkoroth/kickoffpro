@@ -403,8 +403,8 @@ function ProviderCard({
             <SectionRule label="Pickup Address" />
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div className="input-row">
-                <Field label="Contact name" error={errors.pickup_name}>
-                  <input className={`input-field${errors.pickup_name ? ' input-error' : ''}`} placeholder="Warehouse manager" value={state.pickup_name} onChange={(e) => onStateChange({ pickup_name: e.target.value })} />
+                <Field label="Pickup Facility Name (Delhivery Warehouse)" error={errors.pickup_name}>
+                  <input className={`input-field${errors.pickup_name ? ' input-error' : ''}`} placeholder="Exact Facility Name in Delhivery One (e.g. noir)" value={state.pickup_name} onChange={(e) => onStateChange({ pickup_name: e.target.value })} />
                 </Field>
                 <Field label="Phone" error={errors.pickup_phone}>
                   <input className={`input-field${errors.pickup_phone ? ' input-error' : ''}`} placeholder="10-digit mobile" value={state.pickup_phone} onChange={(e) => onStateChange({ pickup_phone: e.target.value })} />
@@ -1635,7 +1635,7 @@ export default function AdminShipping() {
     if (state.provider_enabled) {
       if (!state.api_url.trim()) e.api_url = 'API URL is required';
       if (!state.api_key_set && !newApiKey.trim()) e.api_key = 'API key is required';
-      if (!state.pickup_name.trim()) e.pickup_name = 'Contact name is required';
+      if (!state.pickup_name.trim()) e.pickup_name = 'Pickup facility name is required';
       if (!state.pickup_address_line1.trim()) e.pickup_address_line1 = 'Address is required';
       if (!state.pickup_city.trim()) e.pickup_city = 'City is required';
       if (!state.pickup_state.trim()) e.pickup_state = 'State is required';
