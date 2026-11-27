@@ -91,26 +91,43 @@ function parseDelhiveryError(status: number, data: Record<string, unknown>, _con
 
   // 422 — Validation errors
   if (status === 422) {
-    const rmk = (data.rmk ?? data.error ?? data.message ?? '') as string;
-    const errorStr = JSON.stringify(data).toLowerCase();
+    const rmk = String(data.rmk ?? data.error ?? data.message ?? '').trim();
+    const rmkLower = rmk.toLowerCase();
 
-    // Pickup location issues
-    if (rmk.includes('pickup') || errorStr.includes('pickup') || errorStr.includes('warehouse')) {
+    // Pickup location issues (check actual remark text, NOT JSON keys like `pickups_count`)
+    if (
+      rmkLower.includes('pickup') ||
+      rmkLower.includes('warehouse') ||
+      rmkLower.includes('clientwarehouse') ||
+      rmkLower.includes('facility')
+    ) {
       return {
         ...base,
-        message: 'Pickup location invalid',
-        meaning: 'The configured pickup address does not exist in Delhivery One.',
-        suggested_fix: 'Delhivery One → Settings → Pickup Locations → Create warehouse using same address + phone as KickoffPro admin.',
+        message: rmk || 'Pickup location invalid',
+        meaning: rmk || 'The configured pickup address does not exist in Delhivery One.',
+        suggested_fix: 'Verify Facility Name in Delhivery One → Settings → Pickup Locations matches KickoffPro admin.',
         severity: 'high',
         operational_category: 'pickup_not_registered',
       };
     }
 
-    // Phone/address issues
-    if (rmk.includes('phone') || errorStr.includes('phone') || errorStr.includes('mobile')) {
+    // Wallet / balance / credit issues
+    if (rmkLower.includes('balance') || rmkLower.includes('wallet') || rmkLower.includes('credit')) {
       return {
         ...base,
-        message: 'Customer phone invalid',
+        message: rmk || 'Delhivery wallet balance insufficient',
+        meaning: rmk || 'Your Delhivery account does not have sufficient prepaid balance.',
+        suggested_fix: 'Recharge your Delhivery One wallet or check account billing status.',
+        severity: 'high',
+        operational_category: 'invalid_payload',
+      };
+    }
+
+    // Phone/address issues
+    if (rmkLower.includes('phone') || rmkLower.includes('mobile')) {
+      return {
+        ...base,
+        message: rmk || 'Customer phone invalid',
         meaning: 'Customer phone number is missing or invalid.',
         suggested_fix: 'Update customer information with valid 10-digit phone number before shipment creation.',
         severity: 'medium',
@@ -118,12 +135,12 @@ function parseDelhiveryError(status: number, data: Record<string, unknown>, _con
       };
     }
 
-    // Address issues
-    if (rmk.includes('address') || errorStr.includes('address') || errorStr.includes('pincode')) {
+    // Address / pincode issues
+    if (rmkLower.includes('address') || rmkLower.includes('pincode') || rmkLower.includes('serviceable')) {
       return {
         ...base,
-        message: 'Delivery address invalid',
-        meaning: 'Delivery address is incomplete or pincode is invalid.',
+        message: rmk || 'Delivery address invalid',
+        meaning: rmk || 'Delivery address is incomplete or pincode is invalid.',
         suggested_fix: 'Verify customer address has: line1, city, state, valid 6-digit pincode.',
         severity: 'medium',
         operational_category: 'address_invalid',
@@ -131,10 +148,10 @@ function parseDelhiveryError(status: number, data: Record<string, unknown>, _con
     }
 
     // Weight issues
-    if (rmk.includes('weight') || errorStr.includes('weight')) {
+    if (rmkLower.includes('weight')) {
       return {
         ...base,
-        message: 'Product weight missing',
+        message: rmk || 'Product weight missing',
         meaning: 'Product weight is required for shipment creation.',
         suggested_fix: 'Add weight_grams to product before creating shipment.',
         severity: 'medium',
@@ -143,10 +160,10 @@ function parseDelhiveryError(status: number, data: Record<string, unknown>, _con
     }
 
     // COD issues
-    if (rmk.includes('cod') || errorStr.includes('cod')) {
+    if (rmkLower.includes('cod')) {
       return {
         ...base,
-        message: 'COD not available',
+        message: rmk || 'COD not available',
         meaning: 'Cash on Delivery is not available for this destination.',
         suggested_fix: 'Check serviceability for destination pincode. May need to disable COD for this order.',
         severity: 'medium',
@@ -154,12 +171,12 @@ function parseDelhiveryError(status: number, data: Record<string, unknown>, _con
       };
     }
 
-    // Generic 422
+    // Generic 422 — always surface Delhivery's exact `rmk`
     return {
       ...base,
       message: rmk || 'Invalid shipment data',
-      meaning: 'The shipment payload failed validation.',
-      suggested_fix: 'Check all required fields: customer name, phone, complete address, product weight.',
+      meaning: rmk || 'The shipment payload failed validation.',
+      suggested_fix: 'Check Delhivery error details in the Shipment panel below.',
       severity: 'medium',
       operational_category: 'invalid_payload',
     };
@@ -229,7 +246,7 @@ export class DelhiveryProvider implements ShippingProvider {
     // CORRECT: Base URL without /api suffix — endpoints add their own paths
     this.apiUrl = (config.api_url ?? 'https://track.delhivery.com').replace(/\/api\/?$/, '');
     this.webhookSecret = config.webhook_secret ?? null;
-    this.pickupName = config.pickup_name ?? '';
+    this.pickupName = (config.pickup_name ?? '').trim();
   }
 
   private authHeader(): Record<string, string> {
