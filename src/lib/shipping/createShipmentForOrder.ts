@@ -35,6 +35,7 @@ export interface CreateShipmentForOrderInput {
 
 export interface CreateShipmentForOrderResult {
   shipmentId: string;
+  providerName: string;
   trackingId: string | undefined;
   labelUrl: string | undefined;
   providerResponse: ShipmentResponse;
@@ -128,6 +129,7 @@ export async function createShipmentForOrder(
 
     return {
       shipmentId,
+      providerName: provider.providerName,
       trackingId: undefined,
       labelUrl: undefined,
       providerResponse: {
@@ -197,6 +199,7 @@ export async function createShipmentForOrder(
 
     return {
       shipmentId,
+      providerName: provider.providerName,
       trackingId: undefined,
       labelUrl: undefined,
       providerResponse: providerResponseWithLatency,
@@ -246,5 +249,5 @@ export async function createShipmentForOrder(
     latency_ms: latencyMs,
   }, { source: 'api', entityType: 'order', entityId: input.orderId });
 
-  return { shipmentId, trackingId, labelUrl, providerResponse };
+  return { shipmentId, providerName: provider.providerName, trackingId, labelUrl, providerResponse };
 }

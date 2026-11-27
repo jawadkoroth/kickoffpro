@@ -191,10 +191,12 @@ export async function POST(
       payment: {
         method: (order.payment_method === 'cod' ? 'cod' : 'prepaid') as 'cod' | 'prepaid',
         cod_amount_paise: order.payment_method === 'cod' ? order.total_paise : undefined,
+        total_amount_paise: order.total_paise,
       },
     };
 
-    // 4a. NEW PIPE (feature-flag gated, off by default in production)
+    // 4a. NEW PIPE (feature-flag gated)
+    let newPipeError: string | null = null;
     const newPipeResult = await createShipmentForOrder({
       clientRequestId: id,
       orderId: id,
@@ -202,19 +204,29 @@ export async function POST(
       attemptNumber: 1,
       req: shipmentReq,
     }).catch((err: unknown) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      newPipeError = msg;
       logEvent('shipping.ship_route.new_pipe_error', {
         order_id: id,
         order_number: order.order_number,
-        error: err instanceof Error ? err.message : String(err),
+        error: msg,
       }, { source: 'api', severity: 'error' });
       return null;
     });
 
+    if (newPipeError) {
+      return apiError(500, `Courier shipment setup error: ${newPipeError}`);
+    }
+
     if (newPipeResult !== null) {
-      if (!newPipeResult.providerResponse.success) {
-        return apiError(500, newPipeResult.providerResponse.error || 'Shipment creation failed');
+      if (!newPipeResult.providerResponse.success || !newPipeResult.trackingId) {
+        const parsed = newPipeResult.providerResponse.parsed_error;
+        const msg = parsed?.suggested_fix
+          ? `${parsed.message}: ${parsed.suggested_fix}`
+          : newPipeResult.providerResponse.error || 'Courier did not issue an AWB/tracking number';
+        return apiError(422, msg);
       }
-      const autoProviderName = order.shipping_provider ?? 'automated';
+      const autoProviderName = newPipeResult.providerName || order.shipping_provider || 'delhivery';
       const trackingUrl = resolveTrackingUrl(autoProviderName, newPipeResult.trackingId);
       const shippedAt = new Date().toISOString();
 
@@ -223,7 +235,8 @@ export async function POST(
         .update({
           order_status: 'shipped',
           shipment_mode: 'automated',
-          tracking_id: newPipeResult.trackingId ?? null,
+          shipping_provider: autoProviderName,
+          tracking_id: newPipeResult.trackingId,
           tracking_url: trackingUrl,
           label_url: newPipeResult.labelUrl ?? null,
           label_url_original: newPipeResult.labelUrl ?? null,
@@ -231,12 +244,11 @@ export async function POST(
         })
         .eq('id', id);
 
-      if (newPipeResult.trackingId) {
-        await notifyOrderShipped(id, 'auto_ship');
-      }
+      await notifyOrderShipped(id, 'auto_ship');
 
       return apiSuccess({
         mode: 'automated',
+        shipping_provider: autoProviderName,
         tracking_id: newPipeResult.trackingId,
         tracking_url: trackingUrl,
         label_url: newPipeResult.labelUrl,
@@ -279,13 +291,13 @@ export async function POST(
     const provider = new DelhiveryProvider(legacyConfig);
     const result = await provider.createShipment(shipmentReq);
 
-    if (!result.success) {
+    if (!result.success || !result.tracking_id) {
       logEvent('shipping.ship_route.legacy_failed', {
         order_id: id,
         order_number: order.order_number,
-        error: result.error,
+        error: result.error || 'No AWB/tracking number returned by courier',
       }, { source: 'api', severity: 'error' });
-      return apiError(500, result.error || 'Shipment creation failed');
+      return apiError(422, result.error || 'Courier did not return an AWB/tracking number');
     }
 
     const legacyProvider = settings.provider_name ?? 'delhivery';

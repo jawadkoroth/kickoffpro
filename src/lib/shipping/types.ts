@@ -3,7 +3,7 @@ export interface ShipmentRequest {
   customer: { name: string; phone: string; email?: string };
   address: { line1: string; line2?: string; city: string; state: string; pincode: string };
   product: { name: string; quantity: number; weight_grams: number };
-  payment: { method: 'cod' | 'prepaid'; cod_amount_paise?: number };
+  payment: { method: 'cod' | 'prepaid'; cod_amount_paise?: number; total_amount_paise?: number };
 }
 
 export interface ShipmentResponse {

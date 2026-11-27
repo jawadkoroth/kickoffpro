@@ -316,6 +316,7 @@ export default function AdminOrderDetail({ params }: { params: Promise<{ id: str
         });
         const data = await res.json();
         if (!data.success) {
+          await fetchShipmentData();
           showToast(data.error || 'Shipment creation failed', 'error');
           setActionLoading('');
           return;

@@ -320,7 +320,15 @@ export class DelhiveryProvider implements ShippingProvider {
   }
 
   async createShipment(req: ShipmentRequest): Promise<ShipmentResponse> {
-    // KickoffPro: Delhivery shipment payload — field names are Delhivery One API spec
+    const codAmountInr =
+      req.payment.method === 'cod'
+        ? ((req.payment.cod_amount_paise ?? req.payment.total_amount_paise ?? 0) / 100).toFixed(2)
+        : '0';
+    const totalAmountInr = Number(
+      ((req.payment.total_amount_paise ?? req.payment.cod_amount_paise ?? 0) / 100).toFixed(2),
+    );
+
+    // KickoffPro: Delhivery B2C `/api/cmu/create.json` payload
     const shipmentPayload = {
       shipments: [{
         name: req.customer.name,
@@ -329,20 +337,22 @@ export class DelhiveryProvider implements ShippingProvider {
         address_type: 'home',
         city: req.address.city,
         state: req.address.state,
+        country: 'India',
         pin: req.address.pincode,
         phone: req.customer.phone,
         order: req.order_number,
+        seller_inv: req.order_number,
         payment_mode: req.payment.method === 'cod' ? 'COD' : 'Prepaid',
-        cod_amount: req.payment.method === 'cod'
-          ? ((req.payment.cod_amount_paise ?? 0) / 100).toString()
-          : '0',
-        // Weight must be in KG for Delhivery One
-        weight: ((req.product.weight_grams ?? 500) / 1000).toFixed(3),
+        cod_amount: codAmountInr,
+        total_amount: totalAmountInr,
+        // Delhivery B2C create API accepts physical weight in grams
+        weight: Math.max(1, Math.round(req.product.weight_grams ?? 500)),
         shipment_width: 10,
         shipment_height: 10,
         shipment_length: 15,
-        product_desc: req.product.name,
-        quantity: req.product.quantity ?? 1,
+        shipping_mode: 'Surface',
+        products_desc: req.product.name,
+        quantity: String(req.product.quantity ?? 1),
       }],
       pickup_location: { name: this.pickupName },
     };
@@ -404,11 +414,25 @@ export class DelhiveryProvider implements ShippingProvider {
         response_preview: rawText.substring(0, 500),
       }, { source: 'api' });
 
-      // Success: Delhivery returns { packages: [{ waybill, ... }] } on success
-      const pkgs = data.packages as Array<{ waybill?: string; status?: string }> | undefined;
-      const waybill = pkgs?.[0]?.waybill ?? (data.waybill as string | undefined);
+      // Delhivery `/api/cmu/create.json` often returns HTTP 200 even on rejections
+      // (`success: false`, `error: true`, `packages[0].status: 'Fail'`, or empty waybill).
+      const pkgs = data.packages as
+        | Array<{
+            waybill?: string;
+            status?: string;
+            remarks?: string[] | string;
+            rmk?: string;
+          }>
+        | undefined;
+      const pkg0 = pkgs?.[0];
+      const pkgStatus = (pkg0?.status ?? '').toLowerCase();
+      const waybill = (pkg0?.waybill ?? (data.waybill as string | undefined) ?? '').trim();
+      const explicitFailure =
+        data.success === false ||
+        data.error === true ||
+        pkgStatus === 'fail';
 
-      if (response.ok && waybill) {
+      if (response.ok && !explicitFailure && waybill) {
         logEvent('shipping.delhivery.awb_created', {
           order_number: req.order_number,
           waybill,
@@ -424,26 +448,28 @@ export class DelhiveryProvider implements ShippingProvider {
         };
       }
 
-      // Also handle Delhivery's "upload" style success with cod/pre_count
-      if (response.ok && (data.cod_count !== undefined || data.pre_count !== undefined)) {
-        // Partial success — may have created some AWBs
-        const uploadPkgs = data.package_count as number | undefined;
-        logEvent('shipping.delhivery.awb_created', {
-          order_number: req.order_number,
-          waybill: 'pending_upload_response',
-          package_count: uploadPkgs,
-          latency_ms: latencyMs,
-        }, { source: 'api' });
-        return {
-          success: true,
-          tracking_id: waybill,
-          raw_response: data,
-          latency_ms: latencyMs,
-        };
-      }
+      // Extract Delhivery's human-readable rejection reason
+      const pkgRemarks = Array.isArray(pkg0?.remarks)
+        ? pkg0.remarks.filter(Boolean).join('; ')
+        : typeof pkg0?.remarks === 'string'
+          ? pkg0.remarks
+          : '';
+      const extractedRemark =
+        pkgRemarks ||
+        pkg0?.rmk ||
+        (typeof data.rmk === 'string' ? data.rmk : '') ||
+        (typeof data.error === 'string' ? data.error : '') ||
+        (!waybill && response.ok ? 'Delhivery did not return an AWB/waybill number' : '');
 
-      // Parse error with forensic diagnostics
-      const parsedError = parseDelhiveryError(response.status, data, 'createShipment');
+      const errStatus = response.ok ? 422 : response.status;
+      const parsedError = parseDelhiveryError(
+        errStatus,
+        { ...data, rmk: extractedRemark || data.rmk },
+        'createShipment',
+      );
+      if (extractedRemark && parsedError.message === 'Invalid shipment data') {
+        parsedError.message = extractedRemark;
+      }
 
       const logSeverity: import('@/lib/log').Severity =
         parsedError.severity === 'critical' ? 'fatal' :
