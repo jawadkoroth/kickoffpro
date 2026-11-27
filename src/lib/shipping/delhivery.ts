@@ -544,12 +544,32 @@ export class DelhiveryProvider implements ShippingProvider {
         { headers: this.authHeader() },
       );
       const data = await response.json() as Record<string, unknown>;
-      const shipmentData = (data['ShipmentData'] as Array<{ Shipment?: { Status?: { Status?: string; Instructions?: string; StatusDateTime?: string } } }> | undefined)?.[0];
+      const shipmentData = (data['ShipmentData'] as Array<{
+        Shipment?: {
+          Status?: { Status?: string; Instructions?: string; StatusDateTime?: string; StatusLocation?: string };
+          ExpectedDeliveryDate?: string;
+          Scans?: Array<{ ScanDetail?: { ScanDateTime?: string; Scan?: string; ScannedLocation?: string; Instructions?: string } }>;
+        };
+      }> | undefined)?.[0];
       const rawStatus = shipmentData?.Shipment?.Status?.Status ?? 'unknown';
+      const scans = shipmentData?.Shipment?.Scans ?? [];
+      const events = scans
+        .map((s) => s.ScanDetail)
+        .filter((d): d is NonNullable<typeof d> => Boolean(d))
+        .map((d) => ({
+          timestamp: d.ScanDateTime ?? '',
+          status: d.Scan ?? '',
+          location: d.ScannedLocation,
+          activity: d.Instructions,
+        }))
+        .reverse();
+
       return {
         status: rawStatus,
-        location: shipmentData?.Shipment?.Status?.Instructions,
+        location: shipmentData?.Shipment?.Status?.StatusLocation ?? shipmentData?.Shipment?.Status?.Instructions,
         timestamp: shipmentData?.Shipment?.Status?.StatusDateTime,
+        estimated_delivery_date: shipmentData?.Shipment?.ExpectedDeliveryDate,
+        events,
         raw: data,
       };
     } catch (err) {

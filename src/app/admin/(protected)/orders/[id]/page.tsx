@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { useToast } from '@/hooks/useToast';
 import { ShipmentDetailPanel } from '@/components/ShipmentDetailPanel';
+import { TrackingTimeline, type TrackingScanItem } from '@/components/orders/TrackingTimeline';
 import { ShipmentTimeline } from '@/components/ShipmentTimeline';
 import { ProviderResponsePanel } from '@/components/ProviderResponsePanel';
 import AdminNotes from '@/components/admin/AdminNotes';
@@ -48,6 +49,10 @@ interface Order {
   label_url: string | null;
   shipping_provider: string | null;
   shipment_mode: 'automated' | 'manual' | null;
+  shipment_status?: string | null;
+  tracking_events?: TrackingScanItem[] | null;
+  last_tracking_sync_at?: string | null;
+  estimated_delivery_date?: string | null;
   shipped_at: string | null;
   shipped_notified_at: string | null;
   delivered_at: string | null;
@@ -953,6 +958,50 @@ export default function AdminOrderDetail({ params }: { params: Promise<{ id: str
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-4)', gap: 8, flexWrap: 'wrap' }}>
           <p className="input-label" style={{ margin: 0 }}>Shipment &amp; Notification Audit</p>
           <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+            {order.tracking_id && order.shipment_mode !== 'manual' && (
+              <button
+                type="button"
+                onClick={async () => {
+                  if (actionLoading) return;
+                  setActionLoading('sync-tracking');
+                  try {
+                    const res = await fetch(`/api/admin/orders/${order.id}/sync-tracking`, {
+                      method: 'POST',
+                    });
+                    const json = await res.json();
+                    if (!json.success) {
+                      showToast(json.error || 'Failed to sync tracking', 'error');
+                    } else {
+                      const sync = json.sync as { rawStatus?: string; eventsCount?: number };
+                      showToast(
+                        sync?.rawStatus
+                          ? `Synced: ${sync.rawStatus} (${sync.eventsCount ?? 0} scans)`
+                          : 'Live tracking synced',
+                        'success',
+                      );
+                      await Promise.all([fetchOrder(), fetchShipmentData()]);
+                    }
+                  } catch {
+                    showToast('Failed to sync tracking', 'error');
+                  } finally {
+                    setActionLoading('');
+                  }
+                }}
+                disabled={Boolean(actionLoading)}
+                style={{
+                  fontSize: '0.6875rem',
+                  fontWeight: 700,
+                  padding: '4px 10px',
+                  borderRadius: 4,
+                  border: '1px solid var(--border-color)',
+                  background: 'var(--bg-input)',
+                  color: 'var(--text-primary)',
+                  cursor: actionLoading ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {actionLoading === 'sync-tracking' ? 'Syncing...' : '↻ Sync Live Tracking'}
+              </button>
+            )}
             {order.shipment_mode && (
               <span style={{
                 fontSize: '0.5625rem',
@@ -990,7 +1039,24 @@ export default function AdminOrderDetail({ params }: { params: Promise<{ id: str
           orderNumber={order.order_number}
         />
 
-        {(order.tracking_id || order.tracking_url || order.shipped_notified_at || order.delivered_notified_at) && (
+        {order.shipment_status === 'rto_initiated' && order.order_status !== 'rto' && (
+          <div
+            style={{
+              marginTop: 'var(--space-3)',
+              padding: '10px 12px',
+              borderRadius: 'var(--radius-sm)',
+              background: 'rgba(249, 115, 22, 0.14)',
+              border: '1px solid rgba(249, 115, 22, 0.45)',
+              color: '#FB923C',
+              fontSize: '0.75rem',
+              fontWeight: 700,
+            }}
+          >
+            ⚠ RTO IN TRANSIT — Courier has initiated Return to Origin. Inventory will auto-restore once RTO is delivered back to warehouse.
+          </div>
+        )}
+
+        {(order.tracking_id || order.tracking_url || order.shipped_notified_at || order.delivered_notified_at || (order.tracking_events && order.tracking_events.length > 0)) && (
           <div style={{
             marginTop: 'var(--space-3)',
             padding: '10px 12px',
@@ -1028,9 +1094,27 @@ export default function AdminOrderDetail({ params }: { params: Promise<{ id: str
                   {order.delivered_notified_at ? `Sent (${formatDate(order.delivered_notified_at)})` : 'Not sent'}
                 </strong>
               </span>
+              {order.last_tracking_sync_at && (
+                <span>
+                  Last Synced: <strong>{formatDate(order.last_tracking_sync_at)}</strong>
+                </span>
+              )}
+              {order.estimated_delivery_date && (
+                <span>
+                  Est. Delivery: <strong>{order.estimated_delivery_date}</strong>
+                </span>
+              )}
             </div>
             {order.delivery_note && (
               <div className="text-muted">Delivery note: {order.delivery_note}</div>
+            )}
+            {order.tracking_events && order.tracking_events.length > 0 && (
+              <div style={{ marginTop: 6, paddingTop: 8, borderTop: '1px solid var(--border-color)' }}>
+                <div style={{ fontSize: '0.6875rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)' }}>
+                  Live Courier Scan Timeline ({order.tracking_events.length})
+                </div>
+                <TrackingTimeline events={order.tracking_events} />
+              </div>
             )}
           </div>
         )}

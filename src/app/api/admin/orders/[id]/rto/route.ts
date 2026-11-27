@@ -79,6 +79,7 @@ export async function POST(
         order_status: 'rto',
         rto_at: nowIso,
         rto_reason: cleanReason,
+        shipment_status: 'rto_delivered',
         last_activity_at: nowIso,
         refund_status: isPrepaidPaid ? 'pending' : 'none',
         updated_at: nowIso,
@@ -93,7 +94,15 @@ export async function POST(
     }
 
     if (order.payment_status !== 'failed') {
-      await supabase.rpc('restore_order_stock', { p_order_id: id });
+      const { data: claimed } = await supabase
+        .from('orders')
+        .update({ stock_restored_at: nowIso })
+        .eq('id', id)
+        .is('stock_restored_at', null)
+        .select('id');
+      if (claimed && claimed.length > 0) {
+        await supabase.rpc('restore_order_stock', { p_order_id: id });
+      }
     }
 
     const { data: shipment } = await supabase

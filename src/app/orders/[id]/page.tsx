@@ -4,6 +4,7 @@ import Image from 'next/image';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { getPublicUrl } from '@/lib/media';
 import CustomerOrderActions, { type StoredReturnItemView } from '@/components/orders/CustomerOrderActions';
+import { TrackingTimeline, type TrackingScanItem } from '@/components/orders/TrackingTimeline';
 import { formatCourierDisplayName, resolveTrackingUrl } from '@/lib/shipping/couriers';
 import styles from '../orders.module.css';
 
@@ -56,6 +57,10 @@ type OrderDetail = {
   tracking_id: string | null;
   tracking_url: string | null;
   shipping_provider: string | null;
+  shipment_status?: string | null;
+  tracking_events?: TrackingScanItem[] | null;
+  last_tracking_sync_at?: string | null;
+  estimated_delivery_date?: string | null;
   shipped_at: string | null;
   delivered_at: string | null;
   return_type: string | null;
@@ -169,6 +174,7 @@ export default async function OrderDetailPage({
       coupon_code, payment_method, payment_status, order_status,
       customer, shipping_address, cancel_reason, created_at, updated_at,
       tracking_id, tracking_url, shipping_provider, shipped_at, delivered_at,
+      shipment_status, tracking_events, last_tracking_sync_at, estimated_delivery_date,
       return_type, return_reason, return_notes, return_items, estimated_refund_paise,
       return_status, return_requested_at, rto_at, rto_reason
       `,
@@ -235,10 +241,23 @@ export default async function OrderDetailPage({
 
   // Build the stepper steps. `done` = strictly past steps; `current`
   // = the active step (next-to-arrive), styled with the gold pulse.
+  const shippedMilestoneLabel =
+    status === 'shipped'
+      ? order.shipment_status === 'out_for_delivery'
+        ? 'Out for Delivery'
+        : order.shipment_status === 'in_transit'
+          ? 'In Transit'
+          : order.shipment_status === 'rto_initiated'
+            ? 'RTO In Transit'
+            : order.shipment_status === 'picked_up'
+              ? 'Picked Up'
+              : 'Shipped'
+      : 'Shipped';
+
   const steps: { key: string; label: string; time: string | null }[] = [
     { key: 'placed', label: 'Placed', time: order.created_at },
     { key: 'confirmed', label: 'Confirmed', time: status === 'pending' ? null : order.updated_at },
-    { key: 'shipped', label: 'Shipped', time: ['shipped', 'delivered', 'return_requested', 'returned'].includes(status) ? (order.shipped_at || order.updated_at) : null },
+    { key: 'shipped', label: shippedMilestoneLabel, time: ['shipped', 'delivered', 'return_requested', 'returned'].includes(status) ? (order.shipped_at || order.updated_at) : null },
     { key: 'delivered', label: 'Delivered', time: ['delivered', 'return_requested', 'returned'].includes(status) ? (order.delivered_at || order.updated_at) : null },
   ];
   const activeIdx = STEP_INDEX[status]; // -1 for cancelled
@@ -289,6 +308,9 @@ export default async function OrderDetailPage({
           <p className={styles.cancelledLabel}>Parcel Returned to Origin (RTO)</p>
           <p className={styles.cancelledReason}>
             {order.rto_reason || 'This shipment could not be delivered and returned to our warehouse.'}
+          </p>
+          <p style={{ marginTop: 8, fontSize: '0.78rem', opacity: 0.85 }}>
+            Need help or want to reorder? Contact our support team or place a fresh order anytime.
           </p>
         </section>
       ) : (
@@ -355,6 +377,16 @@ export default async function OrderDetailPage({
               <p style={{ fontWeight: 700, fontFamily: 'monospace', margin: '2px 0 0 0', fontSize: '0.9rem' }}>{order.tracking_id}</p>
             </div>
           </div>
+          {order.shipment_status === 'rto_initiated' && !isRto && (
+            <div style={{ padding: '10px 12px', borderRadius: 6, background: 'rgba(249,115,22,0.12)', border: '1px solid rgba(249,115,22,0.4)', color: '#FB923C', fontSize: '0.78rem', fontWeight: 600, marginBottom: 12 }}>
+              ⚠ Return to Origin (RTO) In Transit — Courier could not complete delivery. Our team will assist you once the parcel returns.
+            </div>
+          )}
+          {order.estimated_delivery_date && !isRto && !isCancelled && status !== 'delivered' && (
+            <p style={{ margin: '0 0 10px 0', fontSize: '0.78rem', opacity: 0.85 }}>
+              Estimated Delivery: <strong>{order.estimated_delivery_date}</strong>
+            </p>
+          )}
           {resolvedTrackUrl && (
             <a
               href={resolvedTrackUrl}
@@ -365,6 +397,9 @@ export default async function OrderDetailPage({
             >
               Track {courierLabel} Shipment →
             </a>
+          )}
+          {order.tracking_events && order.tracking_events.length > 0 && (
+            <TrackingTimeline events={order.tracking_events} collapsible />
           )}
         </section>
       )}

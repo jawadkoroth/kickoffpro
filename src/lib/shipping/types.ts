@@ -20,10 +20,19 @@ export interface ShipmentResponse {
   latency_ms?: number;
 }
 
+export interface TrackingScanEvent {
+  timestamp: string;
+  status: string;
+  location?: string;
+  activity?: string;
+}
+
 export interface TrackingResponse {
   status: string;
   location?: string;
   timestamp?: string;
+  estimated_delivery_date?: string;
+  events?: TrackingScanEvent[];
   raw?: unknown;
 }
 

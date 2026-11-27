@@ -27,13 +27,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { logEvent } from '@/lib/log';
-import { canTransition, shipmentStatusToOrderStatus } from '@/lib/shipping/state';
+import { canTransition } from '@/lib/shipping/state';
 import type { CanonicalShipmentStatus } from '@/lib/shipping/state';
-import type { NormalisedShipmentEvent } from '@/lib/shipping/types';
+import type { NormalisedShipmentEvent, TrackingScanEvent } from '@/lib/shipping/types';
 import { DelhiveryProvider } from '@/lib/shipping/delhivery';
 import { ShiprocketProvider } from '@/lib/shipping/shiprocket';
 import type { ProviderConfig } from '@/lib/shipping/types';
-import { enqueue } from '@/lib/jobs/queue';
+import { applyCanonicalShipmentMilestone } from '@/lib/shipping/syncShipmentTracking';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -225,12 +225,22 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return ok200('duplicate');
   }
 
-  /* 4. Look up shipment ──────────────────────────────────────────── */
+  /* 4. Look up shipment (and fallback to orders by tracking_id) ──── */
   const { data: shipment } = await supabase
     .from('shipments')
     .select('id, status, order_id')
     .eq('tracking_id', tracking_id)
     .maybeSingle();
+
+  let orderId: string | null = shipment?.order_id ?? null;
+  if (!orderId) {
+    const { data: orderRow } = await supabase
+      .from('orders')
+      .select('id')
+      .eq('tracking_id', tracking_id)
+      .maybeSingle();
+    orderId = orderRow?.id ?? null;
+  }
 
   /* 5. Insert webhook event row (dedup anchor) ───────────────────── */
   await supabase.from('shipping_webhook_events').insert({
@@ -242,80 +252,73 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     received_at: new Date().toISOString(),
   });
 
-  if (!shipment) {
+  if (!shipment && !orderId) {
     logEvent('shipping.webhook.no_shipment', { tracking_id, canonical_status }, { source: 'webhook', severity: 'warn' });
     return ok200('no_shipment_found');
   }
 
-  const currentStatus = shipment.status as CanonicalShipmentStatus;
-
-  /* 6. State machine guard ───────────────────────────────────────── */
-  if (!canTransition(currentStatus, canonical_status)) {
+  /* 6. State machine guard (when shipment row exists) ───────────── */
+  const currentStatus = (shipment?.status as CanonicalShipmentStatus | undefined) ?? null;
+  if (currentStatus && currentStatus !== canonical_status && !canTransition(currentStatus, canonical_status)) {
     logEvent('shipping.webhook.illegal_transition', {
       tracking_id, from: currentStatus, to: canonical_status,
     }, { source: 'webhook', severity: 'warn' });
     return ok200('illegal_transition');
   }
 
-  /* 7. Update shipment status ────────────────────────────────────── */
-  await supabase
-    .from('shipments')
-    .update({
-      status: canonical_status,
-      last_provider_event_at: provider_event_at ?? new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', shipment.id);
+  /* 7. Append history ─────────────────────────────────────────────── */
+  if (shipment) {
+    await supabase.from('shipment_status_history').insert({
+      shipment_id: shipment.id,
+      previous_status: currentStatus,
+      next_status: canonical_status,
+      source: 'webhook',
+      provider_payload: raw as object,
+    });
+  }
 
-  /* 8. Append history ─────────────────────────────────────────────── */
-  await supabase.from('shipment_status_history').insert({
-    shipment_id: shipment.id,
-    previous_status: currentStatus,
-    next_status: canonical_status,
-    source: 'webhook',
-    provider_payload: raw as object,
-  });
+  /* 8. Extract any scan events / ETD from webhook payload ─────────── */
+  const rawObj = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  const rawScans = Array.isArray(rawObj.scans) ? (rawObj.scans as Array<Record<string, unknown>>) : [];
+  const extractedEvents: TrackingScanEvent[] = rawScans
+    .map((s) => ({
+      timestamp: String(s.date || s.timestamp || provider_event_at || ''),
+      status: String(s['sr-status-label'] || s.status || s.activity || provider_event_type),
+      location: s.location ? String(s.location) : undefined,
+      activity: s.activity ? String(s.activity) : undefined,
+    }))
+    .filter((e) => e.timestamp || e.status || e.activity);
 
-  /* 9. Denorm order status ───────────────────────────────────────── */
-  const orderStatus = shipmentStatusToOrderStatus(canonical_status);
-  if (orderStatus && shipment.order_id) {
-    const nowIso = new Date().toISOString();
-    const orderUpdate: Record<string, unknown> = {
-      order_status: orderStatus,
-      updated_at: nowIso,
-    };
-    if (orderStatus === 'shipped') {
-      orderUpdate.shipped_at = nowIso;
-    } else if (orderStatus === 'delivered') {
-      orderUpdate.delivered_at = nowIso;
-    }
+  if (extractedEvents.length === 0) {
+    extractedEvents.push({
+      timestamp: provider_event_at ?? new Date().toISOString(),
+      status: provider_event_type,
+      location: rawObj.current_location ? String(rawObj.current_location) : undefined,
+      activity: provider_event_type,
+    });
+  }
 
-    await supabase
-      .from('orders')
-      .update(orderUpdate)
-      .eq('id', shipment.order_id);
+  const estimatedDeliveryDate =
+    typeof rawObj.etd === 'string' && rawObj.etd.trim()
+      ? rawObj.etd.trim()
+      : undefined;
 
-    // Strictly idempotent lifecycle notification for shipped / delivered milestones
-    if (orderStatus === 'shipped' || orderStatus === 'delivered') {
-      try {
-        const { dispatchOrderNotification } = await import('@/lib/notifications/orderNotifications');
-        await dispatchOrderNotification({
-          orderId: shipment.order_id,
-          targetStatus: orderStatus,
-          source: 'webhook',
-        });
-      } catch (err) {
-        logEvent('shipping.webhook.email_failed', {
-          order_id: shipment.order_id,
-          error: err instanceof Error ? err.message : String(err),
-        }, { source: 'webhook', severity: 'error' });
-      }
-    }
+  /* 9. Apply idempotent milestone, stock restore, and notifications ─ */
+  if (orderId) {
+    await applyCanonicalShipmentMilestone({
+      orderId,
+      shipmentId: shipment?.id ?? null,
+      canonicalStatus: canonical_status,
+      events: extractedEvents,
+      estimatedDeliveryDate,
+      source: 'webhook',
+      providerEventAt: provider_event_at,
+    });
   }
 
   logEvent('shipping.webhook.processed', {
     tracking_id, from: currentStatus, to: canonical_status,
-    shipment_id: shipment.id, order_id: shipment.order_id,
+    shipment_id: shipment?.id ?? null, order_id: orderId,
   }, { source: 'webhook' });
 
   return ok200('processed');

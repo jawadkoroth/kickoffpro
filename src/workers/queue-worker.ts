@@ -23,6 +23,12 @@ loadEnvConfig(process.cwd());
 
 import { processJobs } from '@/lib/jobs/runner';
 import { listHandlerKinds } from '@/lib/jobs/handlers';
+import { syncActiveAutomatedShipments } from '@/lib/shipping/syncShipmentTracking';
+
+const TRACKING_SYNC_INTERVAL_MS = Math.max(
+  5 * 60 * 1000,
+  Number(process.env.TRACKING_SYNC_INTERVAL_MS) || 45 * 60 * 1000,
+); // Default: every 45 minutes
 
 // Polling interval configuration (ms)
 const ACTIVE_POLL_INTERVAL_MS = Math.max(
@@ -129,6 +135,8 @@ async function main() {
   console.log('[WORKER] Loop started. Polling for jobs...');
 
   let consecutiveIdleCycles = 0;
+  // Delay first tracking sync by 60s after boot so restarts stay light
+  let lastTrackingSyncAt = Date.now() - TRACKING_SYNC_INTERVAL_MS + 60_000;
 
   while (!isShuttingDown) {
     const currentUrl = (process.env.NEXT_PUBLIC_SUPABASE_URL || '').trim();
@@ -184,6 +192,21 @@ async function main() {
 
         if (!isShuttingDown) {
           await interruptibleSleep(IDLE_POLL_INTERVAL_MS);
+        }
+      }
+
+      // Periodic automated shipment tracking fallback (every 45m by default)
+      if (!isShuttingDown && Date.now() - lastTrackingSyncAt >= TRACKING_SYNC_INTERVAL_MS) {
+        lastTrackingSyncAt = Date.now();
+        try {
+          const syncStats = await syncActiveAutomatedShipments(25);
+          if (syncStats.checked > 0) {
+            console.log(
+              `[WORKER] [${new Date().toISOString()}] Tracking sync: checked=${syncStats.checked}, updated=${syncStats.updated}, errors=${syncStats.errors}`,
+            );
+          }
+        } catch (syncErr) {
+          console.error('[WORKER_TRACKING_SYNC_ERROR]', syncErr);
         }
       }
     } catch (err) {

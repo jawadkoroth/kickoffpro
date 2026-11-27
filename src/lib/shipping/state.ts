@@ -21,6 +21,7 @@ export type CanonicalShipmentStatus =
   | 'in_transit'
   | 'out_for_delivery'
   | 'delivered'
+  | 'rto_initiated'
   | 'failed'
   | 'returned'
   | 'cancelled';
@@ -41,10 +42,11 @@ export type CanonicalShipmentStatus =
 const ALLOWED_TRANSITIONS: Record<CanonicalShipmentStatus, CanonicalShipmentStatus[]> = {
   pending:            ['processing', 'shipment_created', 'failed', 'cancelled'],
   processing:         ['shipment_created', 'failed', 'cancelled'],
-  shipment_created:   ['picked_up', 'in_transit', 'failed', 'cancelled'],
-  picked_up:          ['in_transit', 'failed', 'cancelled'],
-  in_transit:         ['out_for_delivery', 'delivered', 'failed', 'returned', 'cancelled'],
-  out_for_delivery:   ['delivered', 'failed', 'returned'],
+  shipment_created:   ['picked_up', 'in_transit', 'rto_initiated', 'failed', 'cancelled'],
+  picked_up:          ['in_transit', 'out_for_delivery', 'rto_initiated', 'failed', 'cancelled'],
+  in_transit:         ['out_for_delivery', 'delivered', 'failed', 'rto_initiated', 'returned', 'cancelled'],
+  out_for_delivery:   ['delivered', 'failed', 'rto_initiated', 'returned'],
+  rto_initiated:      ['returned'],
   delivered:          [],
   failed:             ['pending', 'cancelled'],
   returned:           [],
@@ -105,7 +107,7 @@ export function shipmentStatusToOrderStatus(
     case 'out_for_delivery': return 'shipped';
     case 'delivered':        return 'delivered';
     case 'cancelled':        return 'cancelled';
-    case 'returned':         return 'cancelled';
+    case 'returned':         return 'rto';
     default:                 return null;
   }
 }
@@ -124,7 +126,8 @@ export function mapDelhiveryStatus(
   if (['IT', 'IN TRANSIT', 'PKD', 'PACKED'].includes(s)) return 'in_transit';
   if (['PU', 'PICKED UP', 'PICKUP'].includes(s))      return 'picked_up';
   if (['SHP', 'SHIPMENT CREATED', 'MANIFESTED'].includes(s)) return 'shipment_created';
-  if (['RTO', 'RTO INITIATED', 'RTO DELIVERED', 'RETURNED'].includes(s)) return 'returned';
+  if (['RTO', 'RTO INITIATED', 'RTO IN TRANSIT'].includes(s)) return 'rto_initiated';
+  if (['RTO DELIVERED', 'RETURNED'].includes(s)) return 'returned';
   if (['CNL', 'CANCELLED', 'CANCEL'].includes(s))     return 'cancelled';
   if (['FAILED', 'UNDELIVERED', 'UD'].includes(s))    return 'failed';
   return null;

@@ -35,7 +35,10 @@ export function mapShiprocketStatus(rawStatus: string): import('./state').Canoni
   if (['SHIPMENT CREATED', 'AWB ASSIGNED', 'LABEL GENERATED', 'READY TO SHIP', 'MANIFESTED'].includes(s)) {
     return 'shipment_created';
   }
-  if (['RTO INITIATED', 'RTO IN TRANSIT', 'RTO DELIVERED', 'RTO ACKNOWLEDGED', 'RETURNED'].includes(s)) {
+  if (['RTO INITIATED', 'RTO IN TRANSIT', 'RTO ACKNOWLEDGED'].includes(s)) {
+    return 'rto_initiated';
+  }
+  if (['RTO DELIVERED', 'RETURNED'].includes(s)) {
     return 'returned';
   }
   if (['CANCELED', 'CANCELLED'].includes(s)) return 'cancelled';
@@ -579,11 +582,30 @@ export class ShiprocketProvider implements ShippingProvider {
       const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
       const trackData = data['tracking_data'] as Record<string, unknown> | undefined;
       const shipmentData = trackData?.['shipment_track'] as Array<Record<string, unknown>> | undefined;
+      const activities = trackData?.['shipment_track_activities'] as Array<Record<string, unknown>> | undefined;
       const latest = shipmentData?.[0];
+      const edd =
+        (trackData?.['etd'] as string | undefined) ??
+        (latest?.['edd'] as string | undefined) ??
+        undefined;
+
+      const events = Array.isArray(activities)
+        ? activities
+            .map((a) => ({
+              timestamp: String(a['date'] || ''),
+              status: String(a['sr-status-label'] || a['status'] || ''),
+              location: a['location'] ? String(a['location']) : undefined,
+              activity: a['activity'] ? String(a['activity']) : undefined,
+            }))
+            .filter((e) => e.timestamp || e.status || e.activity)
+        : [];
+
       return {
         status: (latest?.['current_status'] as string) ?? 'unknown',
-        location: (latest?.['location'] as string) ?? undefined,
-        timestamp: (latest?.['updated_at'] as string) ?? undefined,
+        location: (latest?.['current_status'] ? events[0]?.location : undefined) ?? (latest?.['destination'] as string) ?? undefined,
+        timestamp: (latest?.['updated_time_stamp'] as string) ?? (latest?.['updated_at'] as string) ?? events[0]?.timestamp ?? undefined,
+        estimated_delivery_date: edd,
+        events,
         raw: data,
       };
     } catch (err) {

@@ -109,7 +109,7 @@ export async function GET(req: NextRequest) {
   let query = admin
     .from('orders')
     .select(
-      'id, order_number, total_paise, order_status, payment_status, payment_method, customer, cancel_reason, cancelled_by, return_type, return_reason, return_status, return_requested_at, last_activity_at, shipping_provider, tracking_id, refund_status, refund_reference, refunded_at, rto_at, rto_reason, cod_paid_at, created_at',
+      'id, order_number, total_paise, order_status, payment_status, payment_method, customer, cancel_reason, cancelled_by, return_type, return_reason, return_status, return_requested_at, last_activity_at, shipping_provider, tracking_id, shipment_status, last_tracking_sync_at, refund_status, refund_reference, refunded_at, rto_at, rto_reason, cod_paid_at, created_at',
       { count: 'exact' },
     )
     .order('last_activity_at', { ascending: false })
@@ -190,6 +190,8 @@ export async function GET(req: NextRequest) {
       last_activity_at?: string | null;
       shipping_provider?: string | null;
       tracking_id?: string | null;
+      shipment_status?: string | null;
+      last_tracking_sync_at?: string | null;
       refund_status?: string | null;
       refund_reference?: string | null;
       refunded_at?: string | null;
@@ -216,6 +218,8 @@ export async function GET(req: NextRequest) {
       last_activity_at: row.last_activity_at ?? row.created_at,
       shipping_provider: row.shipping_provider ?? null,
       tracking_id: row.tracking_id ?? null,
+      shipment_status: row.shipment_status ?? null,
+      last_tracking_sync_at: row.last_tracking_sync_at ?? null,
       refund_status: row.refund_status ?? 'none',
       refund_reference: row.refund_reference ?? null,
       refunded_at: row.refunded_at ?? null,

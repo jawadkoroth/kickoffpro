@@ -29,6 +29,8 @@ interface OrderRow {
   return_requested_at?: string | null;
   shipping_provider?: string | null;
   tracking_id?: string | null;
+  shipment_status?: string | null;
+  last_tracking_sync_at?: string | null;
   refund_status?: string | null;
   refund_reference?: string | null;
   refunded_at?: string | null;
@@ -565,6 +567,54 @@ function OrdersList() {
                       {!isDelivered && (
                         <span className={`badge badge-${order.order_status}`}>{statusLabel}</span>
                       )}
+                      {order.order_status === 'shipped' && order.shipment_status === 'rto_initiated' && (
+                        <span
+                          style={{
+                            padding: '2px 8px',
+                            borderRadius: 999,
+                            background: 'rgba(249, 115, 22, 0.2)',
+                            border: '1px solid rgba(249, 115, 22, 0.55)',
+                            color: '#FB923C',
+                            fontSize: '0.6875rem',
+                            fontWeight: 800,
+                            letterSpacing: '0.04em',
+                          }}
+                        >
+                          RTO IN TRANSIT
+                        </span>
+                      )}
+                      {order.order_status === 'shipped' &&
+                        (order.shipment_status === 'out_for_delivery' ||
+                          order.shipment_status === 'in_transit' ||
+                          order.shipment_status === 'picked_up') && (
+                          <span
+                            style={{
+                              padding: '2px 8px',
+                              borderRadius: 999,
+                              background:
+                                order.shipment_status === 'out_for_delivery'
+                                  ? 'rgba(34, 197, 94, 0.18)'
+                                  : 'rgba(59, 130, 246, 0.15)',
+                              border:
+                                order.shipment_status === 'out_for_delivery'
+                                  ? '1px solid rgba(34, 197, 94, 0.5)'
+                                  : '1px solid rgba(59, 130, 246, 0.4)',
+                              color:
+                                order.shipment_status === 'out_for_delivery'
+                                  ? '#4ADE80'
+                                  : '#60A5FA',
+                              fontSize: '0.6875rem',
+                              fontWeight: 700,
+                              letterSpacing: '0.03em',
+                            }}
+                          >
+                            {order.shipment_status === 'out_for_delivery'
+                              ? 'Out for Delivery'
+                              : order.shipment_status === 'in_transit'
+                                ? 'In Transit'
+                                : 'Picked Up'}
+                          </span>
+                        )}
                     </div>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8125rem', color: 'var(--text-muted)' }}>

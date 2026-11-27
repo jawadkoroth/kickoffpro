@@ -10,6 +10,7 @@ import { FEATURE_FLAGS } from '@/lib/featureFlags';
 import { getPublicUrl } from '@/lib/media';
 import { trackPurchase, clearCheckoutEventId } from '@/lib/tracking/client';
 import CustomerOrderActions, { type StoredReturnItemView } from '@/components/orders/CustomerOrderActions';
+import { TrackingTimeline, type TrackingScanItem } from '@/components/orders/TrackingTimeline';
 import { formatCourierDisplayName, resolveTrackingUrl } from '@/lib/shipping/couriers';
 import styles from './page.module.css';
 
@@ -45,6 +46,10 @@ interface Order {
   tracking_id: string | null;
   tracking_url?: string | null;
   shipping_provider: string | null;
+  shipment_status?: string | null;
+  tracking_events?: TrackingScanItem[] | null;
+  last_tracking_sync_at?: string | null;
+  estimated_delivery_date?: string | null;
   delivered_at?: string | null;
   created_at: string;
   updated_at: string;
@@ -303,11 +308,23 @@ export default function OrderPage({ params }: { params: Promise<{ id: string }> 
   );
   const courierLabel = formatCourierDisplayName(order.shipping_provider);
 
+  const isDeliveredOrLater = ['delivered', 'return_requested', 'returned'].includes(order.order_status);
+  const isShippedOrLater = ['shipped', 'delivered', 'return_requested', 'returned'].includes(order.order_status);
+  const shipStatus = order.shipment_status || '';
+  const isInTransitReached = isDeliveredOrLater || ['in_transit', 'out_for_delivery', 'delivered', 'rto_initiated', 'rto_delivered'].includes(shipStatus);
+  const isOfdReached = isDeliveredOrLater || ['out_for_delivery', 'delivered'].includes(shipStatus);
+
   const statusSteps = [
     { key: 'pending', label: 'Placed', done: true, time: order.created_at },
     { key: 'confirmed', label: 'Confirmed', done: ['confirmed', 'shipped', 'delivered', 'return_requested', 'returned'].includes(order.order_status), time: order.order_status !== 'pending' ? order.updated_at : null },
-    { key: 'shipped', label: 'Shipped', done: ['shipped', 'delivered', 'return_requested', 'returned'].includes(order.order_status), time: ['shipped', 'delivered', 'return_requested', 'returned'].includes(order.order_status) ? order.updated_at : null },
-    { key: 'delivered', label: 'Delivered', done: ['delivered', 'return_requested', 'returned'].includes(order.order_status), time: ['delivered', 'return_requested', 'returned'].includes(order.order_status) ? order.updated_at : null },
+    { key: 'shipped', label: 'Shipped', done: isShippedOrLater, time: isShippedOrLater ? order.updated_at : null },
+    ...(isShippedOrLater && shipStatus
+      ? [
+          { key: 'in_transit', label: shipStatus === 'rto_initiated' ? 'RTO In Transit' : 'In Transit', done: isInTransitReached, time: null as string | null },
+          { key: 'out_for_delivery', label: 'Out for Delivery', done: isOfdReached, time: null as string | null },
+        ]
+      : []),
+    { key: 'delivered', label: 'Delivered', done: isDeliveredOrLater, time: isDeliveredOrLater ? (order.delivered_at || order.updated_at) : null },
   ];
 
   return (
@@ -570,6 +587,16 @@ export default function OrderPage({ params }: { params: Promise<{ id: string }> 
                 <p style={{ fontWeight: 700, fontFamily: 'monospace', margin: '2px 0 0 0' }}>{order.tracking_id}</p>
               </div>
             </div>
+            {order.shipment_status === 'rto_initiated' && !isRto && (
+              <div style={{ padding: '10px 12px', borderRadius: 6, background: 'rgba(249,115,22,0.12)', border: '1px solid rgba(249,115,22,0.4)', color: '#FB923C', fontSize: '0.78rem', fontWeight: 600, marginTop: 12 }}>
+                ⚠ Return to Origin (RTO) In Transit — Courier could not complete delivery. Our team will assist you once the parcel returns.
+              </div>
+            )}
+            {order.estimated_delivery_date && !isRto && !isCancelled && order.order_status !== 'delivered' && (
+              <p style={{ margin: '10px 0 0 0', fontSize: '0.78rem', opacity: 0.85 }}>
+                Estimated Delivery: <strong>{order.estimated_delivery_date}</strong>
+              </p>
+            )}
             {resolvedTrackUrl && (
               <a
                 href={resolvedTrackUrl}
@@ -580,6 +607,9 @@ export default function OrderPage({ params }: { params: Promise<{ id: string }> 
               >
                 Track {courierLabel} Shipment →
               </a>
+            )}
+            {order.tracking_events && order.tracking_events.length > 0 && (
+              <TrackingTimeline events={order.tracking_events} collapsible />
             )}
           </section>
         )}
