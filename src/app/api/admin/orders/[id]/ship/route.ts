@@ -263,19 +263,21 @@ export async function POST(
 
     if (!settings) return apiError(500, 'Shipping settings not configured');
 
+    const legacyProviderName = settings.provider_name ?? 'delhivery';
     const { DelhiveryProvider } = await import('@/lib/shipping/delhivery');
+    const { ShiprocketProvider } = await import('@/lib/shipping/shiprocket');
     const legacyConfig = {
       id: '',
-      name: settings.provider_name ?? 'delhivery',
-      environment: 'sandbox' as const,
+      name: legacyProviderName,
+      environment: 'live' as const,
       api_url: settings.api_url,
       api_key: settings.api_key,
       api_secret: null,
-      webhook_secret: null,
+      webhook_secret: settings.webhook_secret ?? null,
       token: null,
       token_expires_at: null,
-      auth_email: null,
-      auth_password_encrypted: null,
+      auth_email: settings.auth_email ?? null,
+      auth_password_encrypted: settings.auth_password ?? null,
       pickup_name: settings.pickup_name,
       pickup_phone: settings.pickup_phone,
       pickup_gstin: null,
@@ -288,7 +290,9 @@ export async function POST(
       features_reverse: false,
       features_insurance: false,
     };
-    const provider = new DelhiveryProvider(legacyConfig);
+    const provider = legacyProviderName === 'shiprocket'
+      ? new ShiprocketProvider(legacyConfig)
+      : new DelhiveryProvider(legacyConfig);
     const result = await provider.createShipment(shipmentReq);
 
     if (!result.success || !result.tracking_id) {

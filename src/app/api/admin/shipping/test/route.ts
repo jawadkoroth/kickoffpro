@@ -15,10 +15,15 @@ import { logEvent } from '@/lib/log';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 
-export async function POST(_req: NextRequest): Promise<NextResponse> {
+export async function POST(req: NextRequest): Promise<NextResponse> {
   const t0 = Date.now();
 
   try {
+    const body = await req.json().catch(() => ({})) as { provider?: string };
+    const requestedProvider = typeof body?.provider === 'string' && body.provider.trim()
+      ? body.provider.trim().toLowerCase()
+      : null;
+
     // Auth check — require admin role
     const supabase = await createServerSupabaseClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -37,24 +42,43 @@ export async function POST(_req: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
     }
 
-    // Try NEW PIPE first (if enabled), otherwise fall back to LEGACY
-    let provider = await getActiveProvider();
+    const adminClient = createAdminClient();
+    const { DelhiveryProvider } = await import('@/lib/shipping/delhivery');
+    const { ShiprocketProvider } = await import('@/lib/shipping/shiprocket');
+
+    // Try NEW PIPE first when no specific provider override is requested
+    let provider = requestedProvider ? null : await getActiveProvider();
     let isLegacy = false;
+
+    if (!provider && requestedProvider) {
+      // Check shipping_providers row for the requested provider first
+      const { data: providerRow } = await adminClient
+        .from('shipping_providers')
+        .select('*')
+        .eq('name', requestedProvider)
+        .maybeSingle();
+
+      if (providerRow) {
+        provider = requestedProvider === 'shiprocket'
+          ? new ShiprocketProvider(providerRow)
+          : new DelhiveryProvider(providerRow);
+      }
+    }
 
     if (!provider) {
       // Fall back to legacy system using shipping_settings
-      const supabase = createAdminClient();
-      const { data: settings } = await supabase
+      const { data: settings } = await adminClient
         .from('shipping_settings')
         .select('*')
         .limit(1)
         .maybeSingle();
 
-      if (!settings || !settings.provider_enabled) {
+      const targetName = requestedProvider ?? settings?.provider_name ?? 'delhivery';
+      if (!settings || (!requestedProvider && !settings.provider_enabled)) {
         logEvent('shipping.test.no_active_provider', {}, { source: 'api', severity: 'warn' });
         return NextResponse.json<ConnectionTestResult>({
           success: false,
-          provider: 'delhivery',
+          provider: targetName,
           checks: {
             auth: { ok: false, latency_ms: 0, message: 'No active provider configured' },
             api: { ok: false, message: 'Provider not enabled' },
@@ -66,20 +90,18 @@ export async function POST(_req: NextRequest): Promise<NextResponse> {
         }, { status: 503 });
       }
 
-      // Create legacy provider instance
-      const { DelhiveryProvider } = await import('@/lib/shipping/delhivery');
       const legacyConfig = {
         id: '',
-        name: settings.provider_name ?? 'delhivery',
-        environment: 'sandbox' as const,
+        name: targetName,
+        environment: 'live' as const,
         api_url: settings.api_url,
         api_key: settings.api_key,
         api_secret: null,
-        webhook_secret: null,
+        webhook_secret: settings.webhook_secret ?? null,
         token: null,
         token_expires_at: null,
-        auth_email: null,
-        auth_password_encrypted: null,
+        auth_email: settings.auth_email ?? null,
+        auth_password_encrypted: settings.auth_password ?? null,
         pickup_name: settings.pickup_name,
         pickup_phone: settings.pickup_phone,
         pickup_gstin: null,
@@ -92,7 +114,9 @@ export async function POST(_req: NextRequest): Promise<NextResponse> {
         features_reverse: false,
         features_insurance: false,
       };
-      provider = new DelhiveryProvider(legacyConfig);
+      provider = targetName === 'shiprocket'
+        ? new ShiprocketProvider(legacyConfig)
+        : new DelhiveryProvider(legacyConfig);
       isLegacy = true;
     }
 

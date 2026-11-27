@@ -167,10 +167,31 @@ export async function GET() {
     return apiError(500, `Failed to load shipping settings: ${error.message}`);
   }
 
+  // Also load per-provider rows so Delhivery & Shiprocket keep separate API URLs,
+  // pickup names, and credentials without overwriting each other.
+  const { data: providerRows } = await (auth.supabase || auth.serverSupabase)
+    .from('shipping_providers')
+    .select('name, is_active, api_url, api_key, auth_email, auth_password_encrypted, webhook_secret, pickup_name')
+    .in('name', ['delhivery', 'shiprocket']);
+
+  const providers: Record<string, Record<string, unknown>> = {};
+  for (const row of providerRows ?? []) {
+    providers[row.name] = {
+      is_active: Boolean(row.is_active),
+      api_url: row.api_url ?? '',
+      api_key_set: typeof row.api_key === 'string' && row.api_key.trim().length > 0,
+      auth_email: row.auth_email ?? '',
+      auth_password_set: typeof row.auth_password_encrypted === 'string' && row.auth_password_encrypted.trim().length > 0,
+      webhook_secret_set: typeof row.webhook_secret === 'string' && row.webhook_secret.trim().length > 0,
+      pickup_name: row.pickup_name ?? '',
+    };
+  }
+
   // Strip raw secrets before responding; only tell the client
   // whether each credential is currently set.
   const { api_key, auth_password, webhook_secret, ...rest } = (data ?? {}) as Record<string, unknown>;
   const res = apiSuccess({
+    providers,
     settings: {
       free_shipping_threshold_paise: 99900,
       default_shipping_charge_paise: 9900,
@@ -206,6 +227,7 @@ export async function GET() {
 /* ------------------------------------------------------------------ */
 
 interface PatchBody {
+  target_provider?: string;
   provider_enabled?: boolean;
   provider_name?: string;
   api_url?: string;
@@ -458,14 +480,17 @@ export async function PATCH(req: NextRequest) {
       .maybeSingle();
 
     if (finalSettings) {
-      const providerName = finalSettings.provider_name ?? 'delhivery';
+      const targetProvider =
+        typeof body.target_provider === 'string' && body.target_provider.trim()
+          ? body.target_provider.trim().toLowerCase()
+          : (finalSettings.provider_name ?? 'delhivery');
       const providerUpdate: Record<string, any> = {
-        name: providerName,
-        is_active: finalSettings.provider_enabled ?? false,
+        name: targetProvider,
+        is_active: Boolean(finalSettings.provider_enabled) && finalSettings.provider_name === targetProvider,
         environment: 'live',
-        api_url: finalSettings.api_url ?? null,
-        auth_email: finalSettings.auth_email ?? null,
-        pickup_name: finalSettings.pickup_name ?? null,
+        api_url: (typeof body.api_url === 'string' ? body.api_url.trim() : finalSettings.api_url) ?? null,
+        auth_email: (typeof body.auth_email === 'string' ? body.auth_email.trim() : finalSettings.auth_email) ?? null,
+        pickup_name: (typeof body.pickup_name === 'string' ? body.pickup_name.trim() : finalSettings.pickup_name) ?? null,
         pickup_phone: finalSettings.pickup_phone ?? null,
         pickup_line1: finalSettings.pickup_address_line1 ?? null,
         pickup_line2: finalSettings.pickup_address_line2 ?? null,
@@ -474,17 +499,23 @@ export async function PATCH(req: NextRequest) {
         pickup_pincode: finalSettings.pickup_pincode ?? null,
         features_cod: finalSettings.cod_enabled ?? true,
       };
-      if (finalSettings.api_key) {
+      if (typeof body.api_key === 'string' && body.api_key.trim().length > 0) {
+        providerUpdate.api_key = body.api_key.trim();
+      } else if (targetProvider === finalSettings.provider_name && finalSettings.api_key) {
         providerUpdate.api_key = finalSettings.api_key;
       }
-      if (finalSettings.auth_password) {
+      if (typeof body.auth_password === 'string' && body.auth_password.trim().length > 0) {
+        providerUpdate.auth_password_encrypted = body.auth_password.trim();
+      } else if (targetProvider === finalSettings.provider_name && finalSettings.auth_password) {
         providerUpdate.auth_password_encrypted = finalSettings.auth_password;
       }
-      if (finalSettings.webhook_secret) {
+      if (typeof body.webhook_secret === 'string' && body.webhook_secret.trim().length > 0) {
+        providerUpdate.webhook_secret = body.webhook_secret.trim();
+      } else if (targetProvider === finalSettings.provider_name && finalSettings.webhook_secret) {
         providerUpdate.webhook_secret = finalSettings.webhook_secret;
       }
       // If Shiprocket auth credentials changed, clear cached JWT so next call logs in cleanly
-      if (providerName === 'shiprocket' && (body.auth_email !== undefined || body.auth_password)) {
+      if (targetProvider === 'shiprocket' && (body.auth_email !== undefined || body.auth_password)) {
         providerUpdate.token = null;
         providerUpdate.token_expires_at = null;
       }
@@ -495,7 +526,7 @@ export async function PATCH(req: NextRequest) {
         .select('id')
         .maybeSingle();
 
-      if (upsertedProvider?.id && finalSettings.provider_enabled) {
+      if (upsertedProvider?.id && finalSettings.provider_enabled && finalSettings.provider_name === targetProvider) {
         try {
           await (auth.supabase || auth.serverSupabase).rpc('activate_shipping_provider', {
             p_provider_id: upsertedProvider.id,

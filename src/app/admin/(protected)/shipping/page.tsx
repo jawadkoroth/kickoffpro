@@ -291,7 +291,11 @@ function ProviderCard({
     setTesting(true);
     setTestResult(null);
     try {
-      const res = await fetch('/api/admin/shipping/test', { method: 'POST' });
+      const res = await fetch('/api/admin/shipping/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider: providerKey }),
+      });
       const data = await res.json() as TestResult;
       setTestResult(data);
 
@@ -621,14 +625,25 @@ function ProviderCard({
 /* ─────────────────────────────────────────────────────────────────────
    Tab content components
 ───────────────────────────────────────────────────────────────────── */
+interface ProviderConfigSlice {
+  api_url: string;
+  api_key_set: boolean;
+  auth_email: string;
+  auth_password_set: boolean;
+  webhook_secret_set: boolean;
+  pickup_name: string;
+}
+
 function ProvidersTab({
-  state, onStateChange, errors,
+  state, providerConfigs, onProviderConfigChange, onStateChange, errors,
   newApiKey, onApiKeyChange,
   newAuthPassword, onAuthPasswordChange,
   newWebhookSecret, onWebhookSecretChange,
   onSave, saving,
 }: {
   state: SettingsState;
+  providerConfigs: Record<string, ProviderConfigSlice>;
+  onProviderConfigChange: (providerKey: string, patch: Partial<ProviderConfigSlice>) => void;
   onStateChange: (patch: Partial<SettingsState>) => void;
   errors: Record<string, string>;
   newApiKey: string;
@@ -637,7 +652,7 @@ function ProvidersTab({
   onAuthPasswordChange: (v: string) => void;
   newWebhookSecret: string;
   onWebhookSecretChange: (v: string) => void;
-  onSave: () => void;
+  onSave: (providerKey?: string) => void;
   saving: boolean;
 }) {
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -649,25 +664,65 @@ function ProvidersTab({
           One courier active at a time. Expand a provider to configure credentials and pickup address.
         </p>
       </div>
-      {Object.keys(PROVIDER_META).map((key) => (
-        <ProviderCard
-          key={key}
-          providerKey={key}
-          state={state}
-          isExpanded={expanded === key}
-          onExpand={() => setExpanded(expanded === key ? null : key)}
-          onStateChange={onStateChange}
-          errors={errors}
-          newApiKey={newApiKey}
-          onApiKeyChange={onApiKeyChange}
-          newAuthPassword={newAuthPassword}
-          onAuthPasswordChange={onAuthPasswordChange}
-          newWebhookSecret={newWebhookSecret}
-          onWebhookSecretChange={onWebhookSecretChange}
-          onSave={onSave}
-          saving={saving}
-        />
-      ))}
+      {Object.keys(PROVIDER_META).map((key) => {
+        const slice = providerConfigs[key];
+        const cardState: SettingsState = slice
+          ? {
+              ...state,
+              api_url: slice.api_url || PROVIDER_META[key]?.defaultUrl || '',
+              api_key_set: slice.api_key_set,
+              auth_email: slice.auth_email,
+              auth_password_set: slice.auth_password_set,
+              webhook_secret_set: slice.webhook_secret_set,
+              pickup_name: slice.pickup_name,
+            }
+          : state;
+
+        const handleCardStateChange = (patch: Partial<SettingsState>) => {
+          const slicePatch: Partial<ProviderConfigSlice> = {};
+          if (patch.api_url !== undefined) slicePatch.api_url = patch.api_url;
+          if (patch.auth_email !== undefined) slicePatch.auth_email = patch.auth_email;
+          if (patch.pickup_name !== undefined) slicePatch.pickup_name = patch.pickup_name;
+          if (Object.keys(slicePatch).length > 0) {
+            onProviderConfigChange(key, slicePatch);
+          }
+
+          // When activating this provider, copy its saved URL/pickup/credentials into global state
+          if (patch.provider_enabled && patch.provider_name === key && slice) {
+            onStateChange({
+              ...patch,
+              api_url: slice.api_url || PROVIDER_META[key]?.defaultUrl || '',
+              api_key_set: slice.api_key_set,
+              auth_email: slice.auth_email,
+              auth_password_set: slice.auth_password_set,
+              webhook_secret_set: slice.webhook_secret_set,
+              pickup_name: slice.pickup_name,
+            });
+          } else {
+            onStateChange(patch);
+          }
+        };
+
+        return (
+          <ProviderCard
+            key={key}
+            providerKey={key}
+            state={cardState}
+            isExpanded={expanded === key}
+            onExpand={() => setExpanded(expanded === key ? null : key)}
+            onStateChange={handleCardStateChange}
+            errors={errors}
+            newApiKey={newApiKey}
+            onApiKeyChange={onApiKeyChange}
+            newAuthPassword={newAuthPassword}
+            onAuthPasswordChange={onAuthPasswordChange}
+            newWebhookSecret={newWebhookSecret}
+            onWebhookSecretChange={onWebhookSecretChange}
+            onSave={() => onSave(key)}
+            saving={saving}
+          />
+        );
+      })}
     </div>
   );
 }
@@ -1666,6 +1721,7 @@ export default function AdminShipping() {
   const [newApiKey, setNewApiKey] = useState('');
   const [newAuthPassword, setNewAuthPassword] = useState('');
   const [newWebhookSecret, setNewWebhookSecret] = useState('');
+  const [providerConfigs, setProviderConfigs] = useState<Record<string, ProviderConfigSlice>>({});
   const [storeProducts, setStoreProducts] = useState<Array<{ id: string; name: string; price_paise: number }>>([]);
 
   useEffect(() => {
@@ -1746,6 +1802,24 @@ export default function AdminShipping() {
       setShippingChargeRs(paiseToRupees(s.default_shipping_charge_paise));
       setCodFeeRs(paiseToRupees(s.cod_fee_paise));
       setPromoThresholdRs(paiseToRupees(s.promo_goal_threshold_paise));
+
+      const rawProviders = (data.providers || {}) as Record<string, Partial<ProviderConfigSlice>>;
+      const buildSlice = (key: string): ProviderConfigSlice => {
+        const p = rawProviders[key] || {};
+        const isCurrent = s.provider_name === key;
+        return {
+          api_url: p.api_url || (isCurrent ? s.api_url : '') || PROVIDER_META[key]?.defaultUrl || '',
+          api_key_set: p.api_key_set ?? (isCurrent ? s.api_key_set : false),
+          auth_email: p.auth_email ?? (isCurrent ? s.auth_email : ''),
+          auth_password_set: p.auth_password_set ?? (isCurrent ? s.auth_password_set : false),
+          webhook_secret_set: p.webhook_secret_set ?? (isCurrent ? s.webhook_secret_set : false),
+          pickup_name: p.pickup_name || (isCurrent ? s.pickup_name : ''),
+        };
+      };
+      setProviderConfigs({
+        delhivery: buildSlice('delhivery'),
+        shiprocket: buildSlice('shiprocket'),
+      });
     } catch {
       showToast('Failed to load shipping settings', 'error');
     } finally {
@@ -1755,17 +1829,26 @@ export default function AdminShipping() {
 
   useEffect(() => { fetchSettings(); }, [fetchSettings]);
 
-  function validate(): boolean {
+  function validate(targetProvider?: string): boolean {
+    const cleanTarget = typeof targetProvider === 'string' ? targetProvider : undefined;
+    const activeTarget = cleanTarget || state.provider_name || 'delhivery';
+    const slice = providerConfigs[activeTarget];
+    const effectiveUrl = (slice?.api_url ?? state.api_url).trim();
+    const effectivePickup = (slice?.pickup_name ?? state.pickup_name).trim();
+    const effectiveEmail = (slice?.auth_email ?? state.auth_email).trim();
+    const effectivePassSet = slice?.auth_password_set ?? state.auth_password_set;
+    const effectiveKeySet = slice?.api_key_set ?? state.api_key_set;
+
     const e: Record<string, string> = {};
-    if (state.provider_enabled) {
-      if (!state.api_url.trim()) e.api_url = 'API URL is required';
-      if (state.provider_name === 'shiprocket') {
-        if (!state.auth_email.trim()) e.auth_email = 'Shiprocket API email is required';
-        if (!state.auth_password_set && !newAuthPassword.trim()) e.auth_password = 'Shiprocket API password is required';
+    if (state.provider_enabled || cleanTarget) {
+      if (!effectiveUrl) e.api_url = 'API URL is required';
+      if (activeTarget === 'shiprocket') {
+        if (!effectiveEmail) e.auth_email = 'Shiprocket API email is required';
+        if (!effectivePassSet && !newAuthPassword.trim()) e.auth_password = 'Shiprocket API password is required';
       } else {
-        if (!state.api_key_set && !newApiKey.trim()) e.api_key = 'API key is required';
+        if (!effectiveKeySet && !newApiKey.trim()) e.api_key = 'API key is required';
       }
-      if (!state.pickup_name.trim()) e.pickup_name = 'Pickup facility name is required';
+      if (!effectivePickup) e.pickup_name = 'Pickup facility name is required';
       if (!state.pickup_address_line1.trim()) e.pickup_address_line1 = 'Address is required';
       if (!state.pickup_city.trim()) e.pickup_city = 'City is required';
       if (!state.pickup_state.trim()) e.pickup_state = 'State is required';
@@ -1779,15 +1862,22 @@ export default function AdminShipping() {
     return Object.keys(e).length === 0;
   }
 
-  async function handleSave() {
+  async function handleSave(targetProvider?: string) {
     if (saving) return;
-    if (!validate()) return;
+    if (!validate(targetProvider)) return;
     setSaving(true);
+    const activeTarget = targetProvider || state.provider_name || 'delhivery';
+    const slice = providerConfigs[activeTarget];
+    const effectiveUrl = slice?.api_url ?? state.api_url;
+    const effectivePickup = slice?.pickup_name ?? state.pickup_name;
+    const effectiveEmail = slice?.auth_email ?? state.auth_email;
+
     const payload: Record<string, unknown> = {
+      target_provider: activeTarget,
       provider_enabled: state.provider_enabled,
       provider_name: state.provider_name || 'delhivery',
-      api_url: state.api_url,
-      pickup_name: state.pickup_name,
+      api_url: effectiveUrl,
+      pickup_name: effectivePickup,
       pickup_phone: state.pickup_phone,
       pickup_address_line1: state.pickup_address_line1,
       pickup_address_line2: state.pickup_address_line2,
@@ -1814,7 +1904,7 @@ export default function AdminShipping() {
       buy_x_quantity: Number(state.buy_x_quantity) || 2,
       get_y_quantity: Number(state.get_y_quantity) || 1,
     };
-    if (state.auth_email.trim().length > 0) payload.auth_email = state.auth_email.trim();
+    if (effectiveEmail.trim().length > 0) payload.auth_email = effectiveEmail.trim();
     if (newApiKey.trim().length > 0) payload.api_key = newApiKey.trim();
     if (newAuthPassword.trim().length > 0) payload.auth_password = newAuthPassword.trim();
     if (newWebhookSecret.trim().length > 0) payload.webhook_secret = newWebhookSecret.trim();
@@ -1907,6 +1997,23 @@ export default function AdminShipping() {
         {activeTab === 'providers' && (
           <ProvidersTab
             state={state}
+            providerConfigs={providerConfigs}
+            onProviderConfigChange={(key, patch) =>
+              setProviderConfigs((prev) => {
+                const base: ProviderConfigSlice = prev[key] ?? {
+                  api_url: PROVIDER_META[key]?.defaultUrl || '',
+                  api_key_set: false,
+                  auth_email: '',
+                  auth_password_set: false,
+                  webhook_secret_set: false,
+                  pickup_name: '',
+                };
+                return {
+                  ...prev,
+                  [key]: { ...base, ...patch },
+                };
+              })
+            }
             onStateChange={(patch) => setState((s) => ({ ...s, ...patch }))}
             errors={errors}
             newApiKey={newApiKey}
@@ -1928,7 +2035,7 @@ export default function AdminShipping() {
             shippingChargeRs={shippingChargeRs}
             setShippingChargeRs={setShippingChargeRs}
             codFeeRs={codFeeRs} setCodFeeRs={setCodFeeRs}
-            errors={errors} onSave={handleSave} saving={saving}
+            errors={errors} onSave={() => handleSave()} saving={saving}
           />
         )}
         {activeTab === 'diagnostics' && <DiagnosticsTab />}
