@@ -377,17 +377,17 @@ export class DelhiveryProvider implements ShippingProvider {
     const endpoint = `${this.apiUrl}/api/cmu/create.json`;
     const payloadDataStr = JSON.stringify(shipmentPayload);
 
-    // KickoffPro: Delhivery requires multipart/form-data with:
-    //   format=json
-    //   data=<JSON string>
-    // NOT application/json raw body — this is the "format key missing in POST" root cause.
-    const formData = new FormData();
-    formData.append('format', 'json');
-    formData.append('data', payloadDataStr);
+    // Delhivery `/api/cmu/create.json` expects `application/x-www-form-urlencoded`
+    // (`format=json&data=<JSON>`), NOT `multipart/form-data` FormData chunks in Node fetch.
+    const bodyParams = new URLSearchParams({
+      format: 'json',
+      data: payloadDataStr,
+    });
 
     const requestHeaders: Record<string, string> = {
       ...this.authHeader(),
-      // Note: Don't set Content-Type for FormData - browser sets it with boundary
+      'Content-Type': 'application/x-www-form-urlencoded',
+      Accept: 'application/json',
     };
 
     try {
@@ -398,7 +398,7 @@ export class DelhiveryProvider implements ShippingProvider {
         endpoint,
         pickup_name: this.pickupName,
         payment_mode: shipmentPayload.shipments[0].payment_mode,
-        weight_kg: shipmentPayload.shipments[0].weight,
+        weight_grams: shipmentPayload.shipments[0].weight,
         pincode: req.address.pincode,
         payload_preview: payloadDataStr.substring(0, 300),
       }, { source: 'api' });
@@ -406,7 +406,7 @@ export class DelhiveryProvider implements ShippingProvider {
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: requestHeaders,
-        body: formData,
+        body: bodyParams.toString(),
       });
 
       const latencyMs = Date.now() - t0;
@@ -559,15 +559,19 @@ export class DelhiveryProvider implements ShippingProvider {
 
   async cancelShipment(tracking_id: string): Promise<{ success: boolean }> {
     try {
-      // Delhivery cancel also uses form-encoded body
-      const formData = new FormData();
-      formData.append('waybill', tracking_id);
-      formData.append('cancellation', 'true');
+      const cancelParams = new URLSearchParams({
+        waybill: tracking_id,
+        cancellation: 'true',
+      });
 
       const response = await fetch(`${this.apiUrl}/api/p/edit`, {
         method: 'POST',
-        headers: { ...this.authHeader() }, // Don't set Content-Type for FormData
-        body: formData,
+        headers: {
+          ...this.authHeader(),
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Accept: 'application/json',
+        },
+        body: cancelParams.toString(),
       });
       const rawText = await response.text();
       let data: Record<string, unknown> = {};
